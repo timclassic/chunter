@@ -1,0 +1,12 @@
+{application, chunter,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { chunter_app, []}},
+  {env, []}
+ ]}.

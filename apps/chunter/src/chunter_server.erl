@@ -1,4 +1,4 @@
-%%%-------------------------------------------------------------------
+ %%%-------------------------------------------------------------------
 %%% @author Heinz N. Gies <>
 %%% @copyright (C) 2012, Heinz N. Gies
 %%% @doc
@@ -19,7 +19,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {}).
+-record(state, {port}).
 
 %%%===================================================================
 %%% API
@@ -51,7 +51,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{}}.
+    Cmd = "./apps/chunter/priv/zonemon.d",
+    Port = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
+    {ok, #state{port=Port}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -68,8 +70,8 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call(list_vms, _From, State) ->
-    Reply = [[{id,ID},{name,Name},{state, State},{pathzonepath, Path},{uuid, UUID},{type, Type}] || 
-		[ID,Name,State,Path,UUID,Type,_IP,_SomeNumber] <- 
+    Reply = [[{id,ID},{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}] || 
+		[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 		    [ re:split(Line, ":") 
 		      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 		ID =/= <<"0">>],
@@ -105,6 +107,15 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info({_Port, {data, {eol, Data}}}, #state{port=_Port} = State) ->
+    case parse_data(Data) of
+	{error, unknown} ->
+	    io:format("Data: ~p~n", [Data]);
+	{UUID, Action} ->
+	    io:format("~s: ~p~n", [UUID, Action])
+    end,
+    {noreply, State};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -136,3 +147,30 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+parse_data(<<"S00: ", UUID/binary>>) ->
+    {UUID, uninitialized};
+parse_data(<<"S01: ", UUID/binary>>) ->
+    {UUID, ready};
+parse_data(<<"S02: ", UUID/binary>>) ->
+    {UUID, booting};
+parse_data(<<"S03: ", UUID/binary>>) ->
+    {UUID, running};
+parse_data(<<"S04: ", UUID/binary>>) ->
+    {UUID, shutting_down};
+parse_data(<<"S05: ", UUID/binary>>) ->
+    {UUID, empty};
+parse_data(<<"S06: ", UUID/binary>>) ->
+    {UUID, down};
+parse_data(<<"S07: ", UUID/binary>>) ->
+    {UUID, dying};
+parse_data(<<"S08: ", UUID/binary>>) ->
+    {UUID, dead};
+parse_data(<<"S09: ", UUID/binary>>) ->
+    {UUID, uninitialized};
+parse_data(<<"S10: ", UUID/binary>>) ->
+    {UUID, creating};
+parse_data(<<"S11: ", UUID/binary>>) ->
+    {UUID, destroying};
+parse_data(_) ->
+    {error, unknown}.

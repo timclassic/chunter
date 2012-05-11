@@ -239,8 +239,7 @@ create_disk([]) ->
 create_disk([T|R]) ->
     [T|create_nic(R)].
     
-
-
+%% todo:
     %% <<"filesystem">>, {
     %%     <<"special">>, <<"source">>,
     %%     <<"directory">>, <<"target">>,

@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, list/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -35,6 +35,9 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+
+list() ->
+    gen_server:call(?SERVER, list_vms).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -70,11 +73,7 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call(list_vms, _From, State) ->
-    Reply = [[{id,ID},{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}] || 
-		[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
-		    [ re:split(Line, ":") 
-		      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-		ID =/= <<"0">>],
+    Reply = list_vms(),
     {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
@@ -174,3 +173,11 @@ parse_data(<<"S11: ", UUID/binary>>) ->
     {UUID, destroying};
 parse_data(_) ->
     {error, unknown}.
+
+list_vms() ->
+    [chunter_zoneparser:load([{id,ID},{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
+	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
+	    [ re:split(Line, ":") 
+	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
+	ID =/= <<"0">>].
+    

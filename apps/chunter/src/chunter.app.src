@@ -1,11 +1,17 @@
 {application, chunter,
  [
   {description, ""},
-  {vsn, "1"},
+  {vsn, "0.1.0"},
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+		  jsx,
+		  erlsom,
+		  redgrid,
+		  gproc,
+		  libsniffle,
+		  alog
                  ]},
   {mod, { chunter_app, []}},
   {env, []}

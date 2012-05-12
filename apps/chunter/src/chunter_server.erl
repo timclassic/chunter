@@ -73,33 +73,33 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({call, {machines, list}}, _From, State) ->
+handle_call({call, Auth, {machines, list}}, _From, State) ->
     Reply = list_vms(),
     {reply, Reply, State};
 
-handle_call({call, {machines, get, UUID}}, _From, State) ->
+handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
     Reply = get_vm(UUID),
     {reply, Reply, State};
 
 % TODO
-handle_call({call, {machines, info, UUID}}, _From, State) ->
+handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
     Reply = [], 
     {reply, Reply, State};
 
-handle_call({call, {packages, list}}, _From, State) ->
+handle_call({call, Auth, {packages, list}}, _From, State) ->
     Reply = [], 
     {reply, Reply, State};
 
-handle_call({call, {datasets, list}}, _From, State) ->
+handle_call({call, Auth, {datasets, list}}, _From, State) ->
     Reply = [], 
     {reply, Reply, State};
 
-handle_call({call, {keys, list}}, _From, State) ->
+handle_call({call, Auth, {keys, list}}, _From, State) ->
     Reply = [], 
     {reply, Reply, State};
 
 
-handle_call({call, Call}, _From, State) ->
+handle_call({call, Auth, Call}, _From, State) ->
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
 

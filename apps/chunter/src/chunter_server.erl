@@ -75,11 +75,11 @@ init([]) ->
 %%--------------------------------------------------------------------
 handle_call({call, Auth, {machines, list}}, _From, State) ->
     Reply = list_vms(),
-    {reply, Reply, State};
+    {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
     Reply = get_vm(UUID),
-    {reply, Reply, State};
+    {reply, {ok, Reply}, State};
 
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->

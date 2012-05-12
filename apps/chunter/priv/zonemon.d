@@ -13,7 +13,7 @@ BEGIN
         state[7] = "S07"; /* "Dying"; */
         state[8] = "S08"; /* "Dead"; */
 /* zone_create */
-	state[09] = "S09"; /* Create started */
+	state[9] = "S09"; /* Create started */
 	state[10] = "S10"; /* Create started */
 }
 

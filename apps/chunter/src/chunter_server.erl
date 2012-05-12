@@ -151,7 +151,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, State) ->
-    libsniffle:register(system, chunter, [self()]),
+    libsniffle:register(system, chunter, self()),
     {noreply, State};
 
 handle_info(_Info, State) ->

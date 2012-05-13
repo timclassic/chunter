@@ -6,5 +6,6 @@ deps
 Mnesia.*
 erl_crash.dump
 *.beam
+standalone.config
 rel/chunter
 rel/chunter.tar.bz2

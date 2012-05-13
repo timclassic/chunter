@@ -19,7 +19,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {port}).
+-record(state, {port, datasets=[]}).
 
 %%%===================================================================
 %%% API
@@ -91,13 +91,13 @@ handle_call({call, Auth, {packages, list}}, _From, State) ->
     Reply = [], 
     {reply, {ok,  Reply}, State};
 
-handle_call({call, Auth, {datasets, list}}, _From, State) ->
-    Reply = list_datasets(), 
-    {reply, {ok, Reply}, State};
+handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds} = State) ->
+    {Reply, Ds1} = list_datasets(Ds), 
+    {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
-handle_call({call, Auth, {datasets, get, UUID}}, _From, State) ->
-    Reply = get_dataset(UUID), 
-    {reply, {ok, Reply}, State};
+handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = State) ->
+    {Reply, Ds1} = get_dataset(UUID, Ds), 
+    {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 
 handle_call({call, Auth, {keys, list}}, _From, State) ->
@@ -220,19 +220,26 @@ list_vms() ->
 	ID =/= <<"0">>].
     
 
-get_dataset(UUID) ->
-    read_dsmanifest(filename:join(<<"/var/db/dsadm">>, <<UUID/binary, ".dsmanifest">>)).
+get_dataset(UUID, Ds) ->
+    read_dsmanifest(filename:join(<<"/var/db/dsadm">>, <<UUID/binary, ".dsmanifest">>), Ds).
 
-list_datasets() ->
+list_datasets(Datasets) ->
     filelib:fold_files("/var/db/dsadm", ".*dsmanifest", false, 
-		       fun (F, Fs) ->
-			       [read_dsmanifest(F) | Fs]
-		       end, []).
+		       fun (F, {Fs, DsA}) ->
+			       {F1, DsA1} = read_dsmanifest(F, DsA),
+			       {[F1| Fs], DsA1}
+		       end, {[], Datasets}).
 			       
-read_dsmanifest(F) ->
-    {ok, Data} = file:read_file(F),
-    JSON = jsx:json_to_term(Data),
-    niceify_json(JSON).
+read_dsmanifest(F, Ds) ->
+    case proplists:get_value(F, Ds) of
+	undefined ->
+	    {ok, Data} = file:read_file(F),
+	    JSON = jsx:json_to_term(Data),
+	    JSON1 = niceify_json(JSON),
+	    {JSON1, [{F, JSON1}|Ds]};
+	JSON -> 
+	    {JSON, Ds}
+    end.
 
 niceify_json([{K, V}|R]) when is_list(V), is_binary(K) ->
     [{binary_to_atom(K), niceify_json(V)}|niceify_json(R)];

@@ -9,7 +9,10 @@
 -module(chunter_vmadm).
 
 %% API
--export([start/1
+-export([start/1,
+         start/2,
+         stop/1,
+         reboot/1
 	]).
 
 %%%===================================================================
@@ -23,18 +26,23 @@
 %%--------------------------------------------------------------------
 
 start(UUID) ->
-    os:cmd(<<"/usr/sbin/vmadm start", UUID/binary>>).
+    Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
+    os:cmd(binary_to_list(Cmd)).
+
 
 %TODO
 start(UUID, Image) ->
-    os:cmd(<<"/usr/sbin/vmadm start", UUID/binary>>).
+    Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
+    os:cmd(binary_to_list(Cmd)).
 
 
 stop(UUID) ->
-    os:cmd(<<"/usr/sbin/vmadm stop", UUID/binary>>).
+    Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary>>,
+    os:cmd(binary_to_list(Cmd)).
 
 reboot(UUID) ->
-    os:cmd(<<"/usr/sbin/vmadm reboot", UUID/binary>>).
+    Cmd = <<"/usr/sbin/vmadm reboot", UUID/binary>>,
+    os:cmd(binary_to_list(Cmd)).
 
 %%%===================================================================
 %%% Internal functions

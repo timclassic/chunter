@@ -230,7 +230,7 @@ list_datasets() ->
 		       end, []).
 			       
 read_dsmanifest(F) ->
-    Data = file:read_file(F),
+    {ok, Data} = file:read_file(F),
     {ok, JSON} = jsx:json_to_term(Data),
     niceify_json(JSON).
 

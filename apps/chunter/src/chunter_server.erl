@@ -231,9 +231,8 @@ list_datasets() ->
 			       
 read_dsmanifest(F) ->
     Data = file:read_file(F),
-    niceify_json(jsx:json_to_term(Data)).
-
-
+    {ok, JSON} = jsx:json_to_term(Data),
+    niceify_json(JSON).
 
 niceify_json([{K, V}|R]) when is_list(V), is_binary(K) ->
     [{binary_to_atom(K), niceify_json(V)}|niceify_json(R)];

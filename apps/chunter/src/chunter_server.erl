@@ -36,10 +36,10 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 get(UUID) ->
-    gen_server:call(?SERVER, {call, {get_vm, UUID}}).
+    gen_server:call(?SERVER, {call, system, {machines, get, UUID}}).
 
 list() ->
-    gen_server:call(?SERVER, {call, list_vms}).
+    gen_server:call(?SERVER, {call, system, {machines, list}}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -188,7 +188,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 get_vm(ZUUID) ->
-    [chunter_zoneparser:load([{id,ID},{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
+    [chunter_zoneparser:load([{name,Name},{state, VMState},{pathzonepath, Path},{id, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
@@ -196,7 +196,7 @@ get_vm(ZUUID) ->
 
 
 list_vms() ->
-    [chunter_zoneparser:load([{uuid,ID},{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
+    [chunter_zoneparser:load([{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],

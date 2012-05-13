@@ -231,7 +231,7 @@ list_datasets() ->
 			       
 read_dsmanifest(F) ->
     {ok, Data} = file:read_file(F),
-    {ok, JSON} = jsx:json_to_term(Data),
+    JSON = jsx:json_to_term(Data),
     niceify_json(JSON).
 
 niceify_json([{K, V}|R]) when is_list(V), is_binary(K) ->

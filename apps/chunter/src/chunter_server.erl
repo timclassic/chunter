@@ -162,7 +162,8 @@ handle_info(timeout, State) ->
     end;
 
 handle_info({sniffle, request, register}, State) ->
-    {noreply, State, 500};
+    libsniffle:register(system, chunter, self()),
+    {noreply, State};
 
 handle_info(_Info, State) ->
     {noreply, State}.

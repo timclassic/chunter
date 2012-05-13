@@ -92,8 +92,13 @@ handle_call({call, Auth, {packages, list}}, _From, State) ->
     {reply, {ok,  Reply}, State};
 
 handle_call({call, Auth, {datasets, list}}, _From, State) ->
-    Reply = [], 
+    Reply = list_datasets(), 
     {reply, {ok, Reply}, State};
+
+handle_call({call, Auth, {datasets, get, UUID}}, _From, State) ->
+    Reply = get_dataset(UUID), 
+    {reply, {ok, Reply}, State};
+
 
 handle_call({call, Auth, {keys, list}}, _From, State) ->
     Reply = [], 
@@ -213,4 +218,39 @@ list_vms() ->
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 	ID =/= <<"0">>].
+    
+
+get_dataset(UUID) ->
+    read_dsmanifest(filename:join(<<"/var/db/dsadm">>, <<UUID/binary, ".dsmanifest">>)).
+
+list_datasets() ->
+    filelib:fold_files("/var/db/dsadm", ".*dsmanifest", false, 
+		       fun (F, Fs) ->
+			       [read_dsmanifest(F) | Fs]
+		       end, []).
+			       
+read_dsmanifest(F) ->
+    Data = file:read_file(F),
+    niceify_json(jsx:json_to_term(Data)).
+
+
+
+niceify_json([{K, V}|R]) when is_list(V), is_binary(K) ->
+    [{binary_to_atom(K), niceify_json(V)}|niceify_json(R)];
+
+niceify_json([{K, V}|R]) when is_list(V) ->
+    [{K, niceify_json(V)}|niceify_json(R)];
+
+niceify_json([{K, V}|R]) when is_binary(K) ->
+    [{binary_to_atom(K), V}|niceify_json(R)];
+
+niceify_json([H|R]) ->
+    [H|niceify_json(R)];
+
+niceify_json([]) ->
+    [].
+
+
+binary_to_atom(B) ->
+    list_to_atom(binary_to_list(B)).
     

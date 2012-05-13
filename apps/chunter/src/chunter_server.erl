@@ -154,12 +154,12 @@ handle_cast(_Msg, State) ->
 handle_info(timeout, State) ->
     try 
 	libsniffle:join_client_channel(),
-        libsniffle:register(system, chunter, self())
+        libsniffle:register(system, chunter, self()),
+	{noreply, State}
     catch
         _T:_E -> 
-            ok
-    end,
-    {noreply, State};
+	    {noreply, State, 1000}
+    end;
 
 handle_info({sniffle, request, register}, State) ->
     {noreply, State, 500};

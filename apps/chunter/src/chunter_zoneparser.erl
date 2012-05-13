@@ -171,6 +171,8 @@ create_zone_data([{nic, Nic}|R], Disks, Nics) ->
    create_zone_data(R, Disks, [create_nic(Nic)|Nics]);
 
 ?REMOVE('ip-type');
+
+?RENAME('uuid', 'id');
 ?RENAME_B64('alias', 'alias');
 ?RENAME_BOOL('autoboot', 'autoboot');
 ?RENAME('billing-id', 'billing_id');

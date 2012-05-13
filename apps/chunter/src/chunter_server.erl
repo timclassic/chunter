@@ -196,7 +196,7 @@ get_vm(ZUUID) ->
 
 
 list_vms() ->
-    [chunter_zoneparser:load([{id,ID},{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
+    [chunter_zoneparser:load([{uuid,ID},{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],

@@ -172,6 +172,7 @@ create_zone_data([{nic, Nic}|R], Disks, Nics) ->
 
 ?REMOVE('ip-type');
 ?REMOVE('id');
+?REMOVE('debugid');
 ?RENAME('uuid', 'id');
 ?RENAME_B64('alias', 'alias');
 ?RENAME_BOOL('autoboot', 'autoboot');

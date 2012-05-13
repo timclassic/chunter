@@ -118,20 +118,20 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({cast, {machine, start, UUID}}, State) ->
+handle_cast({cast, Auth, {machine, start, UUID}}, State) ->
     spawn(chunter_vmadm, start, [UUID]),
     {noreply, State};
 
-handle_cast({cast, {machine, start, UUID, Image}}, State) ->
+handle_cast({cast, Auth, {machine, start, UUID, Image}}, State) ->
     spawn(chunter_vmadm, start, [UUID, Image]),
     {noreply, State};
 
 
-handle_cast({cast, {machine, stop, UUID}}, State) ->
+handle_cast({cast, Auth, {machine, stop, UUID}}, State) ->
     spawn(chunter_vmadm, stop, [UUID]),
     {noreply, State};
 
-handle_cast({cast, {machine, reboot, UUID}}, State) ->
+handle_cast({cast, Auth, {machine, reboot, UUID}}, State) ->
     spawn(chunter_vmadm, reboot, [UUID]),
     {noreply, State};
 

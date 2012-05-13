@@ -188,7 +188,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 get_vm(ZUUID) ->
-    [VM] = [chunter_zoneparser:load([{name,Name},{state, VMState},{pathzonepath, Path},{id, UUID},{type, Type}]) || 
+    [VM] = [chunter_zoneparser:load([{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
 	       [ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 		   [ re:split(Line, ":") 
 		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],

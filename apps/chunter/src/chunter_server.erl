@@ -56,6 +56,8 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
+    gproc:reg({p, g, {sniffle, register}}),
     {ok, #state{}, 1000}.
 
 
@@ -151,8 +153,16 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, State) ->
-    libsniffle:register(system, chunter, self()),
+    try 
+        libsniffle:register(system, chunter, self())
+    catch
+        _T:_E -> 
+            ok
+    end,
     {noreply, State};
+
+handle_info({sniffle, request, register}, State) ->
+    {noreply, State, 500};
 
 handle_info(_Info, State) ->
     {noreply, State}.

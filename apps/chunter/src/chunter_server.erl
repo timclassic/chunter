@@ -84,19 +84,19 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
     Reply = [], 
-    {reply, Reply, State};
+    {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {packages, list}}, _From, State) ->
     Reply = [], 
-    {reply, Reply, State};
+    {reply, {ok,  Reply}, State};
 
 handle_call({call, Auth, {datasets, list}}, _From, State) ->
     Reply = [], 
-    {reply, Reply, State};
+    {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {keys, list}}, _From, State) ->
     Reply = [], 
-    {reply, Reply, State};
+    {reply, {ok, Reply}, State};
 
 
 handle_call({call, Auth, Call}, _From, State) ->

@@ -87,6 +87,37 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
     Reply = [], 
     {reply, {ok, Reply}, State};
 
+handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, _From, 
+	    #state{datasets=Ds} = State) ->
+    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
+    {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
+    Memory = proplists:get_value(memory, Package),
+    Disk = proplists:get_value(disk, Package),
+    Swap = proplists:get_value(swap, Package),
+    Reply = [{tags, Tags},
+	     {customer_metadata, Metadata},
+	     {alias, Name}],
+    Reply1 = case proplists:get_value(platform_type, Dataset) of
+		 <<"smartos">> ->
+		     [{max_physical_memory, Memory},
+		      {quota, Disk},
+		      {max_swap, Swap},
+		      {dataset_uuid, DatasetUUID}
+		      |Reply];
+		 _ ->
+		     [{max_physical_memory, Memory+1024},
+		      {ram, Memory},
+		      {quota, 10},
+		      {disk_driver, proplists:get_value(disk_driver, Dataset)},
+		      {nic_driver, proplists:get_value(nic_driver, Dataset)},
+		      {max_swap, Swap},
+		      {dataset_uuid, DatasetUUID}
+		      |Reply]
+	     end,
+    io:format("====Creating====~n~p~n================~n", [Reply1]),
+    {reply, {ok, Reply1},  State#state{datasets=Ds1}};
+
+
 handle_call({call, Auth, {packages, list}}, _From, State) ->
     Reply = [], 
     {reply, {ok,  Reply}, State};
@@ -211,7 +242,6 @@ get_vm(ZUUID) ->
 	       ID =/= <<"0">>],
     VM.
 
-
 list_vms() ->
     [chunter_zoneparser:load([{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
@@ -260,3 +290,28 @@ niceify_json([]) ->
 binary_to_atom(B) ->
     list_to_atom(binary_to_list(B)).
     
+
+%% Wo loadbalance nodes by a very accurate measurement of random.
+%% It is good practive to hope that the random node is the least 
+%% loded one - not much else you can do about it.
+pick_host(Hosts) ->
+    [H|R] = shuffle(Hosts),
+    H.
+
+shuffle(List) ->
+%% Determine the log n portion then randomize the list.
+   randomize(round(math:log(length(List)) + 0.5), List).
+
+randomize(1, List) ->
+   randomize(List);
+randomize(T, List) ->
+   lists:foldl(fun(_E, Acc) ->
+                  randomize(Acc)
+               end, randomize(List), lists:seq(1, (T - 1))).
+
+randomize(List) ->
+   D = lists:map(fun(A) ->
+                    {random:uniform(), A}
+             end, List),
+   {_, D1} = lists:unzip(lists:keysort(1, D)), 
+   D1.

@@ -89,6 +89,7 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, _From, 
 	    #state{datasets=Ds} = State) ->
+    io:format("Create!~n"),
     {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
     {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
     Memory = proplists:get_value(memory, Package),
@@ -141,8 +142,7 @@ handle_call({call, Auth, Call}, _From, State) ->
     {reply, Reply, State};
 
 handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
+    {reply, {error, unknwon}, State}.
 
 
 %%--------------------------------------------------------------------
@@ -235,7 +235,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 get_vm(ZUUID) ->
-    [VM] = [chunter_zoneparser:load([{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
+    [VM] = [chunter_zoneparser:load([{name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
 	       [ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 		   [ re:split(Line, ":") 
 		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
@@ -243,7 +243,7 @@ get_vm(ZUUID) ->
     VM.
 
 list_vms() ->
-    [chunter_zoneparser:load([{name,Name},{state, VMState},{pathzonepath, Path},{uuid, UUID},{type, Type}]) || 
+    [chunter_zoneparser:load([{name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
@@ -266,7 +266,9 @@ read_dsmanifest(F, Ds) ->
 	    {ok, Data} = file:read_file(F),
 	    JSON = jsx:json_to_term(Data),
 	    JSON1 = niceify_json(JSON),
-	    {JSON1, [{F, JSON1}|Ds]};
+	    ID = proplists:get_value(uuid, JSON1),
+	    JSON2 = [{id, ID}|JSON1],
+	    {JSON2, [{F, JSON2}|Ds]};
 	JSON -> 
 	    {JSON, Ds}
     end.
@@ -291,27 +293,3 @@ binary_to_atom(B) ->
     list_to_atom(binary_to_list(B)).
     
 
-%% Wo loadbalance nodes by a very accurate measurement of random.
-%% It is good practive to hope that the random node is the least 
-%% loded one - not much else you can do about it.
-pick_host(Hosts) ->
-    [H|R] = shuffle(Hosts),
-    H.
-
-shuffle(List) ->
-%% Determine the log n portion then randomize the list.
-   randomize(round(math:log(length(List)) + 0.5), List).
-
-randomize(1, List) ->
-   randomize(List);
-randomize(T, List) ->
-   lists:foldl(fun(_E, Acc) ->
-                  randomize(Acc)
-               end, randomize(List), lists:seq(1, (T - 1))).
-
-randomize(List) ->
-   D = lists:map(fun(A) ->
-                    {random:uniform(), A}
-             end, List),
-   {_, D1} = lists:unzip(lists:keysort(1, D)), 
-   D1.

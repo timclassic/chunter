@@ -46,18 +46,23 @@ reboot(UUID) ->
     os:cmd(binary_to_list(Cmd)).
 
 create(Data) ->
-    Port = open_port({spawn, "/usr/sbin/vmadm create"}, [use_stdio, binary, {line, 1000}]),
+    Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
     port_command(Port, jsx:to_json(Data)),
-    receive
-	Data ->
-	    io:format("Data: ~p~n", [Data])
-    after
-	5000 ->
-	    io:format("Timeout.~n")
-    end,
+    port_command(Port, "\nEOF\n"),
+    wait_for_tex(Port),
     port_close(Port).
 
     
+wait_for_tex(Port) ->
+    receive
+	{Port,Text} ->
+	    io:format("Data: ~p~n", [Text]),
+            wait_for_tex(Port)
+    after
+	60000 ->
+	    io:format("Timeout.~n")
+    end.
 
 
 %%%===================================================================

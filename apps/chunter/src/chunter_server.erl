@@ -116,6 +116,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 		      |Reply]
 	     end,
     io:format("====Creating====~n~p~n================~n", [Reply1]),
+    spawn(chunter_vmadm, create, [Reply1]),
     {reply, {ok, Reply1},  State#state{datasets=Ds1}};
 
 

@@ -44,6 +44,13 @@ reboot(UUID) ->
     Cmd = <<"/usr/sbin/vmadm reboot", UUID/binary>>,
     os:cmd(binary_to_list(Cmd)).
 
+create(Data) ->
+    Port = open_port({spawn, "/usr/sbin/vmadm"}, [exit_status, use_stdio, binary, {line, 1000}]),
+    port_command(Port, jsx:to_json(Data)).
+
+    
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================

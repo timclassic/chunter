@@ -48,13 +48,7 @@ reboot(UUID) ->
 create(Data) ->
     Port = open_port({spawn, "/usr/sbin/vmadm create"}, [use_stdio, binary, {line, 1000}]),
     port_command(Port, jsx:to_json(Data)),
-    receive
-	_ ->
-	    port_close(Port)
-    after 
-	5000 ->
-	    port_close(Port)
-    end.
+    port_close(Port).
 
     
 

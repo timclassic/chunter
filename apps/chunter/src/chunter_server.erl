@@ -117,6 +117,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 	     end,
     io:format("====Creating====~n~p~n================~n", [Reply1]),
     spawn(chunter_vmadm, create, [Reply1, From]),
+    io:format("post call~n"),
     {noreply,  State#state{datasets=Ds1}};
 
 

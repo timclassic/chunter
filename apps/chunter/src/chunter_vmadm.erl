@@ -13,7 +13,7 @@
          start/2,
          stop/1,
          reboot/1,
-	 create/1
+	 create/2
 	]).
 
 %%%===================================================================
@@ -45,12 +45,13 @@ reboot(UUID) ->
     Cmd = <<"/usr/sbin/vmadm reboot", UUID/binary>>,
     os:cmd(binary_to_list(Cmd)).
 
-create(Data) ->
+create(Data, Caller) ->
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     Res = wait_for_tex(Port),
+    gen_server:reply(Caller, Data),
     port_close(Port),
     Res.
 

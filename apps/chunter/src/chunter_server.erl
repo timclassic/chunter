@@ -87,7 +87,7 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
     Reply = [], 
     {reply, {ok, Reply}, State};
 
-handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, _From, 
+handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds} = State) ->
     io:format("Create!~n"),
     {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
@@ -116,8 +116,8 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 		      |Reply]
 	     end,
     io:format("====Creating====~n~p~n================~n", [Reply1]),
-    spawn(chunter_vmadm, create, [Reply1]),
-    {reply, {ok, Reply1},  State#state{datasets=Ds1}};
+    spawn(chunter_vmadm, create, [Reply1, From]),
+    {noreply,  State#state{datasets=Ds1}};
 
 
 handle_call({call, Auth, {packages, list}}, _From, State) ->
@@ -288,7 +288,6 @@ niceify_json([H|R]) ->
 
 niceify_json([]) ->
     [].
-
 
 binary_to_atom(B) ->
     list_to_atom(binary_to_list(B)).

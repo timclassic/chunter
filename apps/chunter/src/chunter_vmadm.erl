@@ -50,18 +50,22 @@ create(Data) ->
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
-    wait_for_tex(Port),
-    port_close(Port).
+    Res = wait_for_tex(Port),
+    port_close(Port),
+    Res.
 
     
 wait_for_tex(Port) ->
     receive
-	{Port,Text} ->
-	    io:format("Data: ~p~n", [Text]),
-            wait_for_tex(Port)
+	{Port, {data,{eol,<<"Successfully created ", UUID/binary>>}}} ->
+            {ok, UUID};
+	{Port, {data, {eol, Text}}} ->
+            {error, Text};
+        {Port, _E} ->
+            {error, unknown}
     after
 	60000 ->
-	    io:format("Timeout.~n")
+            {error, timeout}
     end.
 
 

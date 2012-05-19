@@ -57,7 +57,7 @@ create(Data, Caller) ->
     Res = case wait_for_tex(Port) of
 	      {ok, UUID} ->
 		  io:format("5a: ~p~n", [UUID]),
-		  {ok, [{id, UUID}|Data]};
+		  {ok, chunter_server:get_vm(UUID)};
 	      E ->
 		  io:format("5b: ~p~n", [E]),
 		  E

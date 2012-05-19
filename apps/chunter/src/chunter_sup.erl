@@ -24,6 +24,7 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, [?CHILD(chunter_watchdog, worker),
+    {ok, { {one_for_one, 5, 10}, [?CHILD(chunter_vm_sup, supervisor),
+				  ?CHILD(chunter_watchdog, worker),
 				  ?CHILD(chunter_server, worker)]}}.
 

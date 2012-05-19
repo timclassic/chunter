@@ -57,6 +57,7 @@ list() ->
 %%--------------------------------------------------------------------
 init([]) ->
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
+    
     {ok, #state{}, 1000}.
 
 
@@ -79,8 +80,9 @@ handle_call({call, Auth, {machines, list}}, _From, State) ->
     {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
-    Reply = get_vm(UUID),
-    {reply, {ok, Reply}, State};
+    Pid = get_vm_pid(UUID),
+    {ok, Reply} = chunter_vm:get(Pid),
+     {reply, {ok, Reply}, State};
 
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
@@ -299,3 +301,12 @@ binary_to_atom(B) ->
     list_to_atom(binary_to_list(B)).
     
 
+get_vm_pid(UUID) ->
+    try gproc:lookup_pid({n, l, {vm, UUID}}) of
+	Pid ->
+	    Pid
+    catch
+	_T:_E ->
+	    {ok, Pid} = chunter_vm_sup:start_child(UUID),
+	    Pid
+    end.

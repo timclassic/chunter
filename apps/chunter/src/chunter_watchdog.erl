@@ -100,8 +100,11 @@ handle_info({_Port, {data, {eol, Data}}}, #state{port=_Port} = State) ->
     case parse_data(Data) of
 	{error, unknown} ->
 	    io:format("Data: ~p~n", [Data]);
+	{UUID, crate} ->
+	    chunter_vm_sup:start_child(UUID);
 	{UUID, Action} ->
-	    io:format("~s: ~p~n", [UUID, Action])
+	    Pid = chunter_server:get_vm_pid(UUID),
+	    chunter_vm:set_state(Pid, Action)
     end,
     {noreply, State};
 

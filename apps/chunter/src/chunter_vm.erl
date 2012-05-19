@@ -105,6 +105,7 @@ handle_cast({state, MachineState}, #state{state = MachineState} = State) ->
     {noreply, State};
 
 handle_cast({state, NewMachineState}, #state{uuid=UUID}=State) ->
+    io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
     gproc:send({p,g,{vm,UUID}}, {vm, state, State}),
     {noreply, State#state{state=NewMachineState}};
 

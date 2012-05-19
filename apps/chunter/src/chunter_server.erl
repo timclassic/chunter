@@ -82,10 +82,6 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
     Reply = get_vm(UUID),
     {reply, {ok, Reply}, State};
 
-handle_call({call, Auth, {machines, delete, UUID}}, _From, State) ->
-    spawn(chunter_vmadm, delete, [UUID]),
-    {reply, ok, State};
-
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds} = State) ->
@@ -164,6 +160,11 @@ handle_call(_Request, _From, State) ->
 handle_cast({cast, Auth, {machines, start, UUID}}, State) ->
     spawn(chunter_vmadm, start, [UUID]),
     {noreply, State};
+
+handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
+    spawn(chunter_vmadm, delete, [UUID]),
+    {noreply, State};
+
 
 handle_cast({cast, Auth, {machines, start, UUID, Image}}, State) ->
     spawn(chunter_vmadm, start, [UUID, Image]),

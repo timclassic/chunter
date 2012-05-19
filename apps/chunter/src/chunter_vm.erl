@@ -63,8 +63,9 @@ start_link(UUID) ->
 %% @end
 %%--------------------------------------------------------------------
 init([UUID]) ->
+    reregister_int(UUID),
     refresh(self()),
-    {ok, #state{uuid=UUID}, 500}.
+    {ok, #state{uuid=UUID}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -120,9 +121,6 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(timeout, #state{uuid = UUID} = State) ->
-    reregister_int(UUID),
-    {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 

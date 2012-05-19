@@ -52,23 +52,16 @@ reboot(UUID) ->
 
 create(Data, Caller) ->
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
-    io:format("1~n"),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
-    io:format("2~n"),
     port_command(Port, jsx:to_json(Data)),
-    io:format("3~n"),
     port_command(Port, "\nEOF\n"),
-    io:format("4~n"),
     Res = case wait_for_tex(Port) of
 	      {ok, UUID} ->
-		  io:format("5a: ~p~n", [UUID]),
 		  {ok, chunter_server:get_vm(UUID)};
 	      E ->
-		  io:format("5b: ~p~n", [E]),
 		  E
 	  end,
     gen_server:reply(Caller, Res),
-    io:format("6: ~p~n", [Res]),
     Res.
 
     

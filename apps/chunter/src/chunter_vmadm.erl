@@ -64,7 +64,6 @@ create(Data, Caller) ->
 	  end,
     gen_server:reply(Caller, Res),
     io:format("6: ~p~n", [Res]),
-    port_close(Port),
     Res.
 
     

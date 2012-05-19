@@ -104,10 +104,13 @@ handle_cast(refresh, #state{uuid=UUID}=State) ->
 handle_cast({state, MachineState}, #state{state = MachineState} = State) ->
     {noreply, State};
 
-handle_cast({state, NewMachineState}, #state{uuid=UUID}=State) ->
+handle_cast({state, NewMachineState}, #state{uuid=UUID,
+					     data=Data}=State) ->
     io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
+    Data1 = [{state, NewMachineState}|proplists:delete(state, Data)],
     gproc:send({p,g,{vm,UUID}}, {vm, state, State}),
-    {noreply, State#state{state=NewMachineState}};
+    {noreply, State#state{state=NewMachineState,
+			  data=Data1}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.

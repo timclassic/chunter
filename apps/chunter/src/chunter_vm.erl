@@ -97,7 +97,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(refresh, #state{uuid=UUID}=State) ->
+handle_cast(refresh, #state{uuid=UUID} = State) ->
     Data = chunter_server:get_vm(UUID),
     {noreply, State#state{data = Data}};
 
@@ -107,8 +107,8 @@ handle_cast({state, MachineState}, #state{state = MachineState} = State) ->
 handle_cast({state, NewMachineState}, #state{uuid=UUID,
 					     data=Data}=State) ->
     io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
+    gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, State}),
     Data1 = [{state, list_to_binary(atom_to_list(NewMachineState))}|proplists:delete(state, Data)],
-    gproc:send({p,g,{vm,UUID}}, {vm, state, State}),
     {noreply, State#state{state=NewMachineState,
 			  data=Data1}};
 

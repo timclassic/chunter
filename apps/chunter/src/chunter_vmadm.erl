@@ -13,6 +13,7 @@
          start/2,
          stop/1,
          reboot/1,
+	 delete/1,
 	 create/2
 	]).
 
@@ -28,6 +29,10 @@
 
 start(UUID) ->
     Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
+    os:cmd(binary_to_list(Cmd)).
+
+delete(UUID) ->
+    Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
     os:cmd(binary_to_list(Cmd)).
 
 

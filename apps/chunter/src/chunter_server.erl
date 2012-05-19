@@ -82,10 +82,10 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
     Reply = get_vm(UUID),
     {reply, {ok, Reply}, State};
 
-% TODO
-handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
-    Reply = [], 
-    {reply, {ok, Reply}, State};
+handle_call({call, Auth, {machines, delete, UUID}}, _From, State) ->
+    spawn(chunter_vmadm, delete, [UUID]),
+    {reply, ok, State};
+
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds} = State) ->
@@ -120,6 +120,10 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
     io:format("post call~n"),
     {noreply,  State#state{datasets=Ds1}};
 
+% TODO
+handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
+    Reply = [], 
+    {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {packages, list}}, _From, State) ->
     Reply = [], 

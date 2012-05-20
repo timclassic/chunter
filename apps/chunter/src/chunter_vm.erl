@@ -168,6 +168,9 @@ reregister_int(UUID) ->
     gproc:reg({n, l, {vm, UUID}}, self()).
 
 
+%if we don't know yet everything is OK
+allowed_transitions(unknown, _) ->
+    true;
 %default transitions
 allowed_transitions(stopped, booting) ->
     true;

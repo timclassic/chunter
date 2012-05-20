@@ -3,18 +3,19 @@
 BEGIN
 {
 /* zone_status_set */
-        state[0] = "S00"; /* "Uninitialized"; */
-        state[1] = "S01"; /* "Ready"; */
-        state[2] = "S02"; /* "Booting"; */
-        state[3] = "S03"; /* "Running"; */
-        state[4] = "S04"; /* "Shutting down"; */
-        state[5] = "S05"; /* "Empty"; */
-        state[6] = "S06"; /* "Down"; */
-        state[7] = "S07"; /* "Dying"; */
-        state[8] = "S08"; /* "Dead"; */
+        state[0] = "S00"; /* UNINITIALIZED */
+        state[1] = "S01"; /* INITIALIZED */
+        state[2] = "S02"; /* READY */
+        state[3] = "S03"; /* BOOTING */
+        state[4] = "S04"; /* RUNNING */
+        state[5] = "S05"; /* SHUTTING_DOWN */
+        state[6] = "S06"; /* EMPTY */
+        state[7] = "S07"; /* DOWN */
+        state[8] = "S08"; /* DYING */
+        state[9] = "S09"; /* DEAD */
 /* zone_create */
-	state[9] = "S09"; /* Create started */
 	state[10] = "S10"; /* Create started */
+	state[11] = "S11"; /* Delete started */
 }
 
 zone_status_set:entry

@@ -143,26 +143,28 @@ code_change(_OldVsn, State, _Extra) ->
 parse_data(<<"S00: ", UUID/binary>>) ->
     {UUID, uninitialized};
 parse_data(<<"S01: ", UUID/binary>>) ->
-    {UUID, ready};
+    {UUID, initialized};
 parse_data(<<"S02: ", UUID/binary>>) ->
-    {UUID, booting};
+    {UUID, ready};
 parse_data(<<"S03: ", UUID/binary>>) ->
-    {UUID, running};
+    {UUID, booting};
 parse_data(<<"S04: ", UUID/binary>>) ->
-    {UUID, shutting_down};
+    {UUID, running};
 parse_data(<<"S05: ", UUID/binary>>) ->
-    {UUID, empty};
+    {UUID, shutting_down};
 parse_data(<<"S06: ", UUID/binary>>) ->
-    {UUID, down};
+    {UUID, empty};
 parse_data(<<"S07: ", UUID/binary>>) ->
-    {UUID, dying};
+    {UUID, down};
 parse_data(<<"S08: ", UUID/binary>>) ->
-    {UUID, dead};
+    {UUID, dying};
 parse_data(<<"S09: ", UUID/binary>>) ->
-    {UUID, uninitialized};
+    {UUID, dead};
 parse_data(<<"S10: ", UUID/binary>>) ->
-    {UUID, creating};
+    {UUID, uninitialized};
 parse_data(<<"S11: ", UUID/binary>>) ->
+    {UUID, creating};
+parse_data(<<"S12: ", UUID/binary>>) ->
     {UUID, destroying};
 parse_data(_) ->
     {error, unknown}.

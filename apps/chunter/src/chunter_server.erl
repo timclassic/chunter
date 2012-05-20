@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, list/0, get/1, get_vm/1, get_vm_pid/1]).
+-export([start_link/0, list/0, get/1, get_vm/1, get_vm_pid/1, niceify_json/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -82,7 +82,7 @@ handle_call({call, Auth, {machines, list}}, _From, State) ->
 handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
     Pid = get_vm_pid(UUID),
     {ok, Reply} = chunter_vm:get(Pid),
-     {reply, {ok, Reply}, State};
+    {reply, {ok, Reply}, State};
 
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
@@ -120,7 +120,8 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
-    Reply = [], 
+    Pid = get_vm_pid(UUID),
+    {ok, Reply} = chunter_vm:info(Pid),
     {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {packages, list}}, _From, State) ->

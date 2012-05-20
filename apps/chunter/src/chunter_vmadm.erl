@@ -12,6 +12,7 @@
 -export([start/1,
          start/2,
          stop/1,
+	 info/1,
          reboot/1,
 	 delete/1,
 	 create/2
@@ -35,12 +36,13 @@ delete(UUID) ->
     Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
     os:cmd(binary_to_list(Cmd)).
 
+info(UUID) ->
+    Cmd = <<"/usr/sbin/vmadm info ", UUID/binary>>,
+    chunter_server:niceify_json(jsx:to_term(os:cmd(binary_to_list(Cmd)))).
 
-%TODO
 start(UUID, Image) ->
     Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
     os:cmd(binary_to_list(Cmd)).
-
 
 stop(UUID) ->
     Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary>>,

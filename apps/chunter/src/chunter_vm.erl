@@ -14,6 +14,7 @@
 -export([start_link/1, 
 	 refresh/1, 
 	 get/1,
+	 info/1,
 	 set_state/2]).
 
 %% gen_server callbacks
@@ -36,6 +37,10 @@ refresh(Pid) ->
 
 get(Pid) ->
     gen_server:call(Pid, get).
+
+info(Pid) ->
+    gen_server:call(Pid, info).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -81,6 +86,15 @@ init([UUID]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(info, _From, #state{uuid = UUID, data = Data} = State) ->
+    case proplists:get_value(brand, Data) of
+	<<"kvm">> ->
+	    Info = chunter_vmadm:info(UUID),
+	    {reply, {ok, Info}, State};
+	_ ->
+	    {reply, {error, not_supported}, State}
+    end;
+
 handle_call(get, _From, #state{data = Data} = State) ->
     {reply, {ok, Data}, State};
 handle_call(_Request, _From, State) ->

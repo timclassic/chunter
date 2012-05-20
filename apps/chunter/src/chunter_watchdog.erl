@@ -162,8 +162,6 @@ simplifie_state(dying) ->
 simplifie_state(dead) -> 
     stopped.
 
-
-
 parse_data(<<"S00: ", UUID/binary>>) ->
     {UUID, uninitialized};
 parse_data(<<"S01: ", UUID/binary>>) ->

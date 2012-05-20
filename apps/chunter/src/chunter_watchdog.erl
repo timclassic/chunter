@@ -104,7 +104,7 @@ handle_info({_Port, {data, {eol, Data}}}, #state{port=_Port} = State) ->
 	    chunter_vm_sup:start_child(UUID);
 	{UUID, Action} ->
 	    Pid = chunter_server:get_vm_pid(UUID),
-	    chunter_vm:set_state(Pid, Action)
+	    chunter_vm:set_state(Pid, simplifie_state(Action))
     end,
     {noreply, State};
 
@@ -139,6 +139,30 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+simplifie_state(uninitialized) ->
+    stopped;
+simplifie_state(initialized) ->
+    booting;
+simplifie_state(ready) ->
+    booting;
+simplifie_state(booting) ->
+    booting;
+simplifie_state(running) ->
+    running;
+simplifie_state(shutting_down) ->
+    shutting_down;
+simplifie_state(empty) ->
+    shutting_down;
+simplifie_state(down) -> 
+    shutting_down;
+simplifie_state(dying) -> 
+    shutting_down;
+simplifie_state(dead) -> 
+    stopped.
+
+
 
 parse_data(<<"S00: ", UUID/binary>>) ->
     {UUID, uninitialized};

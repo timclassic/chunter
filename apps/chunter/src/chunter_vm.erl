@@ -105,12 +105,18 @@ handle_cast({state, MachineState}, #state{state = MachineState} = State) ->
     {noreply, State};
 
 handle_cast({state, NewMachineState}, #state{uuid=UUID,
-					     data=Data}=State) ->
-    io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
-    gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState}),
-    Data1 = [{state, list_to_binary(atom_to_list(NewMachineState))}|proplists:delete(state, Data)],
-    {noreply, State#state{state=NewMachineState,
-			  data=Data1}};
+		  			     data=Data,
+					     state=OldMachineState}=State) ->
+    case allowed_transitions(OldMachineState, NewMachineState) of
+	true ->
+	    io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
+	    gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState}),
+	    Data1 = [{state, list_to_binary(atom_to_list(NewMachineState))}|proplists:delete(state, Data)],
+	    {noreply, State#state{state=NewMachineState,
+				  data=Data1}};
+	false ->
+	    {noreply, State}
+    end;
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -160,3 +166,21 @@ code_change(_OldVsn, State, _Extra) ->
 reregister_int(UUID) ->
     gproc:reg({p, l, {chunter, vm}}, UUID),
     gproc:reg({n, l, {vm, UUID}}, self()).
+
+
+%default transitions
+allowed_transitions(stopped, booting) ->
+    true;
+allowed_transitions(booting, running) ->
+    true;
+allowed_transitions(running, shutting_down) ->
+    true;
+allowed_transitions(shutting_down, stopped) ->
+    true;
+%escape if something runs off during powerup
+allowed_transitions(booting, shutting_down) ->
+    true;
+allowed_transitions(_From, _To) ->
+    false.
+
+

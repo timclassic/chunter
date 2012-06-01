@@ -38,7 +38,7 @@ delete(UUID) ->
 
 info(UUID) ->
     Cmd = <<"/usr/sbin/vmadm info ", UUID/binary>>,
-    chunter_server:niceify_json(jsx:to_term(os:cmd(binary_to_list(Cmd)))).
+    chunter_server:niceify_json(jsx:to_term(list_to_binary(os:cmd(binary_to_list(Cmd))))).
 
 start(UUID, Image) ->
     Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,

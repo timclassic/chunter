@@ -57,7 +57,6 @@ list() ->
 %%--------------------------------------------------------------------
 init([]) ->
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
-    
     {ok, #state{}, 1000}.
 
 
@@ -76,73 +75,102 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({call, Auth, {machines, list}}, _From, State) ->
-    Reply = list_vms(),
+    Reply = list_vms(Auth),
     {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
-    Pid = get_vm_pid(UUID),
-    {ok, Reply} = chunter_vm:get(Pid),
-    {reply, {ok, Reply}, State};
-
+    case libsnarl:allowed(system, Auth, [vm, UUID, view]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    Pid = get_vm_pid(UUID),
+	    {ok, Reply} = chunter_vm:get(Pid),
+	    {reply, {ok, Reply}, State}
+    end;
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds} = State) ->
-    io:format("Create!~n"),
-    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
-    {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
-    Memory = proplists:get_value(memory, Package),
-    Disk = proplists:get_value(disk, Package),
-    Swap = proplists:get_value(swap, Package),
-    Reply = [{tags, Tags},
-	     {customer_metadata, Metadata},
-	     {alias, Name}],
-    Reply1 = case proplists:get_value(platform_type, Dataset) of
-		 <<"smartos">> ->
-		     [{max_physical_memory, Memory},
-		      {quota, Disk},
-		      {max_swap, Swap},
-		      {dataset_uuid, DatasetUUID}
-		      |Reply];
-		 _ ->
-		     [{max_physical_memory, Memory+1024},
-		      {ram, Memory},
-		      {quota, 10},
-		      {disk_driver, proplists:get_value(disk_driver, Dataset)},
-		      {nic_driver, proplists:get_value(nic_driver, Dataset)},
-		      {max_swap, Swap},
-		      {dataset_uuid, DatasetUUID}
-		      |Reply]
-	     end,
-    io:format("====Creating====~n~p~n================~n", [Reply1]),
-    spawn(chunter_vmadm, create, [Reply1, From]),
-    io:format("post call~n"),
-    {noreply,  State#state{datasets=Ds1}};
+    case libsnarl:allowed(system, Auth, [vm, create]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    io:format("Create!~n"),
+	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
+	    {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
+	    Memory = proplists:get_value(memory, Package),
+	    Disk = proplists:get_value(disk, Package),
+	    Swap = proplists:get_value(swap, Package),
+	    Reply = [{tags, Tags},
+		     {customer_metadata, Metadata},
+		     {alias, Name}],
+	    Reply1 = case proplists:get_value(platform_type, Dataset) of
+			 <<"smartos">> ->
+			     [{max_physical_memory, Memory},
+			      {quota, Disk},
+			      {max_swap, Swap},
+			      {dataset_uuid, DatasetUUID}
+			      |Reply];
+			 _ ->
+			     [{max_physical_memory, Memory+1024},
+			      {ram, Memory},
+			      {quota, 10},
+			      {disk_driver, proplists:get_value(disk_driver, Dataset)},
+			      {nic_driver, proplists:get_value(nic_driver, Dataset)},
+			      {max_swap, Swap},
+			      {dataset_uuid, DatasetUUID}
+			      |Reply]
+		     end,
+	    io:format("====Creating====~n~p~n================~n", [Reply1]),
+	    spawn(chunter_vmadm, create, [Reply1, From, Auth]),
+	    io:format("post call~n"),
+	    {noreply,  State#state{datasets=Ds1}}
+    end;
 
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
-    Pid = get_vm_pid(UUID),
-    {ok, Reply} = chunter_vm:info(Pid),
-    {reply, {ok, Reply}, State};
+    case libsnarl:allowed(system, Auth, [vm, UUID, info]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    Pid = get_vm_pid(UUID),
+	    {ok, Reply} = chunter_vm:info(Pid),
+	    {reply, {ok, Reply}, State}
+    end;
 
 handle_call({call, Auth, {packages, list}}, _From, State) ->
-    Reply = [], 
-    {reply, {ok,  Reply}, State};
+    case libsnarl:allowed(system, Auth, [package, list]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    Reply = [], 
+	    {reply, {ok,  Reply}, State}
+    end;
 
 handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds} = State) ->
-    {Reply, Ds1} = list_datasets(Ds), 
+    {Reply, Ds1} = list_datasets(Ds, Auth), 
     {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = State) ->
-    {Reply, Ds1} = get_dataset(UUID, Ds), 
-    {reply, {ok, Reply}, State#state{datasets=Ds1}};
+    case libsnarl:allowed(system, Auth, [dataset, UUID, get]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    {Reply, Ds1} = get_dataset(UUID, Ds), 
+	    {reply, {ok, Reply}, State#state{datasets=Ds1}}
+    end;
 
 
 handle_call({call, Auth, {keys, list}}, _From, State) ->
-    Reply = [], 
-    {reply, {ok, Reply}, State};
+    case libsnarl:allowed(system, Auth, [key, list]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    Reply = [], 
+	    {reply, {ok, Reply}, State}
+    end;
 
 
-handle_call({call, Auth, Call}, _From, State) ->
+handle_call({call, _Auth, Call}, _From, State) ->
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
 
@@ -161,26 +189,51 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({cast, Auth, {machines, start, UUID}}, State) ->
-    spawn(chunter_vmadm, start, [UUID]),
-    {noreply, State};
+    case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    spawn(chunter_vmadm, start, [UUID]),
+	    {noreply, State}
+    end;
 
 handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
-    spawn(chunter_vmadm, delete, [UUID]),
-    {noreply, State};
+    case libsnarl:allowed(system, Auth, [vm, UUID, delete]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    spawn(chunter_vmadm, delete, [UUID]),
+	    {noreply, State}
+    end;
 
 
 handle_cast({cast, Auth, {machines, start, UUID, Image}}, State) ->
-    spawn(chunter_vmadm, start, [UUID, Image]),
-    {noreply, State};
+    case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    spawn(chunter_vmadm, start, [UUID, Image]),
+	    {noreply, State}
+    end;
 
 
 handle_cast({cast, Auth, {machines, stop, UUID}}, State) ->
-    spawn(chunter_vmadm, stop, [UUID]),
-    {noreply, State};
+    case libsnarl:allowed(system, Auth, [vm, UUID, stop]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    spawn(chunter_vmadm, stop, [UUID]),
+	    {noreply, State}
+    end;
 
 handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
-    spawn(chunter_vmadm, reboot, [UUID]),
-    {noreply, State};
+    case libsnarl:allowed(system, Auth, [vm, UUID, reboot]) of
+	false ->
+	    {reply, {error, forbidden}, State};
+	true ->
+	    spawn(chunter_vmadm, reboot, [UUID]),
+	    {noreply, State}
+    end;
 
 
 handle_cast(_Msg, State) ->
@@ -252,22 +305,31 @@ get_vm(ZUUID) ->
 	       ID =/= <<"0">>],
     VM.
 
-list_vms() ->
+list_vms(Auth) ->
+    AuthC = libsnarl:user_cache(system,Auth),
     [chunter_zoneparser:load([{name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-	ID =/= <<"0">>].
-    
+	ID =/= <<"0">> andalso
+	    libsnarl:allowed(system, AuthC, [vm, UUID, view]) == true].
 
 get_dataset(UUID, Ds) ->
     read_dsmanifest(filename:join(<<"/var/db/dsadm">>, <<UUID/binary, ".dsmanifest">>), Ds).
 
-list_datasets(Datasets) ->
+list_datasets(Datasets, Auth) ->
+    AuthC = libsnarl:user_cache(system, Auth),
     filelib:fold_files("/var/db/dsadm", ".*dsmanifest", false, 
 		       fun (F, {Fs, DsA}) ->
-			       {F1, DsA1} = read_dsmanifest(F, DsA),
-			       {[F1| Fs], DsA1}
+			       UUID = re:run(F, "/var/db/dsadm/(.*)\.dsmanifest", 
+					     [{capture, all_but_first, binary}]),
+			       case libsnarl:allowed(system, AuthC, [vm, UUID, view]) of
+				   true ->
+				       {F1, DsA1} = read_dsmanifest(F, DsA),
+				       {[F1| Fs], DsA1};
+				   false ->
+				       {Fs, DsA}
+			       end
 		       end, {[], Datasets}).
 			       
 read_dsmanifest(F, Ds) ->

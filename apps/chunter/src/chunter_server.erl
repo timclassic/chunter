@@ -306,7 +306,7 @@ get_vm(ZUUID) ->
     VM.
 
 list_vms(Auth) ->
-    AuthC = libsnarl:user_cache(system,Auth),
+    {ok, AuthC} = libsnarl:user_cache(system, Auth),
     [chunter_zoneparser:load([{name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
@@ -318,7 +318,7 @@ get_dataset(UUID, Ds) ->
     read_dsmanifest(filename:join(<<"/var/db/dsadm">>, <<UUID/binary, ".dsmanifest">>), Ds).
 
 list_datasets(Datasets, Auth) ->
-    AuthC = libsnarl:user_cache(system, Auth),
+    {ok, AuthC} = libsnarl:user_cache(system, Auth),
     filelib:fold_files("/var/db/dsadm", ".*dsmanifest", false, 
 		       fun (F, {Fs, DsA}) ->
 			       UUID = re:run(F, "/var/db/dsadm/(.*)\.dsmanifest", 

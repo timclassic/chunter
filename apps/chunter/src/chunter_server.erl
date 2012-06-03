@@ -103,13 +103,28 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 	    Reply = [{tags, Tags},
 		     {customer_metadata, Metadata},
 		     {alias, Name}],
-	    Reply1 = case proplists:get_value(platform_type, Dataset) of
+	    
+	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"external">>) of
+			       {ok, IP} ->
+				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"external">>),
+				       {[{nics, 
+					  [[
+					    {nic_tag, <<"external">>},
+					    {ip, libsnarl:ip_tp_str(IP)},
+					    {netmask, libsnarl:ip_tp_str(Mask)},
+					    {gateway, libsnarl:ip_tp_str(Gateway)}
+					   ]]}|Reply],
+					[network, <<"external">>, release, IP]};
+				   _ ->
+				       {undefiend, []}
+			       end,
+	    Reply2 = case proplists:get_value(platform_type, Dataset) of
 			 <<"smartos">> ->
 			     [{max_physical_memory, Memory},
 			      {quota, Disk},
 			      {max_swap, Swap},
 			      {dataset_uuid, DatasetUUID}
-			      |Reply];
+			      |Reply1];
 			 _ ->
 			     [{max_physical_memory, Memory+1024},
 			      {ram, Memory},
@@ -118,10 +133,10 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			      {nic_driver, proplists:get_value(nic_driver, Dataset)},
 			      {max_swap, Swap},
 			      {dataset_uuid, DatasetUUID}
-			      |Reply]
+			      |Reply1]
 		     end,
-	    io:format("====Creating====~n~p~n================~n", [Reply1]),
-	    spawn(chunter_vmadm, create, [Reply1, From, Auth]),
+	    io:format("====Creating====~n~p~n================~n", [Reply2]),
+	    spawn(chunter_vmadm, create, [Reply2, From, Auth, Rights]),
 	    io:format("post call~n"),
 	    {noreply,  State#state{datasets=Ds1}}
     end;

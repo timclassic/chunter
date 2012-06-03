@@ -15,7 +15,7 @@
 	 info/1,
          reboot/1,
 	 delete/1,
-	 create/3
+	 create/4
 	]).
 
 %%%===================================================================
@@ -52,14 +52,17 @@ reboot(UUID) ->
     Cmd = <<"/usr/sbin/vmadm reboot", UUID/binary>>,
     os:cmd(binary_to_list(Cmd)).
 
-create(Data, Caller, Owner) ->
+create(Data, Caller, Owner, Rights) ->
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     Res = case wait_for_tex(Port) of
 	      {ok, UUID} ->
-		  libsnarl:user_grant(system, Owner, [vm, UUID, '...']),
+		  {ok, Owners} = libsnarl:group_add(<<"vm_", UUID/binary, "_owner">>),
+		  [libsnarl:group_grant(Owners, Perm) ||
+		      Perm <- [[vm, UUID, '...'] | Rights]],
+		  libsnarl:user_add_to_group(system, Owner, Owners),
 		  {ok, chunter_server:get_vm(UUID)};
 	      E ->
 		  E

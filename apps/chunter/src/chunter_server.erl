@@ -94,7 +94,6 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 	false ->
 	    {reply, {error, forbidden}, State};
 	true ->
-	    io:format("Create!~n"),
 	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
 	    {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
 	    Memory = proplists:get_value(memory, Package),
@@ -135,9 +134,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			      {dataset_uuid, DatasetUUID}
 			      |Reply1]
 		     end,
-	    io:format("====Creating====~n~p~n================~n", [Reply2]),
 	    spawn(chunter_vmadm, create, [Reply2, From, Auth, Rights]),
-	    io:format("post call~n"),
 	    {noreply,  State#state{datasets=Ds1}}
     end;
 

@@ -59,8 +59,8 @@ create(Data, Caller, Owner, Rights) ->
     port_command(Port, "\nEOF\n"),
     Res = case wait_for_tex(Port) of
 	      {ok, UUID} ->
-		  {ok, Owners} = libsnarl:group_add(<<"vm_", UUID/binary, "_owner">>),
-		  [libsnarl:group_grant(Owners, Perm) ||
+		  {ok, Owners} = libsnarl:group_add(system, <<"vm_", UUID/binary, "_owner">>),
+		  [libsnarl:group_grant(system, Owners, Perm) ||
 		      Perm <- [[vm, UUID, '...'] | Rights]],
 		  libsnarl:user_add_to_group(system, Owner, Owners),
 		  {ok, chunter_server:get_vm(UUID)};
@@ -70,7 +70,6 @@ create(Data, Caller, Owner, Rights) ->
     gen_server:reply(Caller, Res),
     Res.
 
-    
 wait_for_tex(Port) ->
     receive
 	{Port, {data,{eol,<<"Successfully created ", UUID/binary>>}}} ->
@@ -84,9 +83,6 @@ wait_for_tex(Port) ->
             {error, timeout}
     end.
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
- 

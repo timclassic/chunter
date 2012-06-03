@@ -234,6 +234,12 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
 		     end
 		     || Nic <- Nics]
 	    end,
+	    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
+		{ok, GUUID} ->
+		    libsnarl:group_delete(system, GUUID);
+		_ -> 
+		    ok
+	    end,
 	    spawn(chunter_vmadm, delete, [UUID]),
 	    {noreply, State}
     end;

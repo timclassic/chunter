@@ -217,6 +217,23 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
 	false ->
 	    {reply, {error, forbidden}, State};
 	true ->
+	    VM = get_vm(UUID),
+
+	    case proplists:get_value(nics, VM) of
+		undefined ->
+		    [];
+		Nics ->
+		    [try
+			 Net = proplists:get_value(nic_tag, Nic),
+			 IP = proplists:get_value(ip, Nic),
+			 libsnarl:network_release_ip(system, Net, IP),
+			 ok
+		     catch 
+			 _:_ ->
+			     ok
+		     end
+		     || Nic <- Nics]
+	    end,
 	    spawn(chunter_vmadm, delete, [UUID]),
 	    {noreply, State}
     end;

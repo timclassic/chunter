@@ -27,11 +27,11 @@ zone_status_set:entry
 fop_mkdir:entry
 / stringof(args[0]->v_path) == "/zones" /
 {
-	printf("%s: %s", state[9], stringof(args[1]));
+	printf("%s: %s\n", state[9], stringof(args[1]));
 }
 
 fop_rmdir:entry
 / stringof(args[0]->v_path) == "/zones" /
 {
-	printf("%s: %s", state[10], stringof(args[1]));
+	printf("%s: %s\n", state[10], stringof(args[1]));
 }

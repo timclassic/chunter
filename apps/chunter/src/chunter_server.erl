@@ -110,9 +110,9 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 				       {[{nics, 
 					  [[
 					    {nic_tag, <<"external">>},
-					    {ip, libsnarl:ip_tp_str(IP)},
-					    {netmask, libsnarl:ip_tp_str(Mask)},
-					    {gateway, libsnarl:ip_tp_str(Gateway)}
+					    {ip, libsnarl:ip_to_str(IP)},
+					    {netmask, libsnarl:ip_to_str(Mask)},
+					    {gateway, libsnarl:ip_to_str(Gateway)}
 					   ]]}|Reply],
 					[network, <<"external">>, release, IP]};
 				   _ ->

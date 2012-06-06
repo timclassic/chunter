@@ -27,6 +27,7 @@ load() ->
     application:start(inets),
     application:start(erlsom),
     application:start(libsniffle),
+    application:start(libsnarl),
     application:start(chunter).
 
 %% ===================================================================

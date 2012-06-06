@@ -40,6 +40,9 @@ get(UUID) ->
 
 list() ->
     gen_server:call(?SERVER, {call, system, {machines, list}}).
+reregister() ->
+    gen_server:cast(?SERVER, reregister).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -270,6 +273,18 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
 	    {noreply, State}
     end;
 
+handle_cast(reregister, State) ->
+    try
+	libsniffle:join_client_channel(),
+        libsniffle:register(system, chunter, self()),
+	{noreply, State}
+    catch
+	_T:_E ->
+	    application:stop(gproc),
+	    application:start(gproc),
+	    {noreply, State, 1000}
+    end;
+
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -286,14 +301,8 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, State) ->
-    try 
-	libsniffle:join_client_channel(),
-        libsniffle:register(system, chunter, self()),
-	{noreply, State}
-    catch
-        _T:_E -> 
-	    {noreply, State, 1000}
-    end;
+    reregister(),
+    {noreply, State};
 
 handle_info({sniffle, request, register}, State) ->
     libsniffle:register(system, chunter, self()),

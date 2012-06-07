@@ -116,7 +116,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 					    {netmask, libsnarl:ip_to_str(Mask)},
 					    {gateway, libsnarl:ip_to_str(Gateway)}
 					   ]]}|Reply],
-					[network, <<"external">>, release, IP]};
+					[[network, <<"external">>, release, IP]]};
 				   _ ->
 				       {undefiend, []}
 			       end,

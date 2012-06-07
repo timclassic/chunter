@@ -111,7 +111,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"external">>),
 				       {[{nics, 
 					  [[
-					    {nic_tag, <<"external">>},
+					    {nic_tag, <<"admin">>},
 					    {ip, libsnarl:ip_to_str(IP)},
 					    {netmask, libsnarl:ip_to_str(Mask)},
 					    {gateway, libsnarl:ip_to_str(Gateway)}

@@ -143,8 +143,8 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			      {disks,
 			       [{size, Disk*1024},
 				{image_uuid, Dataset}]},
-			      {disk_driver, proplists:get_value(disk_driver, Dataset)},
-			      {nic_driver, proplists:get_value(nic_driver, Dataset)},
+			      {disk_driver, proplists:get_value(disk_driver, Dataset, <<"virtio">>)},
+			      {nic_driver, proplists:get_value(nic_driver, Dataset, <<"virtio">>)},
 			      {max_swap, Swap}
 			      |Reply1];
 			 OS ->

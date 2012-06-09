@@ -137,16 +137,22 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			      |Reply1];
 			 <<"linux">> = OS ->
 			     ?INFO({os, type, OS}, [], [chunter]),
-			     [{max_physical_memory, Memory+1024},
-			      {ram, Memory},
-			      {brand, <<"kvm">>},
-			      {disks,
-			       [{size, Disk*1024},
-				{image_uuid, Dataset}]},
-			      {disk_driver, proplists:get_value(disk_driver, Dataset, <<"virtio">>)},
-			      {nic_driver, proplists:get_value(nic_driver, Dataset, <<"virtio">>)},
-			      {max_swap, Swap}
-			      |Reply1];
+			     DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
+			     ?DBG({DiskDrv}, [], [chunter]),
+			     NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
+			     ?DBG({NicDrv}, [], [chunter]),
+			     Res = [{max_physical_memory, Memory+1024},
+				    {ram, Memory},
+				    {brand, <<"kvm">>},
+				    {disks,
+				     [{size, Disk*1024},
+				      {image_uuid, DatasetUUID}]},
+				    {disk_driver, DiskDrv},
+				    {nic_driver, NicDrv},
+				    {max_swap, Swap}
+				    |Reply1],
+			     ?DBG({spec, Res}, [], [chunter]),
+			     Res;
 			 OS ->
 			     ?ERROR({bad_os, OS}, [], [chunter])
 		     end,

@@ -146,7 +146,8 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 				    {brand, <<"kvm">>},
 				    {disks,
 				     [[{size, Disk*1024},
-				      {image_uuid, DatasetUUID}]]},
+				       {model, DiskDrv},
+				       {image_uuid, DatasetUUID}]]},
 				    {disk_driver, DiskDrv},
 				    {nic_driver, NicDrv},
 				    {max_swap, Swap}

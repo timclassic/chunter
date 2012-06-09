@@ -10,6 +10,8 @@
 
 -behaviour(gen_server).
 
+-include_lib("alog_pt.hrl").
+
 %% API
 -export([start_link/0, list/0, get/1, get_vm/1, get_vm_pid/1, niceify_json/1]).
 
@@ -93,15 +95,19 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds} = State) ->
+    ?DEBUG({machines, create, {Name, PackageUUID, DatasetUUID, Metadata, Tags}}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [vm, create]) of
 	false ->
+	    ?WARNING({forbidden, machines, create, Auth}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
+	    ?DEBUG({machines, create, Dataset}, [], [chunter]),
 	    {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
 	    Memory = proplists:get_value(memory, Package),
 	    Disk = proplists:get_value(disk, Package),
 	    Swap = proplists:get_value(swap, Package),
+	    ?DEBUG({machines, create, Memory, Disk, Swap}, [], [chunter]),
 	    Reply = [{tags, Tags},
 		     {customer_metadata, Metadata},
 		     {alias, Name}],
@@ -143,8 +149,10 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
+    ?DEBUG({machines, info, UUID}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [vm, UUID, info]) of
 	false ->
+	    ?WARNING({machines, info, Auth}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    Pid = get_vm_pid(UUID),
@@ -153,8 +161,10 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
     end;
 
 handle_call({call, Auth, {packages, list}}, _From, State) ->
+    ?DEBUG({packages, list}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [package, list]) of
 	false ->
+	    ?WARNING({forbidden, packages, list, Auth}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    Reply = [], 
@@ -162,12 +172,15 @@ handle_call({call, Auth, {packages, list}}, _From, State) ->
     end;
 
 handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds} = State) ->
+    ?DEBUG({datasets, list}, [], [chunter]),
     {Reply, Ds1} = list_datasets(Ds, Auth), 
     {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = State) ->
+    ?DEBUG({datasets, get, UUID}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [dataset, UUID, get]) of
 	false ->
+	    ?WARNING({forbidden, dataset, get, Auth, UUID}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    {Reply, Ds1} = get_dataset(UUID, Ds), 
@@ -176,8 +189,10 @@ handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = St
 
 
 handle_call({call, Auth, {keys, list}}, _From, State) ->
+    ?DEBUG({keys, list}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [key, list]) of
 	false ->
+	    ?WARNING({forbidden, keys, list, Auth}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    Reply = [], 
@@ -186,6 +201,7 @@ handle_call({call, Auth, {keys, list}}, _From, State) ->
 
 
 handle_call({call, _Auth, Call}, _From, State) ->
+    ?DEBUG({unknown, Call}, [], [chunter]),
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
 
@@ -206,6 +222,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({cast, Auth, {machines, start, UUID}}, State) ->
     case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
 	false ->
+	    ?WARNING({forbidden, machines, start, Auth, UUID}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    spawn(chunter_vmadm, start, [UUID]),
@@ -215,6 +232,7 @@ handle_cast({cast, Auth, {machines, start, UUID}}, State) ->
 handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
     case libsnarl:allowed(system, Auth, [vm, UUID, delete]) of
 	false ->
+	    ?WARNING({forbidden, machines, delete, Auth, UUID}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    VM = get_vm(UUID),
@@ -248,6 +266,7 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
 handle_cast({cast, Auth, {machines, start, UUID, Image}}, State) ->
     case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
 	false ->
+	    ?WARNING({forbidden, machines, start, Auth, UUID, Image}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    spawn(chunter_vmadm, start, [UUID, Image]),
@@ -258,6 +277,7 @@ handle_cast({cast, Auth, {machines, start, UUID, Image}}, State) ->
 handle_cast({cast, Auth, {machines, stop, UUID}}, State) ->
     case libsnarl:allowed(system, Auth, [vm, UUID, stop]) of
 	false ->
+	    ?WARNING({forbidden, machines, stop, Auth, UUID}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    spawn(chunter_vmadm, stop, [UUID]),
@@ -267,6 +287,7 @@ handle_cast({cast, Auth, {machines, stop, UUID}}, State) ->
 handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
     case libsnarl:allowed(system, Auth, [vm, UUID, reboot]) of
 	false ->
+	    ?WARNING({forbidden, machines, reboot, Auth, UUID}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    spawn(chunter_vmadm, reboot, [UUID]),
@@ -279,7 +300,8 @@ handle_cast(reregister, State) ->
         libsniffle:register(system, chunter, self()),
 	{noreply, State}
     catch
-	_T:_E ->
+	T:E ->
+	    ?ERROR({gproc, error, register, T, E}, [], [chunter]),
 	    application:stop(gproc),
 	    application:start(gproc),
 	    {noreply, State, 1000}

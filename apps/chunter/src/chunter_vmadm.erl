@@ -93,7 +93,7 @@ wait_for_tex(Port) ->
             {error, unknown}
     after
 	60000 ->
-	    ?ERROR({vmadm, timeout, E}, [], [vmadm, chunter]),
+	    ?ERROR({vmadm, timeout}, [], [vmadm, chunter]),
             {error, timeout}
     end.
 

@@ -95,19 +95,19 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds} = State) ->
-    ?DEBUG({machines, create, {Name, PackageUUID, DatasetUUID, Metadata, Tags}}, [], [chunter]),
+    ?DBG({machines, create, {Name, PackageUUID, DatasetUUID, Metadata, Tags}}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [vm, create]) of
 	false ->
 	    ?WARNING({forbidden, machines, create, Auth}, [], [chunter]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
-	    ?DEBUG({machines, create, Dataset}, [], [chunter]),
+	    ?DBG({machines, create, Dataset}, [], [chunter]),
 	    {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
 	    Memory = proplists:get_value(memory, Package),
 	    Disk = proplists:get_value(disk, Package),
 	    Swap = proplists:get_value(swap, Package),
-	    ?DEBUG({machines, create, Memory, Disk, Swap}, [], [chunter]),
+	    ?DBG({machines, create, Memory, Disk, Swap}, [], [chunter]),
 	    Reply = [{tags, Tags},
 		     {customer_metadata, Metadata},
 		     {alias, Name}],
@@ -149,7 +149,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
-    ?DEBUG({machines, info, UUID}, [], [chunter]),
+    ?DBG({machines, info, UUID}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [vm, UUID, info]) of
 	false ->
 	    ?WARNING({machines, info, Auth}, [], [chunter]),
@@ -161,7 +161,7 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
     end;
 
 handle_call({call, Auth, {packages, list}}, _From, State) ->
-    ?DEBUG({packages, list}, [], [chunter]),
+    ?DBG({packages, list}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [package, list]) of
 	false ->
 	    ?WARNING({forbidden, packages, list, Auth}, [], [chunter]),
@@ -172,12 +172,12 @@ handle_call({call, Auth, {packages, list}}, _From, State) ->
     end;
 
 handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds} = State) ->
-    ?DEBUG({datasets, list}, [], [chunter]),
+    ?DBG({datasets, list}, [], [chunter]),
     {Reply, Ds1} = list_datasets(Ds, Auth), 
     {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = State) ->
-    ?DEBUG({datasets, get, UUID}, [], [chunter]),
+    ?DBG({datasets, get, UUID}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [dataset, UUID, get]) of
 	false ->
 	    ?WARNING({forbidden, dataset, get, Auth, UUID}, [], [chunter]),
@@ -189,7 +189,7 @@ handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = St
 
 
 handle_call({call, Auth, {keys, list}}, _From, State) ->
-    ?DEBUG({keys, list}, [], [chunter]),
+    ?DBG({keys, list}, [], [chunter]),
     case libsnarl:allowed(system, Auth, [key, list]) of
 	false ->
 	    ?WARNING({forbidden, keys, list, Auth}, [], [chunter]),
@@ -201,7 +201,7 @@ handle_call({call, Auth, {keys, list}}, _From, State) ->
 
 
 handle_call({call, _Auth, Call}, _From, State) ->
-    ?DEBUG({unknown, Call}, [], [chunter]),
+    ?DBG({unknown, Call}, [], [chunter]),
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
 

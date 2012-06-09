@@ -137,6 +137,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			 _ ->
 			     [{max_physical_memory, Memory+1024},
 			      {ram, Memory},
+			      {brand, <<"kvm">>},
 			      {disks, 
 			       [{size, Disk*1024},
 				{image_uuid, Dataset}]},

@@ -127,14 +127,14 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 				       ?WARNING({no_ip}, [], [chunter]),
 				       {[], []}
 			       end,
-	    Reply2 = case proplists:get_value(platform_type, Dataset) of
+	    Reply2 = case proplists:get_value(os, Dataset) of
 			 <<"smartos">> ->
 			     [{max_physical_memory, Memory},
 			      {quota, Disk},
 			      {max_swap, Swap},
 			      {dataset_uuid, DatasetUUID}
 			      |Reply1];
-			 _ ->
+			 <<"linux">> ->
 			     [{max_physical_memory, Memory+1024},
 			      {ram, Memory},
 			      {brand, <<"kvm">>},

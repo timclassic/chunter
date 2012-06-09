@@ -128,24 +128,30 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 				       {[], []}
 			       end,
 	    Reply2 = case proplists:get_value(os, Dataset) of
-			 <<"smartos">> ->
+			 <<"smartos">> = OS ->
+			     ?INFO({os, type, OS}, [], [chunter]),
 			     [{max_physical_memory, Memory},
 			      {quota, Disk},
 			      {max_swap, Swap},
 			      {dataset_uuid, DatasetUUID}
 			      |Reply1];
-			 <<"linux">> ->
+			 <<"linux">> = OS ->
+			     ?INFO({os, type, OS}, [], [chunter]),
 			     [{max_physical_memory, Memory+1024},
 			      {ram, Memory},
 			      {brand, <<"kvm">>},
-			      {disks, 
+			      {disks,
 			       [{size, Disk*1024},
 				{image_uuid, Dataset}]},
 			      {disk_driver, proplists:get_value(disk_driver, Dataset)},
 			      {nic_driver, proplists:get_value(nic_driver, Dataset)},
 			      {max_swap, Swap}
-			      |Reply1]
+			      |Reply1];
+			 OS ->
+			     ?ERROR({bad_os, OS}, [], [chunter])
 		     end,
+
+	    ?DBG({spec, Reply2}, [], [chunter]),
 	    spawn(chunter_vmadm, create, [Reply2, From, Auth, Rights]),
 	    {noreply,  State#state{datasets=Ds1}}
     end;

@@ -124,7 +124,8 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 					   ]]}|Reply],
 					[[network, <<"external">>, release, libsnarl:ip_to_str(IP)]]};
 				   _ ->
-				       {undefiend, []}
+				       ?WARNING({no_ip}, [], [chunter]),
+				       {[], []}
 			       end,
 	    Reply2 = case proplists:get_value(platform_type, Dataset) of
 			 <<"smartos">> ->
@@ -136,11 +137,12 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			 _ ->
 			     [{max_physical_memory, Memory+1024},
 			      {ram, Memory},
-			      {quota, 10},
+			      {disks, 
+			       [{size, Disk*1024},
+				{image_uuid, Dataset}]},
 			      {disk_driver, proplists:get_value(disk_driver, Dataset)},
 			      {nic_driver, proplists:get_value(nic_driver, Dataset)},
-			      {max_swap, Swap},
-			      {dataset_uuid, DatasetUUID}
+			      {max_swap, Swap}
 			      |Reply1]
 		     end,
 	    spawn(chunter_vmadm, create, [Reply2, From, Auth, Rights]),

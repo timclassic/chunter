@@ -6,7 +6,7 @@
                   kernel,
                   stdlib,
                   sasl,
-                  alog,
+                  lager,
                   redgrid,
                   gproc,
                   nicedecimal,

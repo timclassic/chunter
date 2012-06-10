@@ -10,8 +10,6 @@
 
 -behaviour(gen_server).
 
--include_lib("alog_pt.hrl").
-
 %% API
 -export([start_link/0, list/0, get/1, get_vm/1, get_vm_pid/1, niceify_json/1]).
 
@@ -80,12 +78,18 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({call, Auth, {machines, list}}, _From, State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:list.", []),
     Reply = list_vms(Auth),
     {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:get - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, view]) of
 	false ->
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:info - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    Pid = get_vm_pid(UUID),
@@ -95,52 +99,69 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds} = State) ->
-    ?DBG({machines, create, {Name, PackageUUID, DatasetUUID, Metadata, Tags}}, [], [chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [Name, PackageUUID, DatasetUUID]),
+    lager:debug([{fifi_component, chunter}],
+		"machines:create - Meta Data: ~p, Tags: ~p.", [Metadata, Tags]),
     case libsnarl:allowed(system, Auth, [vm, create]) of
 	false ->
-	    ?WARNING({forbidden, machines, create, Auth}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:create - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
-	    ?DBG({machines, create, Dataset}, [], [chunter]),
+	    lager:debug([{fifi_component, chunter}],
+		"machines:create - Dataset Data: ~p, Tags: ~p.", [Dataset]),
 	    {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
 	    {Memory, []} = string:to_integer(binary_to_list(proplists:get_value(memory, Package))),
 	    {Disk, []} = string:to_integer(binary_to_list(proplists:get_value(disk, Package))),
 	    {Swap,[]} = string:to_integer(binary_to_list(proplists:get_value(swap, Package))),
-	    ?DBG({machines, create, Memory, Disk, Swap}, [], [chunter]),
+	    lager:info([{fifi_component, chunter}],
+		       "machines:create -  Memroy: ~pMB, Disk: ~pGB, Swap: ~pMB.", [Memory, Disk, Swap]),
 	    Reply = [{tags, Tags},
 		     {customer_metadata, Metadata},
 		     {alias, Name}],
-	    
 	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"external">>) of
 			       {ok, IP} ->
 				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"external">>),
+				       IPStr = libsnarl:ip_to_str(IP),
+				       MaskStr = libsnarl:ip_to_str(Mask),
+				       GWStr = libsnarl:ip_to_str(Gateway),
+				       lager:info([{fifi_component, chunter}],
+						  "machines:create -  ~s mask ~s gw ~s.", 
+						  [IPStr, MaskStr, GWStr]),
 				       {[{nics, 
 					  [[
 					    {nic_tag, <<"admin">>},
-					    {ip, libsnarl:ip_to_str(IP)},
-					    {netmask, libsnarl:ip_to_str(Mask)},
-					    {gateway, libsnarl:ip_to_str(Gateway)}
+					    {ip, IPStr},
+					    {netmask, MaskStr},
+					    {gateway, GWStr}
 					   ]]}|Reply],
 					[[network, <<"external">>, release, libsnarl:ip_to_str(IP)]]};
 				   _ ->
-				       ?WARNING({no_ip}, [], [chunter]),
+				       lager:warning([{fifi_component, chunter}],
+						     "create machines - could not obtain IP.", []),
 				       {[], []}
 			       end,
 	    Reply2 = case proplists:get_value(os, Dataset) of
 			 <<"smartos">> = OS ->
-			     ?INFO({os, type, OS}, [], [chunter]),
+			     lager:info([{fifi_component, chunter}],
+					"machines:create - os type ~s.", 
+					[OS]),
 			     [{max_physical_memory, Memory},
 			      {quota, Disk},
 			      {max_swap, Swap},
 			      {dataset_uuid, DatasetUUID}
 			      |Reply1];
 			 <<"linux">> = OS ->
-			     ?INFO({os, type, OS}, [], [chunter]),
+			     lager:info([{fifi_component, chunter}],
+					"machines:create - os type ~s.", 
+					[OS]),
 			     DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
-			     ?DBG({DiskDrv}, [], [chunter]),
 			     NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
-			     ?DBG({NicDrv}, [], [chunter]),
+			     lager:info([{fifi_component, chunter}],
+					"machines:create - disk driver: ~s, net driver: ~s.", 
+					[DiskDrv, NicDrv]),
 			     Res = [{max_physical_memory, Memory+1024},
 				    {ram, Memory},
 				    {brand, <<"kvm">>},
@@ -152,23 +173,27 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 				    {nic_driver, NicDrv},
 				    {max_swap, Swap}
 				    |Reply1],
-			     ?DBG({spec, Res}, [], [chunter]),
 			     Res;
 			 OS ->
-			     ?ERROR({bad_os, OS}, [], [chunter])
+			     lager:debug([{fifi_component, chunter}],
+					 "machines:create - unknown OS: ~p.", 
+					 [OS])
 		     end,
-
-	    ?DBG({spec, Reply2}, [], [chunter]),
+	    lager:debug([{fifi_component, chunter}],
+			"machines:create -  final spec: ~p.", 
+			[Reply2]),
 	    spawn(chunter_vmadm, create, [Reply2, From, Auth, Rights]),
 	    {noreply,  State#state{datasets=Ds1}}
     end;
 
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
-    ?DBG({machines, info, UUID}, [], [chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "machines:info - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, info]) of
 	false ->
-	    ?WARNING({machines, info, Auth}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:info - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    Pid = get_vm_pid(UUID),
@@ -177,10 +202,12 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
     end;
 
 handle_call({call, Auth, {packages, list}}, _From, State) ->
-    ?DBG({packages, list}, [], [chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "packages:list", []),
     case libsnarl:allowed(system, Auth, [package, list]) of
 	false ->
-	    ?WARNING({forbidden, packages, list, Auth}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "packages:list - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    Reply = [], 
@@ -188,15 +215,18 @@ handle_call({call, Auth, {packages, list}}, _From, State) ->
     end;
 
 handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds} = State) ->
-    ?DBG({datasets, list}, [], [chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "datasets:list", []),
     {Reply, Ds1} = list_datasets(Ds, Auth), 
     {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = State) ->
-    ?DBG({datasets, get, UUID}, [], [chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "datasets:get - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [dataset, UUID, get]) of
 	false ->
-	    ?WARNING({forbidden, dataset, get, Auth, UUID}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "datasets:get - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    {Reply, Ds1} = get_dataset(UUID, Ds), 
@@ -205,10 +235,12 @@ handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = St
 
 
 handle_call({call, Auth, {keys, list}}, _From, State) ->
-    ?DBG({keys, list}, [], [chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "keys:list", []),
     case libsnarl:allowed(system, Auth, [key, list]) of
 	false ->
-	    ?WARNING({forbidden, keys, list, Auth}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "keys:list - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    Reply = [], 
@@ -217,7 +249,8 @@ handle_call({call, Auth, {keys, list}}, _From, State) ->
 
 
 handle_call({call, _Auth, Call}, _From, State) ->
-    ?DBG({unknown, Call}, [], [chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "unsupported call - ~p", [Call]),
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
 
@@ -236,9 +269,12 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({cast, Auth, {machines, start, UUID}}, State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:start - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
 	false ->
-	    ?WARNING({forbidden, machines, start, Auth, UUID}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:start - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    spawn(chunter_vmadm, start, [UUID]),
@@ -246,9 +282,12 @@ handle_cast({cast, Auth, {machines, start, UUID}}, State) ->
     end;
 
 handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:delete - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, delete]) of
 	false ->
-	    ?WARNING({forbidden, machines, delete, Auth, UUID}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:delete - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    VM = get_vm(UUID),
@@ -280,9 +319,13 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
 
 
 handle_cast({cast, Auth, {machines, start, UUID, Image}}, State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:start - UUID: ~s, Image: ~s.", [UUID, Image]),
+
     case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
 	false ->
-	    ?WARNING({forbidden, machines, start, Auth, UUID, Image}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:start - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    spawn(chunter_vmadm, start, [UUID, Image]),
@@ -291,9 +334,12 @@ handle_cast({cast, Auth, {machines, start, UUID, Image}}, State) ->
 
 
 handle_cast({cast, Auth, {machines, stop, UUID}}, State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:stop - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, stop]) of
 	false ->
-	    ?WARNING({forbidden, machines, stop, Auth, UUID}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:stop - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    spawn(chunter_vmadm, stop, [UUID]),
@@ -301,9 +347,12 @@ handle_cast({cast, Auth, {machines, stop, UUID}}, State) ->
     end;
 
 handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:reboot - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, reboot]) of
 	false ->
-	    ?WARNING({forbidden, machines, reboot, Auth, UUID}, [], [chunter]),
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:reboot - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    spawn(chunter_vmadm, reboot, [UUID]),
@@ -317,7 +366,8 @@ handle_cast(reregister, State) ->
 	{noreply, State}
     catch
 	T:E ->
-	    ?ERROR({gproc, error, register, T, E}, [], [chunter]),
+	    lager:error([{fifi_component, chunter}],
+			"register - Failed: ~p:~p.", [T, E]),
 	    application:stop(gproc),
 	    application:start(gproc),
 	    {noreply, State, 1000}

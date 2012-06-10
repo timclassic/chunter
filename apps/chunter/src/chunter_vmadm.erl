@@ -8,8 +8,6 @@
 %%%-------------------------------------------------------------------
 -module(chunter_vmadm).
 
--include_lib("alog_pt.hrl").
-
 %% API
 -export([start/1,
          start/2,
@@ -31,38 +29,59 @@
 %%--------------------------------------------------------------------
 
 start(UUID) ->
-    ?INFO({start, UUID}, [], [vmadm, chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "vmadm:start - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
+    lager:debug([{fifi_component, chunter}],
+		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
 delete(UUID) ->
-    ?INFO({delete, UUID}, [], [vmadm, chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "vmadm:delete - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
+    lager:debug([{fifi_component, chunter}],
+		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
 info(UUID) ->
-    ?INFO({info, UUID}, [], [vmadm, chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "vmadm:info - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm info ", UUID/binary>>,
+    lager:debug([{fifi_component, chunter}],
+		"vmadm:cmd - ~s.", [Cmd]),
     chunter_server:niceify_json(jsx:to_term(list_to_binary(os:cmd(binary_to_list(Cmd))))).
 
 start(UUID, Image) ->
-    ?INFO({start, UUID, Image}, [], [vmadm, chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "vmadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
     Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
+    lager:debug([{fifi_component, chunter}],
+		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
 stop(UUID) ->
-    ?INFO({stop, UUID}, [], [vmadm, chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "vmadm:stop - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary>>,
+    lager:debug([{fifi_component, chunter}],
+		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
 reboot(UUID) ->
-    ?INFO({reboot, UUID}, [], [vmadm, chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "vmadm:reboot - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm reboot", UUID/binary>>,
+    lager:debug([{fifi_component, chunter}],
+		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
 create(Data, Caller, Owner, Rights) ->
-    ?INFO({create, Data, Caller, Owner, Rights}, [], [vmadm, chunter]),
+    lager:info([{fifi_component, chunter}],
+	       "vmadm:create", []),
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
+    lager:debug([{fifi_component, chunter}],
+		"vmadm:cmd - ~s.", [Cmd]),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
@@ -74,7 +93,8 @@ create(Data, Caller, Owner, Rights) ->
 		  libsnarl:user_add_to_group(system, Owner, Owners),
 		  {ok, chunter_server:get_vm(UUID)};
 	      E ->
-		  ?ERROR({create, error, E}, [], [vmadm, chunter]),
+		  lager:error([{fifi_component, chunter}],
+			      "vmad:create - Failed: ~p.", [E]),
 		  E
 	  end,
     gen_server:reply(Caller, Res),
@@ -83,17 +103,21 @@ create(Data, Caller, Owner, Rights) ->
 wait_for_tex(Port) ->
     receive
 	{Port, {data,{eol,<<"Successfully created ", UUID/binary>>}}} ->
-	    ?INFO({vmadm, success, UUID}, [], [vmadm, chunter]),
+	    lager:info([{fifi_component, chunter}],
+		       "vmadm:create - success: ~s.", [UUID]),
             {ok, UUID};
 	{Port, {data, {eol, Text}}} ->
-	    ?WARNING({vmadm, unknown, Text}, [], [vmadm, chunter]),
+	    lager:warning([{fifi_component, chunter}],
+		       "vmadm:create - unknown text: ~s.", [Text]),
             {error, Text};
         {Port, E} ->
-	    ?ERROR({vmadm, error, E}, [], [vmadm, chunter]),
+	    lager:error([{fifi_component, chunter}],
+			"vmadm:create - Error: ~p.", [E]),
             {error, unknown}
     after
 	60000 ->
-	    ?ERROR({vmadm, timeout}, [], [vmadm, chunter]),
+	    lager:error([{fifi_component, chunter}],
+			"vmadm:create - Timeout.", []),
             {error, timeout}
     end.
 

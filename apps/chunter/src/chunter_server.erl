@@ -121,6 +121,12 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 	    Reply = [{tags, Tags},
 		     {customer_metadata, Metadata},
 		     {alias, Name}],
+	    DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
+	    NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
+	    lager:info([{fifi_component, chunter}],
+		       "machines:create - disk driver: ~s, net driver: ~s.", 
+		       [DiskDrv, NicDrv]),
+	    
 	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"external">>) of
 			       {ok, IP} ->
 				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"external">>),
@@ -135,7 +141,8 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 					    {nic_tag, <<"admin">>},
 					    {ip, IPStr},
 					    {netmask, MaskStr},
-					    {gateway, GWStr}
+					    {gateway, GWStr},
+					    {model, NicDrv}
 					   ]]}|Reply],
 					[[network, <<"external">>, release, libsnarl:ip_to_str(IP)]]};
 				   _ ->
@@ -157,11 +164,6 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			     lager:info([{fifi_component, chunter}],
 					"machines:create - os type ~s.", 
 					[OS]),
-			     DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
-			     NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
-			     lager:info([{fifi_component, chunter}],
-					"machines:create - disk driver: ~s, net driver: ~s.", 
-					[DiskDrv, NicDrv]),
 			     Res = [{max_physical_memory, Memory+1024},
 				    {ram, Memory},
 				    {brand, <<"kvm">>},

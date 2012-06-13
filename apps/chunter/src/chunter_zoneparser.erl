@@ -109,7 +109,7 @@ parse_xml([{"zone",Attrib,Value}|T])->
     [{"zone", Attrib, lists:flatten(parse_xml(Value))}|parse_xml(T)];
 
 parse_xml([{"dataset",Attrib,_Value}|T])->
-    [{dataset, list_to_atom(proplists:get_value("name", Attrib))}
+    [{dataset, list_to_binary(proplists:get_value("name", Attrib))}
      |parse_xml(T)];
 
 parse_xml([{"attr",Attrib,_Value}|T])->

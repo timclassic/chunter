@@ -112,6 +112,11 @@ parse_xml([{"dataset",Attrib,_Value}|T])->
     [{dataset, list_to_atom(proplists:get_value("name", Attrib))}
      |parse_xml(T)];
 
+parse_xml([{"attr",Attrib,_Value}|T])->
+    [{list_to_atom(proplists:get_value("name", Attrib)), 
+       list_to_binary(proplists:get_value("value", Attrib))}
+     |parse_xml(T)];
+
 parse_xml([{"rctl",Attrib,[{"rctl-value",
 			   Values,
 			   _}]}|T])->
@@ -170,7 +175,7 @@ create_zone_data([{disk, Disk}|R], Disks, Nics, Datasets) ->
    create_zone_data(R, [create_disk(Disk)|Disks], Nics, Datasets);
 
 create_zone_data([{nic, Nic}|R], Disks, Nics, Datasets) ->
-   create_zone_data(R, Disks, [create_nic(Nic)|Nics],Datasets);
+   create_zone_data(R, Disks, [create_nic(Nic)|Nics], Datasets);
 
 create_zone_data([{dataset, Dataset}|R], Disks, Nics, Datasets) ->
    create_zone_data(R, Disks, Nics, [Dataset|Datasets]);

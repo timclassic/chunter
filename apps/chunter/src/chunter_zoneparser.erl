@@ -13,35 +13,35 @@
 
 
 -define(REMOVE(Key),
-	create_zone_data([{Key, _}|R], Disks, Nics) ->
-	       create_zone_data(R, Disks, Nics)).
+	create_zone_data([{Key, _}|R], Disks, Nics, Datasets) ->
+	       create_zone_data(R, Disks, Nics, Datasets)).
 
 -define(RENAME_INT(Old,New),
-	create_zone_data([{Old, Value}|R], Disks, Nics) ->
+	create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
 	       {Num, []} = string:to_integer(binary_to_list(Value)),
 	       [{New, Num}
-		|create_zone_data(R, Disks, Nics)]).
+		|create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(RENAME_B64(Old,New),
-	create_zone_data([{Old, Value}|R], Disks, Nics) ->
+	create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
 	       [{New, base64:decode(Value)}
-		|create_zone_data(R, Disks, Nics)]).
+		|create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(RENAME_BOOL(Old,New),
-	create_zone_data([{Old, <<"true">>}|R], Disks, Nics) ->
-	       [{New, true}|create_zone_data(R, Disks, Nics)];
-	create_zone_data([{Old, <<"false">>}|R], Disks, Nics) ->
-	       [{New, false}|create_zone_data(R, Disks, Nics)]).
+	create_zone_data([{Old, <<"true">>}|R], Disks, Nics, Datasets) ->
+	       [{New, true}|create_zone_data(R, Disks, Nics, Datasets)];
+	create_zone_data([{Old, <<"false">>}|R], Disks, Nics, Datasets) ->
+	       [{New, false}|create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(RENAME_SPLIT(Old,New),
-	create_zone_data([{Old, Value}|R], Disks, Nics) ->
+	create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
 	       [{New, re:split(Value,",")}
-		|create_zone_data(R, Disks, Nics)]).
+		|create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(RENAME(Old,New),
-	create_zone_data([{Old, Value}|R], Disks, Nics) ->
+	create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
 	       [{New, Value}
-		|create_zone_data(R, Disks, Nics)]).
+		|create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(NIC_RENAME(Old,New),
 	create_nic([{Old, Value}|R]) ->
@@ -108,9 +108,8 @@ convert(F, VM)->
 parse_xml([{"zone",Attrib,Value}|T])->
     [{"zone", Attrib, lists:flatten(parse_xml(Value))}|parse_xml(T)];
 
-parse_xml([{"attr",Attrib,_Value}|T])->
-    [{list_to_atom(proplists:get_value("name", Attrib)), 
-       list_to_binary(proplists:get_value("value", Attrib))}
+parse_xml([{"dataset",Attrib,_Value}|T])->
+    [{dataset, list_to_atom(proplists:get_value("name", Attrib))}
      |parse_xml(T)];
 
 parse_xml([{"rctl",Attrib,[{"rctl-value",
@@ -153,22 +152,28 @@ map_attrs(Attrs) ->
 
 
 create_zone_data(Data) ->
-    create_zone_data(Data, [], []).
+    create_zone_data(Data, [], [],[]).
 
-create_zone_data([], [], []) ->
+create_zone_data([], [], [],[]) ->
     [];
 
-create_zone_data([], [], Nics) ->
-    [{nics, Nics}];
+create_zone_data([], [], [], Datasets) ->
+    [{datasets, Datasets}];
+
+create_zone_data([], [], Nics, Datasets) ->
+    [{nics, Nics}|create_zone_data([], [], [], Datasets)];
     
-create_zone_data([], Disks, Nics) ->
-    [{disks, Disks}|create_zone_data([], [], Nics)];
+create_zone_data([], Disks, Nics, Datasets) ->
+    [{disks, Disks}|create_zone_data([], [], Nics, Datasets)];
 
-create_zone_data([{disk, Disk}|R], Disks, Nics) ->
-   create_zone_data(R, [create_disk(Disk)|Disks], Nics);
+create_zone_data([{disk, Disk}|R], Disks, Nics, Datasets) ->
+   create_zone_data(R, [create_disk(Disk)|Disks], Nics, Datasets);
 
-create_zone_data([{nic, Nic}|R], Disks, Nics) ->
-   create_zone_data(R, Disks, [create_nic(Nic)|Nics]);
+create_zone_data([{nic, Nic}|R], Disks, Nics, Datasets) ->
+   create_zone_data(R, Disks, [create_nic(Nic)|Nics],Datasets);
+
+create_zone_data([{dataset, Dataset}|R], Disks, Nics, Datasets) ->
+   create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
 
 ?REMOVE('ip-type');
 ?REMOVE('id');
@@ -213,8 +218,8 @@ create_zone_data([{nic, Nic}|R], Disks, Nics) ->
 ?RENAME_INT('zone.max-physical-memory', 'max_physical_memory');
 ?RENAME_INT('zone.max-swap', 'max_swap');
 ?RENAME_INT('zone.zfs-io-priority', 'zfs_io_priority');
-create_zone_data([Pair|R], Disks, Nics) ->
-    [Pair|create_zone_data(R, Disks, Nics)].
+create_zone_data([Pair|R], Disks, Nics, Datasets) ->
+    [Pair|create_zone_data(R, Disks, Nics, Datasets)].
 
 
 ?NIC_RENAME('ip', 'ip');

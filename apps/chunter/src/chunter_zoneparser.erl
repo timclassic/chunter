@@ -207,7 +207,7 @@ create_zone_data([{dataset, Dataset}|R], Disks, Nics, Datasets) ->
 ?RENAME_SPLIT('resolvers', 'resolvers');
 ?RENAME_B64('spice-opts', 'spice_opts');
 ?RENAME_B64('spice-password', 'spice_password');
-?RENAME_B64('spice-port', 'spice_port');
+?RENAME_INT('spice-port', 'spice_port');
 ?RENAME_INT('tempfs', 'tempfs');
 ?RENAME_INT('vcpus', 'vcpus');
 ?RENAME_INT('virtio-txburst', 'virtio_txburst');

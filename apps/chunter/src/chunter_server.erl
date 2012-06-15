@@ -127,9 +127,9 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 		       "machines:create - disk driver: ~s, net driver: ~s.", 
 		       [DiskDrv, NicDrv]),
 	    
-	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"external">>) of
+	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"admin">>) of
 			       {ok, IP} ->
-				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"external">>),
+				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"admin">>),
 				       IPStr = libsnarl:ip_to_str(IP),
 				       MaskStr = libsnarl:ip_to_str(Mask),
 				       GWStr = libsnarl:ip_to_str(Gateway),
@@ -144,7 +144,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 					    {gateway, GWStr},
 					    {model, NicDrv}
 					   ]]}|Reply],
-					[[network, <<"external">>, release, libsnarl:ip_to_str(IP)]]};
+					[[network, <<"admin">>, release, libsnarl:ip_to_str(IP)]]};
 				   _ ->
 				       lager:warning([{fifi_component, chunter}],
 						     "create machines - could not obtain IP.", []),
@@ -455,9 +455,9 @@ list_datasets(Datasets, Auth) ->
     {ok, AuthC} = libsnarl:user_cache(system, Auth),
     filelib:fold_files("/var/db/dsadm", ".*dsmanifest", false, 
 		       fun (F, {Fs, DsA}) ->
-			       UUID = re:run(F, "/var/db/dsadm/(.*)\.dsmanifest", 
-					     [{capture, all_but_first, binary}]),
-			       case libsnarl:allowed(system, AuthC, [vm, UUID, view]) of
+			       {match, [UUID]} = re:run(F, "/var/db/dsadm/(.*)\.dsmanifest", 
+							[{capture, all_but_first, binary}]),
+			       case libsnarl:allowed(system, AuthC, [dataset, UUID, view]) of
 				   true ->
 				       {F1, DsA1} = read_dsmanifest(F, DsA),
 				       {[F1| Fs], DsA1};

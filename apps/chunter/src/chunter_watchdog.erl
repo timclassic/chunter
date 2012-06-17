@@ -238,7 +238,7 @@ build_stat([<<"w">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
 
 build_stat([<<"swap">>|R], [V|RV], memory, K, M, P, D, F, C) ->
     build_stat(R, RV, memory, K, [{swap, V}|M], P, D, F, C);
-build_stat([<<"free">>|R], memory, [V|RV], K, M, P, D, F, C) ->
+build_stat([<<"free">>|R], [V|RV], memory, K, M, P, D, F, C) ->
     build_stat(R, RV, page, K, [{free, V}|M], P, D, F, C);
 
 

@@ -61,6 +61,8 @@ reregister() ->
 init([]) ->
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    lager:info([{fifi_component, chunter}],
+	       "chunter:init - Host: ~s", [Name]),
     {ok, #state{name=Name}, 1000}.
 
 
@@ -363,6 +365,8 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
     end;
 
 handle_cast(reregister, #state{name=Name}=State) ->
+    lager:info([{fifi_component, chunter}],
+	       "chunter:register - Host: ~s.", [Name]),
     try
 	libsniffle:join_client_channel(),
         libsniffle:register(system, chunter, Name, self()),

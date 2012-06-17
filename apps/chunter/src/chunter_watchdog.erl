@@ -52,6 +52,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    lager:info("chunter:watchdog - initializing: ~s", [Name]),
     Cmd = code:priv_dir(chunter) ++ "/zonemon.d",
     ZonePort = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
     StatPort = erlang:open_port({spawn, "vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),

@@ -14,6 +14,7 @@ check_grid() ->
 			  [Nodes]),
 	    check_grid();
 	_ ->
+	    lager:warning("chunter:load - redgrid connection established.", []),
 	    application:stop(gproc),
 	    application:start(gproc),
 	    ok
@@ -22,6 +23,8 @@ check_grid() ->
 
 load() ->
     application:start(sasl),
+    application:start(lager),
+    application:start(alog),
     application:start(redgrid),
     application:start(gproc),
     application:start(nicedecimal),
@@ -37,6 +40,7 @@ load() ->
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    lager:warning("chunter:load - start.", []),
     check_grid(),
     chunter_sup:start_link().
 

@@ -19,7 +19,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {port}).
+-record(state, {name, zoneport, statport, statspec=[]}).
 
 %%%===================================================================
 %%% API
@@ -51,9 +51,14 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     Cmd = code:priv_dir(chunter) ++ "/zonemon.d",
-    Port = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
-    {ok, #state{port=Port}}.
+    ZonePort = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
+    StatPort = erlang:open_port({spawn, "vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
+    {ok, #state{
+       name=Name,
+       zoneport=ZonePort,
+       statport=StatPort}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -96,7 +101,18 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({_Port, {data, {eol, Data}}}, #state{port=_Port} = State) ->
+handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name} = State) ->
+    case parse_stat(Data, Spec) of
+	skip ->
+	    {noreply, State};
+	{spec, NewSpec} ->
+	    {noreply, State#state{statspec=NewSpec}};
+	{stat, Stat} ->
+	    io:format(Stat),
+	    gproc:send({p,g,{node,Name}}, {stat, Stat}),
+	    {noreply, State}
+    end;
+handle_info({_Port, {data, {eol, Data}}}, #state{zoneport=_Port} = State) ->
     case parse_data(Data) of
 	{error, unknown} ->
 	    io:format("Data: ~p~n", [Data]);
@@ -122,7 +138,10 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{statport=SPort,
+			  zoneport=Zport}) ->
+    erlang:port_close(SPort),
+    erlang:port_close(Zport),
     ok.
 
 %%--------------------------------------------------------------------
@@ -190,3 +209,73 @@ parse_data(<<"S12: ", UUID/binary>>) ->
     {UUID, destroying};
 parse_data(_) ->
     {error, unknown}.
+
+parse_stat(<<" k", _/binary>>, _) ->
+    skip;
+parse_stat(<<" r ", Specs/binary>>, _) ->
+    {spec, [<<"r">> | re:split("\s+",  Specs)]};
+parse_stat(<<" ", Data/binary>>, Specs) ->
+    Res = re:split("\s+",  Data),
+    {stat, build_stat(Specs, Res)}.
+
+build_stat(S, D) ->
+    build_stat(S, D, kthr, [], [], [], [], [], []).
+
+build_stat([], _, _Cat, K, M, P, D, F, C) ->
+    [{kthr, K},
+     {memory, M},
+     {page, P},
+     {disk, D},
+     {faults, F},
+     {cpu, C}];
+
+build_stat([<<"r">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
+    build_stat(R, RV, kthr, [{queue, V}|K], M, P, D, F, C);
+build_stat([<<"b">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
+    build_stat(R, RV, kthr, [{blocked, V}|K], M, P, D, F, C);
+build_stat([<<"w">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
+    build_stat(R, RV, memory, [{swapped, V}|K], M, P, D, F, C);
+
+build_stat([<<"swap">>|R], [V|RV], memory, K, M, P, D, F, C) ->
+    build_stat(R, RV, memory, K, [{swap, V}|M], P, D, F, C);
+build_stat([<<"free">>|R], memory, [V|RV], K, M, P, D, F, C) ->
+    build_stat(R, RV, page, K, [{free, V}|M], P, D, F, C);
+
+
+build_stat([<<"re">>|R], [V|RV], page, K, M, P, D, F, C) ->
+    build_stat(R, RV, page, K, M, [{reclaims, V}|P], D, F, C);
+build_stat([<<"mf">>|R], [V|RV], page, K, M, P, D, F, C) ->
+    build_stat(R, RV, page, K, M, [{minor_faults, V}|P], D, F, C);
+build_stat([<<"pi">>|R], [V|RV], page, K, M, P, D, F, C) ->
+    build_stat(R, RV, page, K, M, [{in, V}|P], D, F, C);
+build_stat([<<"po">>|R], [V|RV], page, K, M, P, D, F, C) ->
+    build_stat(R, RV, page, K, M, [{out, V}|P], D, F, C);
+build_stat([<<"fr">>|R], [V|RV], page, K, M, P, D, F, C) ->
+    build_stat(R, RV, page, K, M, [{freed, V}|P], D, F, C);
+build_stat([<<"de">>|R], [V|RV], page, K, M, P, D, F, C) ->
+    build_stat(R, RV, page, K, M, [{memory_shortfall, V}|P], D, F, C);
+build_stat([<<"sr">>|R], [V|RV], page, K, M, P, D, F, C) ->
+    build_stat(R, RV, disk, K, M, [{scanned, V}|P], D, F, C);
+
+build_stat([<<"in">>|R], [V|RV], disk, K, M, P, D, F, C) ->
+    build_stat(R, RV, faults, K, M, P, D, [{interrupts, V}|F], C);
+build_stat([_|R], [V|RV], disk, K, M, P, D, F, C) ->
+    build_stat(R, RV, faults, K, M, P, [V|D], F, C);
+
+
+
+build_stat([<<"sy">>|R], [V|RV], faults, K, M, P, D, F, C) ->
+    build_stat(R, RV, faults, K, M, P, D, [{system_calls, V}|F], C);
+build_stat([<<"cs">>|R], [V|RV], faults, K, M, P, D, F, C) ->
+    build_stat(R, RV, cpu, K, M, P, D, [{system_calls, V}|F], C);
+
+build_stat([<<"us">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
+    build_stat(R, RV, cpu, K, M, P, D, F, [{user, V}|C]);
+build_stat([<<"sy">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
+    build_stat(R, RV, cpu, K, M, P, D, F, [{system, V}|C]);
+build_stat([<<"id">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
+    build_stat(R, RV, cpu, K, M, P, D, F, [{idel, V}|C]).
+
+
+
+

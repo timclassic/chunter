@@ -19,7 +19,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {port, datasets=[]}).
+-record(state, {name, port, datasets=[]}).
 
 %%%===================================================================
 %%% API
@@ -60,7 +60,8 @@ reregister() ->
 %%--------------------------------------------------------------------
 init([]) ->
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
-    {ok, #state{}, 1000}.
+    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    {ok, #state{name=Name}, 1000}.
 
 
 %%--------------------------------------------------------------------
@@ -361,10 +362,10 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
 	    {noreply, State}
     end;
 
-handle_cast(reregister, State) ->
+handle_cast(reregister, #state{name=Name}=State) ->
     try
 	libsniffle:join_client_channel(),
-        libsniffle:register(system, chunter, self()),
+        libsniffle:register(system, chunter, Name, self()),
 	{noreply, State}
     catch
 	T:E ->

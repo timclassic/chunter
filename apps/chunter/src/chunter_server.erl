@@ -59,6 +59,8 @@ reregister() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    lager:info([{fifi_component, chunter}],
+	       "chunter:init.", []),
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info([{fifi_component, chunter}],

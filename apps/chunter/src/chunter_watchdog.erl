@@ -213,9 +213,9 @@ parse_data(_) ->
 parse_stat(<<" k", _/binary>>, _) ->
     skip;
 parse_stat(<<" r ", Specs/binary>>, _) ->
-    {spec, [<<"r">> | re:split("\s+",  Specs)]};
+    {spec, [<<"r">> | re:split(Specs, "\s+")]};
 parse_stat(<<" ", Data/binary>>, Specs) ->
-    Res = re:split("\s+",  Data),
+    Res = re:split(Data, "\s+"),
     {stat, build_stat(Specs, Res)}.
 
 build_stat(S, D) ->

@@ -395,8 +395,8 @@ handle_info(timeout, State) ->
     reregister(),
     {noreply, State};
 
-handle_info({sniffle, request, register}, State) ->
-    libsniffle:register(system, chunter, self()),
+handle_info({sniffle, request, register}, #state{name = Name} = State) ->
+    libsniffle:register(system, chunter, Name, self()),
     {noreply, State};
 
 handle_info(_Info, State) ->

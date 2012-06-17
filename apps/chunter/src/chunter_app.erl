@@ -7,8 +7,11 @@
 
 check_grid() ->
     timer:sleep(100),
-    case length(redgrid:nodes()) of
+    Nodes = redgrid:nodes(),
+    case length(Nodes) of
 	X when X =< 1 ->
+	    lager:warning("chunter:load - Not enough nodes: ~p",
+			  [Nodes]),
 	    check_grid();
 	_ ->
 	    application:stop(gproc),

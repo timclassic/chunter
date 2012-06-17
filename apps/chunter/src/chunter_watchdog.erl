@@ -260,7 +260,7 @@ build_stat([<<"sr">>|R], [V|RV], page, K, M, P, D, F, C) ->
 build_stat([<<"in">>|R], [V|RV], disk, K, M, P, D, F, C) ->
     build_stat(R, RV, faults, K, M, P, D, [{interrupts, V}|F], C);
 build_stat([_|R], [V|RV], disk, K, M, P, D, F, C) ->
-    build_stat(R, RV, faults, K, M, P, [V|D], F, C);
+    build_stat(R, RV, disk, K, M, P, [V|D], F, C);
 
 
 

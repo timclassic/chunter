@@ -106,8 +106,10 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name} = State) ->
     case parse_stat(Data, Spec) of
-	skip ->
+	unknown ->
 	    lager:error("watchdog:stat - unknwon message: ~p", [Data]),
+	    {noreply, State};
+	skip ->
 	    {noreply, State};
 	{spec, NewSpec} ->
 	    lager:debug("watchdog:stat - Spec: ~p", [NewSpec]),
@@ -221,7 +223,10 @@ parse_stat(<<" r ", Specs/binary>>, _) ->
     {spec, [<<"r">> | re:split(Specs, "\s+")]};
 parse_stat(<<" ", Data/binary>>, Specs) ->
     Res = re:split(Data, "\s+"),
-    {stat, build_stat(Specs, Res)}.
+    {stat, build_stat(Specs, Res)};
+
+parse_stat(_, _) ->
+    unknown.
 
 build_stat(S, D) ->
     build_stat(S, D, kthr, [], [], [], [], [], []).

@@ -107,20 +107,22 @@ handle_cast(_Msg, State) ->
 handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name} = State) ->
     case parse_stat(Data, Spec) of
 	skip ->
+	    lager:error("watchdog:stat - unknwon message: ~p", [Data]);
 	    io:format("a~n"),
 	    {noreply, State};
 	{spec, NewSpec} ->
+	    lager:debug("watchdog:stat - Spec: ~p", [NewSpec]);
 	    io:format("b ~p~n", [NewSpec]),
 	    {noreply, State#state{statspec=NewSpec}};
-	{stat, Stat} ->
-	    io:format("c ~p~n", [Stat]),
-	    gproc:send({p,g,{node,Name}}, {stat, Stat}),
+	{stat, State} ->
+	    lager:debug("watchdog:stat - State: ~p", [State]);
+	    gproc:send({p,g,{node,Name}}, {stat, State}),
 	    {noreply, State}
     end;
 handle_info({_Port, {data, {eol, Data}}}, #state{zoneport=_Port} = State) ->
     case parse_data(Data) of
 	{error, unknown} ->
-	    io:format("Data: ~p~n", [Data]);
+	    lager:error("watchdog:zone - unknwon message: ~p", [Data]);
 	{UUID, crate} ->
 	    chunter_vm_sup:start_child(UUID);
 	{UUID, Action} ->

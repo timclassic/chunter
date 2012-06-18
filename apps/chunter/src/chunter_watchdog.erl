@@ -215,7 +215,7 @@ parse_data(<<"S12: ", UUID/binary>>) ->
 parse_data(_) ->
     {error, unknown}.
 
-parse_stat(<<" k", _/binary>>, _) ->
+parse_stat(<<" k", _R/binary>>, _) ->
     skip;
 parse_stat(<<" r ", Specs/binary>>, _) ->
     {spec, [<<"r">> | re:split(Specs, "\s+")]};

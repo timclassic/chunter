@@ -54,7 +54,7 @@ init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info("chunter:watchdog - initializing: ~s", [Name]),
     Cmd = code:priv_dir(chunter) ++ "/zonemon.d",
-    ZonePort = 1,%erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
+    ZonePort = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
     lager:info("chunter:watchdog - zone watchdog started.", []),
     StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
     lager:info("chunter:watchdog - stats watchdog started.", []),
@@ -107,11 +107,13 @@ handle_cast(_Msg, State) ->
 handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name} = State) ->
     case parse_stat(Data, Spec) of
 	skip ->
+	    io:format("a~n"),
 	    {noreply, State};
 	{spec, NewSpec} ->
+	    io:format("b ~p~n", [NewSpec]),
 	    {noreply, State#state{statspec=NewSpec}};
 	{stat, Stat} ->
-	    io:format(Stat),
+	    io:format("c ~p~n", [Stat]),
 	    gproc:send({p,g,{node,Name}}, {stat, Stat}),
 	    {noreply, State}
     end;
@@ -225,6 +227,7 @@ build_stat(S, D) ->
     build_stat(S, D, kthr, [], [], [], [], [], []).
 
 build_stat([], _, _Cat, K, M, P, D, F, C) ->
+    io:format("20~n"),
     [{kthr, K},
      {memory, M},
      {page, P},
@@ -232,6 +235,7 @@ build_stat([], _, _Cat, K, M, P, D, F, C) ->
      {faults, F},
      {cpu, C}];
 build_stat(_, [], _Cat, K, M, P, D, F, C) ->
+    io:format("20~n"),
     [{kthr, K},
      {memory, M},
      {page, P},
@@ -304,7 +308,3 @@ build_stat([<<"sy">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
 build_stat([<<"id">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
     io:format("19~n"),
     build_stat(R, RV, cpu, K, M, P, D, F, [{idel, V}|C]).
-
-
-
-

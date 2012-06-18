@@ -227,7 +227,6 @@ build_stat(S, D) ->
     build_stat(S, D, kthr, [], [], [], [], [], []).
 
 build_stat([], _, _Cat, K, M, P, D, F, C) ->
-    io:format("20~n"),
     [{kthr, K},
      {memory, M},
      {page, P},
@@ -235,7 +234,6 @@ build_stat([], _, _Cat, K, M, P, D, F, C) ->
      {faults, F},
      {cpu, C}];
 build_stat(_, [], _Cat, K, M, P, D, F, C) ->
-    io:format("20~n"),
     [{kthr, K},
      {memory, M},
      {page, P},
@@ -244,67 +242,48 @@ build_stat(_, [], _Cat, K, M, P, D, F, C) ->
      {cpu, C}];
 
 build_stat([<<"r">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
-    io:format("1~n"),
     build_stat(R, RV, kthr, [{queue, V}|K], M, P, D, F, C);
 build_stat([<<"b">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
-    io:format("2~n"),
     build_stat(R, RV, kthr, [{blocked, V}|K], M, P, D, F, C);
 build_stat([<<"w">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
-    io:format("3~n"),
     build_stat(R, RV, memory, [{swapped, V}|K], M, P, D, F, C);
 
 build_stat([<<"swap">>|R], [V|RV], memory, K, M, P, D, F, C) ->
-    io:format("4~n"),
     build_stat(R, RV, memory, K, [{swap, V}|M], P, D, F, C);
 build_stat([<<"free">>|R], [V|RV], memory, K, M, P, D, F, C) ->
-    io:format("5~n"),
     build_stat(R, RV, page, K, [{free, V}|M], P, D, F, C);
 
 
 build_stat([<<"re">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    io:format("6~n"),
     build_stat(R, RV, page, K, M, [{reclaims, V}|P], D, F, C);
 build_stat([<<"mf">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    io:format("7~n"),
     build_stat(R, RV, page, K, M, [{minor_faults, V}|P], D, F, C);
 build_stat([<<"pi">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    io:format("8~n"),
     build_stat(R, RV, page, K, M, [{in, V}|P], D, F, C);
 build_stat([<<"po">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    io:format("9~n"),
     build_stat(R, RV, page, K, M, [{out, V}|P], D, F, C);
 build_stat([<<"fr">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    io:format("10~n"),
     build_stat(R, RV, page, K, M, [{freed, V}|P], D, F, C);
 build_stat([<<"de">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    io:format("11~n"),
     build_stat(R, RV, page, K, M, [{memory_shortfall, V}|P], D, F, C);
 build_stat([<<"sr">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    io:format("12~n"),
     build_stat(R, RV, disk, K, M, [{scanned, V}|P], D, F, C);
 
 build_stat([<<"in">>|R], [V|RV], disk, K, M, P, D, F, C) ->
-    io:format("13~n"),
     build_stat(R, RV, faults, K, M, P, D, [{interrupts, V}|F], C);
 build_stat([_|R], [V|RV], disk, K, M, P, D, F, C) ->
-    io:format("14~n"),
     build_stat(R, RV, disk, K, M, P, [V|D], F, C);
 
 
 
 build_stat([<<"sy">>|R], [V|RV], faults, K, M, P, D, F, C) ->
-    io:format("15~n"),
     build_stat(R, RV, faults, K, M, P, D, [{system_calls, V}|F], C);
 build_stat([<<"cs">>|R], [V|RV], faults, K, M, P, D, F, C) ->
-    io:format("16~n"),
     build_stat(R, RV, cpu, K, M, P, D, [{system_calls, V}|F], C);
 
 build_stat([<<"us">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
-    io:format("17~n"),
     build_stat(R, RV, cpu, K, M, P, D, F, [{user, V}|C]);
 build_stat([<<"sy">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
-    io:format("18~n"),
     build_stat(R, RV, cpu, K, M, P, D, F, [{system, V}|C]);
 build_stat([<<"id">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
-    io:format("19~n"),
     build_stat(R, RV, cpu, K, M, P, D, F, [{idel, V}|C]).

@@ -107,15 +107,13 @@ handle_cast(_Msg, State) ->
 handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name} = State) ->
     case parse_stat(Data, Spec) of
 	skip ->
-	    lager:error("watchdog:stat - unknwon message: ~p", [Data]);
-	    io:format("a~n"),
+	    lager:error("watchdog:stat - unknwon message: ~p", [Data]),
 	    {noreply, State};
 	{spec, NewSpec} ->
-	    lager:debug("watchdog:stat - Spec: ~p", [NewSpec]);
-	    io:format("b ~p~n", [NewSpec]),
+	    lager:debug("watchdog:stat - Spec: ~p", [NewSpec]),
 	    {noreply, State#state{statspec=NewSpec}};
 	{stat, State} ->
-	    lager:debug("watchdog:stat - State: ~p", [State]);
+	    lager:debug("watchdog:stat - State: ~p", [State]),
 	    gproc:send({p,g,{node,Name}}, {stat, State}),
 	    {noreply, State}
     end;

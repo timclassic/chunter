@@ -107,8 +107,7 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(zonecheck, #state{name=Name} = State) ->
 
-    [chunter_vm:set_state(chunter_server:get_vm_pid(UUID), 
-			  simplifie_state(VMState)) ||
+    [chunter_vm:set_state(chunter_server:get_vm_pid(UUID),VMState) ||
 	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],

@@ -19,7 +19,8 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {name, zoneport, statport, statspec=[]}).
+-record(state0_1_0, {port}).
+-record(state, {name, zoneport, statport, statspec=[], memory=0}).
 
 %%%===================================================================
 %%% API
@@ -59,7 +60,9 @@ init([]) ->
     lager:info("chunter:watchdog - zone watchdog started.", []),
     StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
     lager:info("chunter:watchdog - stats watchdog started.", []),
+    {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     {ok, #state{
+       memory=Mem,
        name=Name,
        zoneport=ZonePort,
        statport=StatPort}}.
@@ -114,8 +117,8 @@ handle_info(zonecheck, State) ->
 	ID =/= <<"0">>],
     {noreply, State};
 
-handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name} = State) ->
-    case parse_stat(Data, Spec) of
+handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name, memory=Mem} = State) ->
+    case parse_stat(Data, Mem, Spec) of
 	unknown ->
 	    lager:error("watchdog:stat - unknwon message: ~p", [Data]),
 	    {noreply, State};
@@ -126,7 +129,7 @@ handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, 
 	    {noreply, State#state{statspec=NewSpec}};
 	{stat, Stats} ->
 	    lager:debug("watchdog:stat - State: ~p", [Stats]),
-	    gproc:send({p,g,{node,Name}}, {stat, Stats}),
+	    gproc:send({p,g,{node,Name}}, {host, stats, Name, Stats}),
 	    {noreply, State}
     end;
 handle_info({_Port, {data, {eol, Data}}}, #state{zoneport=_Port} = State) ->
@@ -169,8 +172,15 @@ terminate(_Reason, #state{statport=SPort,
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+code_change("0.1.0", #state0_1_0{port=ZonePort} = State, _Extra) ->
+    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
+    {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    {ok, #state{
+       memory=Mem,
+       name=Name,
+       zoneport=ZonePort,
+       statport=StatPort}}.
 
 %%%===================================================================
 %%% Internal functions
@@ -228,19 +238,19 @@ parse_data(<<"S12: ", UUID/binary>>) ->
 parse_data(_) ->
     {error, unknown}.
 
-parse_stat(<<" k", _R/binary>>, _) ->
+parse_stat(<<" k", _R/binary>>, _, _) ->
     skip;
-parse_stat(<<" r ", Specs/binary>>, _) ->
+parse_stat(<<" r ", Specs/binary>>, _, _) ->
     {spec, [<<"r">> | re:split(Specs, "\s+")]};
-parse_stat(<<" ", Data/binary>>, Specs) ->
+parse_stat(<<" ", Data/binary>>, Mem, Specs) ->
     Res = re:split(Data, "\s+"),
-    {stat, build_stat(Specs, Res)};
+    {stat, build_stat(Specs, Res, Mem)};
 
-parse_stat(_, _) ->
+parse_stat(_, _, _) ->
     unknown.
 
-build_stat(S, D) ->
-    build_stat(S, D, kthr, [], [], [], [], [], []).
+build_stat(S, D, Mem) ->
+    build_stat(S, D, kthr, [], [{total, Mem}], [], [], [], []).
 
 build_stat([], _, _Cat, K, M, P, D, F, C) ->
     [{kthr, K},

@@ -172,7 +172,7 @@ terminate(_Reason, #state{statport=SPort,
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change("0.1.0", #state0_1_0{port=ZonePort} = State, _Extra) ->
+code_change("0.1.0", #state0_1_0{port=ZonePort}, _Extra) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
     {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
@@ -303,7 +303,7 @@ build_stat([_|R], [V|RV], disk, K, M, P, D, F, C) ->
 build_stat([<<"sy">>|R], [V|RV], faults, K, M, P, D, F, C) ->
     build_stat(R, RV, faults, K, M, P, D, [{system_calls, V}|F], C);
 build_stat([<<"cs">>|R], [V|RV], faults, K, M, P, D, F, C) ->
-    build_stat(R, RV, cpu, K, M, P, D, [{system_calls, V}|F], C);
+    build_stat(R, RV, cpu, K, M, P, D, [{context_switches, V}|F], C);
 
 build_stat([<<"us">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
     build_stat(R, RV, cpu, K, M, P, D, F, [{user, V}|C]);

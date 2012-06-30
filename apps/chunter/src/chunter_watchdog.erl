@@ -107,7 +107,7 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
 
-    [chunter_vm:set_state(chunter_server:get_vm_pid(UUID),list_to_atom((binary_to_list(VMState)))) ||
+    [chunter_vm:set_state(chunter_server:get_vm_pid(UUID),simplifie_state(list_to_atom((binary_to_list(VMState))))) ||
 	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
@@ -176,7 +176,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
+simplifie_state(installed) ->
+    stopped;
 simplifie_state(uninitialized) ->
     stopped;
 simplifie_state(initialized) ->

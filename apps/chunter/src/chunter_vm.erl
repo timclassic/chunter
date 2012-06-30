@@ -15,7 +15,8 @@
 	 refresh/1, 
 	 get/1,
 	 info/1,
-	 set_state/2]).
+	 set_state/2,
+	 force_state/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -31,6 +32,9 @@
 
 set_state(Pid, State) ->
     gen_server:cast(Pid, {state, State}).
+
+force_state(Pid, State) ->
+    gen_server:cast(Pid, {force_state, State}).
 
 refresh(Pid) ->
     gen_server:cast(Pid, refresh).
@@ -115,19 +119,21 @@ handle_cast(refresh, #state{uuid=UUID} = State) ->
     Data = chunter_server:get_vm(UUID),
     {noreply, State#state{data = Data}};
 
-handle_cast({state, MachineState}, #state{state = MachineState} = State) ->
+handle_cast({force_state, MachineState}, #state{state = MachineState} = State) ->
     {noreply, State};
 
-handle_cast({state, NewMachineState}, #state{uuid=UUID,
-		  			     data=Data,
-					     state=OldMachineState}=State) ->
+handle_cast({force_state, NewMachineState}, #state{uuid=UUID,
+						   data=Data}=State) ->
+    io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
+    gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState}),
+    Data1 = [{state, list_to_binary(atom_to_list(NewMachineState))}|proplists:delete(state, Data)],
+    {noreply, State#state{state=NewMachineState,
+			  data=Data1}};
+
+handle_cast({state, NewMachineState}, #state{state=OldMachineState}=State) ->
     case allowed_transitions(OldMachineState, NewMachineState) of
 	true ->
-	    io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
-	    gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState}),
-	    Data1 = [{state, list_to_binary(atom_to_list(NewMachineState))}|proplists:delete(state, Data)],
-	    {noreply, State#state{state=NewMachineState,
-				  data=Data1}};
+	    force_state(self(), NewMachineState);
 	false ->
 	    {noreply, State}
     end;

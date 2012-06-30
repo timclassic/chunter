@@ -54,6 +54,7 @@ init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info("chunter:watchdog - initializing: ~s", [Name]),
     Cmd = code:priv_dir(chunter) ++ "/zonemon.sh",
+    timer:send_interval(5000, zonecheck),
     ZonePort = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
     lager:info("chunter:watchdog - zone watchdog started.", []),
     StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
@@ -104,6 +105,16 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info(zonecheck, #state{name=Name} = State) ->
+
+    [chunter_vm:set_state(chunter_server:get_vm_pid(UUID), 
+			  simplifie_state(VMState)) ||
+	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
+	    [ re:split(Line, ":") 
+	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
+	ID =/= <<"0">>],
+    {noreply, State};
+
 handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name} = State) ->
     case parse_stat(Data, Spec) of
 	unknown ->

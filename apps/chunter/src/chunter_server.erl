@@ -117,7 +117,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
 	    lager:debug([{fifi_component, chunter}],
 		"machines:create - Dataset Data: ~p.", [Dataset]),
-	    {ok, Package} = libsnarl:option_get(Auth, <<"packages">>, PackageUUID),
+	    {ok, Package} = libsnarl:option_get(system, <<"packages">>, PackageUUID),
 	    {Memory, []} = string:to_integer(binary_to_list(proplists:get_value(memory, Package))),
 	    {Disk, []} = string:to_integer(binary_to_list(proplists:get_value(disk, Package))),
 	    {Swap,[]} = string:to_integer(binary_to_list(proplists:get_value(swap, Package))),

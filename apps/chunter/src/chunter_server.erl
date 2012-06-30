@@ -116,20 +116,20 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 	true ->
 	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
 	    lager:debug([{fifi_component, chunter}],
-		"machines:create - Dataset Data: ~p, Tags: ~p.", [Dataset]),
+		"machines:create - Dataset Data: ~p.", [Dataset]),
 	    {ok, Package} = libsnarl:option_get(Auth, packages, PackageUUID),
 	    {Memory, []} = string:to_integer(binary_to_list(proplists:get_value(memory, Package))),
 	    {Disk, []} = string:to_integer(binary_to_list(proplists:get_value(disk, Package))),
 	    {Swap,[]} = string:to_integer(binary_to_list(proplists:get_value(swap, Package))),
 	    lager:info([{fifi_component, chunter}],
-		       "machines:create -  Memroy: ~pMB, Disk: ~pGB, Swap: ~pMB.", [Memory, Disk, Swap]),
+		       "machines:create - Memroy: ~pMB, Disk: ~pGB, Swap: ~pMB.", [Memory, Disk, Swap]),
 	    Reply = [{tags, Tags},
 		     {customer_metadata, Metadata},
 		     {alias, Name}],
 	    DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
 	    NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
 	    lager:info([{fifi_component, chunter}],
-		       "machines:create - disk driver: ~s, net driver: ~s.", 
+		       "machines:create - Disk driver: ~s, net driver: ~s.", 
 		       [DiskDrv, NicDrv]),
 	    
 	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"admin">>) of
@@ -153,7 +153,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 				   _ ->
 				       lager:warning([{fifi_component, chunter}],
 						     "create machines - could not obtain IP.", []),
-				       {[], []}
+				       {Reply, []}
 			       end,
 	    Reply2 = case proplists:get_value(os, Dataset) of
 			 <<"smartos">> = OS ->
@@ -187,7 +187,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 					 [OS])
 		     end,
 	    lager:debug([{fifi_component, chunter}],
-			"machines:create -  final spec: ~p.", 
+			"machines:create - final spec: ~p.", 
 			[Reply2]),
 	    spawn(chunter_vmadm, create, [Reply2, From, Auth, Rights]),
 	    {noreply,  State#state{datasets=Ds1}}

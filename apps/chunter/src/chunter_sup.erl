@@ -27,4 +27,3 @@ init([]) ->
     {ok, {{one_for_one, 5, 10}, [?CHILD(chunter_vm_sup, supervisor),
 				 ?CHILD(chunter_server, worker),
 				 ?CHILD(chunter_watchdog, worker)]}}.
-

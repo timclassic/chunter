@@ -279,8 +279,6 @@ build_stat([<<"in">>|R], [V|RV], disk, K, M, P, D, F, C) ->
 build_stat([_|R], [V|RV], disk, K, M, P, D, F, C) ->
     build_stat(R, RV, disk, K, M, P, [V|D], F, C);
 
-
-
 build_stat([<<"sy">>|R], [V|RV], faults, K, M, P, D, F, C) ->
     build_stat(R, RV, faults, K, M, P, D, [{system_calls, V}|F], C);
 build_stat([<<"cs">>|R], [V|RV], faults, K, M, P, D, F, C) ->

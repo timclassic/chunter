@@ -91,7 +91,7 @@ handle_call({call, Auth, {machines, list}}, _From, State) ->
 handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
     lager:info([{fifi_component, chunter}],
 	       "machines:get - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [vm, UUID, view]) of
+    case libsnarl:allowed(system, Auth, [vm, UUID, get]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:info - forbidden Auth: ~p.", [Auth]),
@@ -453,7 +453,7 @@ list_vms(Auth) ->
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 	ID =/= <<"0">> andalso
-	    libsnarl:allowed(system, AuthC, [vm, UUID, view]) == true].
+	    libsnarl:allowed(system, AuthC, [vm, UUID, get]) == true].
 
 get_dataset(UUID, Ds) ->
     read_dsmanifest(filename:join(<<"/var/db/dsadm">>, <<UUID/binary, ".dsmanifest">>), Ds).
@@ -464,7 +464,7 @@ list_datasets(Datasets, Auth) ->
 		       fun (F, {Fs, DsA}) ->
 			       {match, [UUID]} = re:run(F, "/var/db/dsadm/(.*)\.dsmanifest", 
 							[{capture, all_but_first, binary}]),
-			       case libsnarl:allowed(system, AuthC, [dataset, UUID, view]) of
+			       case libsnarl:allowed(system, AuthC, [dataset, UUID, get]) of
 				   true ->
 				       {F1, DsA1} = read_dsmanifest(F, DsA),
 				       {[F1| Fs], DsA1};

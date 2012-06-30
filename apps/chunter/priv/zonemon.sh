@@ -1,5 +1,5 @@
-#!/usr/sbin/dtrace -qs
-
+#!/bin/sh 
+(cat && kill 0) | dtrace -qn '
 BEGIN
 {
 /* zone_status_set */
@@ -35,3 +35,4 @@ fop_rmdir:entry
 {
 	printf("%s: %s\n", state[10], stringof(args[1]));
 }
+'

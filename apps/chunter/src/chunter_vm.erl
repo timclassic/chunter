@@ -135,8 +135,9 @@ handle_cast({state, NewMachineState}, #state{state=OldMachineState}=State) ->
 	true ->
 	    force_state(self(), NewMachineState);
 	false ->
-	    {noreply, State}
-    end;
+	    ok
+    end,
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.

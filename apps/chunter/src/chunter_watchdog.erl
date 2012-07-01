@@ -19,8 +19,13 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state0_1_0, {port}).
--record(state, {name, zoneport, statport, statspec=[], memory=0}).
+-record(state, {name, 
+		zoneport, 
+		vmstat_port,
+		mpstat_port,
+		vfsstat_port,
+		mpstat=undefiend,
+		statspec=[], memory=0}).
 
 %%%===================================================================
 %%% API
@@ -54,18 +59,28 @@ start_link() ->
 init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info("chunter:watchdog - initializing: ~s", [Name]),
-    Cmd = code:priv_dir(chunter) ++ "/zonemon.sh",
-    timer:send_interval(5000, zonecheck),
-    ZonePort = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
+    Zonemon = code:priv_dir(chunter) ++ "/zonemon.sh",
+    timer:send_interval(1000, zonecheck),
+    PortOpts = [exit_status, use_stdio, binary, {line, 1000}],
+    ZonePort = erlang:open_port({spawn, Zonemon}, PortOpts),
     lager:info("chunter:watchdog - zone watchdog started.", []),
-    StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 1"},[exit_status, use_stdio, binary, {line, 1000}]),
+    VMStat = code:priv_dir(chunter) ++ "/vmstat.sh",
+    VMStatPort = erlang:open_port({spawn, VMStat}, PortOpts),
+    MPStat = code:priv_dir(chunter) ++ "/mpstat.sh",
+    MPStatPort = erlang:open_port({spawn, MPStat}, PortOpts),
+    VFSStat = code:priv_dir(chunter) ++ "/vfsstat.sh",
+    VFSStatPort = erlang:open_port({spawn, VFSStat}, PortOpts),
+
     lager:info("chunter:watchdog - stats watchdog started.", []),
     {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     {ok, #state{
        memory=Mem*1024,
        name=Name,
        zoneport=ZonePort,
-       statport=StatPort}}.
+       vmstat_port=VMStatPort,
+       mpstat_port=MPStatPort,
+       vfsstat_port=VFSStatPort
+      }}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -117,8 +132,9 @@ handle_info(zonecheck, State) ->
 	ID =/= <<"0">>],
     {noreply, State};
 
-handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name, memory=Mem} = State) ->
-    case parse_stat(Data, Mem, Spec) of
+handle_info({_Port, {data, {eol, Data}}}, 
+	    #state{vmstat_port=_Port, statspec=Spec, name=Name, memory=Mem, mpstat=MPStat} = State) ->
+    case parse_stat(Data, Mem, Spec, MPStat) of
 	unknown ->
 	    lager:error("watchdog:stat - unknwon message: ~p", [Data]),
 	    {noreply, State};
@@ -129,9 +145,20 @@ handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, 
 	    {noreply, State#state{statspec=NewSpec}};
 	{stat, Stats} ->
 	    lager:debug("watchdog:stat - State: ~p", [Stats]),
+	    io:format("~p~n", [Stats]),
 	    gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats}),
+	    {noreply, State#state{mpstat=[]}}
+    end;
+handle_info({_Port, {data, {eol, Data}}}, 
+	    #state{mpstat_port=_Port, mpstat=MPStat} = State) ->
+    case parse_mpstat(Data) of
+	{stat, Stats} ->
+	    lager:debug("watchdog:mpstat - State: ~p", [Stats]),
+	    {noreply, State#state{mpstat=[Stats|MPStat]}};
+	_ ->
 	    {noreply, State}
     end;
+
 handle_info({_Port, {data, {eol, Data}}}, #state{zoneport=_Port} = State) ->
     case parse_data(Data) of
 	{error, unknown} ->
@@ -158,9 +185,13 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{statport=SPort,
+terminate(_Reason, #state{vmstat_port=VMSPort,
+			  mpstat_port=MPSPort,
+			  vfsstat_port=VFSSPort,
 			  zoneport=Zport}) ->
-    erlang:port_close(SPort),
+    erlang:port_close(VMSPort),
+    erlang:port_close(MPSPort),
+    erlang:port_close(VFSSPort),
     erlang:port_close(Zport),
     ok.
 
@@ -172,15 +203,8 @@ terminate(_Reason, #state{statport=SPort,
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change("0.1.0", #state0_1_0{port=ZonePort}, _Extra) ->
-    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
-    StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
-    {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    {ok, #state{
-       memory=Mem,
-       name=Name,
-       zoneport=ZonePort,
-       statport=StatPort}}.
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
@@ -238,20 +262,41 @@ parse_data(<<"S12: ", UUID/binary>>) ->
 parse_data(_) ->
     {error, unknown}.
 
-parse_stat(<<" k", _R/binary>>, _, _) ->
+parse_mpstat(<<"CPU", _R/binary>>) ->
+    new;
+parse_mpstat(D) ->
+    [CPU, Minf, Mjf, Xcal, Intr, Ithr, Csw, Icsw, Migr, Smtx, Srw, Syscl, Usr, Sys, _Wt, Idl] = 
+	[V || {V,_} <- [string:to_integer(binary_to_list(R)) || R <- re:split(D, "\s+")]],
+    {stats, [{cpi_id, CPU},
+	     {minor_faults, Minf},
+	     {major_faults, Mjf},
+	     {chross_calls, Xcal},
+	     {interrupts, Intr},
+	     {thread_interrupts, Ithr},
+	     {context_switches, Csw},
+	     {involuntary_context_switches, Icsw},
+	     {thread_migrations, Migr},
+	     {mutexe_spins, Smtx},
+	     {rw_spins, Srw},
+	     {system_calls, Syscl},
+	     {user, Usr},
+	     {system, Sys},
+	     {idel, Idl}]}.
+
+parse_stat(<<" k", _R/binary>>, _, _, _) ->
     skip;
-parse_stat(<<" r ", Specs/binary>>, _, _) ->
+parse_stat(<<" r ", Specs/binary>>, _, _, _) ->
     {spec, [<<"r">> | re:split(Specs, "\s+")]};
-parse_stat(<<" ", Data/binary>>, Mem, Specs) ->
+parse_stat(<<" ", Data/binary>>, Mem, Specs, MPStat) ->
     Res = re:split(Data, "\s+"),
     Vals = [V || {V,_} <- [string:to_integer(binary_to_list(R)) || R <- Res]],
-    {stat, build_stat(Specs, Vals, Mem)};
+    {stat, build_stat(Specs, Vals, Mem, MPStat)};
 
-parse_stat(_, _, _) ->
+parse_stat(_, _, _, _) ->
     unknown.
 
-build_stat(S, D, Mem) ->
-    build_stat(S, D, kthr, [], [{total, Mem}], [], [], [], []).
+build_stat(S, D, Mem, MPStat) ->
+    build_stat(S, D, kthr, [], [{total, Mem}], [], [], [], [{details, MPStat}]).
 
 build_stat([], _, _Cat, K, M, P, D, F, C) ->
     [{kthr, K},

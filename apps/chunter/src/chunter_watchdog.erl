@@ -58,7 +58,7 @@ init([]) ->
     timer:send_interval(5000, zonecheck),
     ZonePort = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
     lager:info("chunter:watchdog - zone watchdog started.", []),
-    StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
+    StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 1"},[exit_status, use_stdio, binary, {line, 1000}]),
     lager:info("chunter:watchdog - stats watchdog started.", []),
     {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     {ok, #state{

@@ -129,7 +129,7 @@ handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, 
 	    {noreply, State#state{statspec=NewSpec}};
 	{stat, Stats} ->
 	    lager:debug("watchdog:stat - State: ~p", [Stats]),
-	    gproc:send({p,g,{node,Name}}, {host, stats, Name, Stats}),
+	    gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats}),
 	    {noreply, State}
     end;
 handle_info({_Port, {data, {eol, Data}}}, #state{zoneport=_Port} = State) ->

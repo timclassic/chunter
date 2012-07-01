@@ -265,8 +265,15 @@ parse_data(_) ->
 parse_mpstat(<<"CPU", _R/binary>>) ->
     new;
 parse_mpstat(D) ->
+    Values = case re:split(D, "\s+") of
+		 
+		 [<<>> | Res] ->
+		     Res;
+		 Res ->
+		     Res
+	     end,
     [CPU, Minf, Mjf, Xcal, Intr, Ithr, Csw, Icsw, Migr, Smtx, Srw, Syscl, Usr, Sys, _Wt, Idl] = 
-	[V || {V,_} <- [string:to_integer(binary_to_list(R)) || R <- re:split(D, "\s+")]],
+	[V || {V,_} <- [string:to_integer(binary_to_list(R)) || R <- Values]],
     {stats, [{cpi_id, CPU},
 	     {minor_faults, Minf},
 	     {major_faults, Mjf},

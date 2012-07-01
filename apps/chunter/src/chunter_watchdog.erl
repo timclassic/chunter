@@ -152,7 +152,7 @@ handle_info({_Port, {data, {eol, Data}}},
 handle_info({_Port, {data, {eol, Data}}}, 
 	    #state{mpstat_port=_Port, mpstat=MPStat} = State) ->
     case parse_mpstat(Data) of
-	{stat, Stats} ->
+	{stats, Stats} ->
 	    lager:debug("watchdog:mpstat - State: ~p", [Stats]),
 	    {noreply, State#state{mpstat=[Stats|MPStat]}};
 	_ ->

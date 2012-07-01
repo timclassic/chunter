@@ -244,7 +244,8 @@ parse_stat(<<" r ", Specs/binary>>, _, _) ->
     {spec, [<<"r">> | re:split(Specs, "\s+")]};
 parse_stat(<<" ", Data/binary>>, Mem, Specs) ->
     Res = re:split(Data, "\s+"),
-    {stat, build_stat(Specs, Res, Mem)};
+    Vals = [V || {V,_} <- [string:to_integer(binary_to_list(R)) || R <- Res]],
+    {stat, build_stat(Specs, Vals, Mem)};
 
 parse_stat(_, _, _) ->
     unknown.

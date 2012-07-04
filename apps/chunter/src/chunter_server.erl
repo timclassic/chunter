@@ -456,13 +456,15 @@ list_vms(Auth) ->
 	    libsnarl:allowed(system, AuthC, [vm, UUID, get]) == true].
 
 get_dataset(UUID, Ds) ->
-    read_dsmanifest(filename:join(<<"/var/db/dsadm">>, <<UUID/binary, ".dsmanifest">>), Ds).
+    read_dsmanifest(filename:join(<<"/var/db/imgadm">>, <<UUID/binary, ".json">>), Ds).
 
 list_datasets(Datasets, Auth) ->
     {ok, AuthC} = libsnarl:user_cache(system, Auth),
-    filelib:fold_files("/var/db/dsadm", ".*dsmanifest", false, 
-		       fun (F, {Fs, DsA}) ->
-			       {match, [UUID]} = re:run(F, "/var/db/dsadm/(.*)\.dsmanifest", 
+    filelib:fold_files("/var/db/imgadm", ".*json", false, 
+		       fun ("/var/db/imgadm/imgcache.json", R) ->
+			       R;
+			   (F, {Fs, DsA}) ->
+			       {match, [UUID]} = re:run(F, "/var/db/imgadm/(.*)\.json", 
 							[{capture, all_but_first, binary}]),
 			       case libsnarl:allowed(system, AuthC, [dataset, UUID, get]) of
 				   true ->

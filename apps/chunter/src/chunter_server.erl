@@ -40,8 +40,6 @@ get(UUID) ->
 
 list() ->
     gen_server:call(?SERVER, {call, system, {machines, list}}).
-reregister() ->
-    gen_server:cast(?SERVER, reregister).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -59,13 +57,14 @@ reregister() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    ok = backyard_srv:register_connect_handler(backyard_connect),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init.", []),
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Name]),
-    {ok, #state{name=Name}, 1000}.
+    {ok, #state{name=Name}}.
 
 
 %%--------------------------------------------------------------------
@@ -366,22 +365,10 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
 	    {noreply, State}
     end;
 
-handle_cast(reregister, #state{name=Name}=State) ->
-    lager:info([{fifi_component, chunter}],
-	       "chunter:register - Host: ~s.", [Name]),
-    try
-	libsniffle:join_client_channel(),
-        libsniffle:register(system, chunter, Name, self()),
-	{noreply, State}
-    catch
-	T:E ->
-	    lager:error([{fifi_component, chunter}],
-			"register - Failed: ~p:~p.", [T, E]),
-	    application:stop(gproc),
-	    application:start(gproc),
-	    {noreply, State, 1000}
-    end;
-
+handle_cast(backyard_connect, #state{name = Name} = State) ->
+    libsniffle:join_client_channel(),
+    libsniffle:register(system, chunter, Name, self()),
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -398,7 +385,6 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, State) ->
-    reregister(),
     {noreply, State};
 
 handle_info({sniffle, request, register}, #state{name = Name} = State) ->
@@ -420,6 +406,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
+    backyard_srv:unregister_handler(),
     ok.
 
 %%--------------------------------------------------------------------

@@ -72,7 +72,7 @@ start_link(UUID) ->
 %% @end
 %%--------------------------------------------------------------------
 init([UUID]) ->
-    reregister_int(UUID),
+    ok = backyard_srv:register_connect_handler(backyard_connect),
     refresh(self()),
     {ok, #state{uuid=UUID}}.
 
@@ -115,6 +115,11 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast(backyard_connect,  #state{uuid = UUID} = State) ->
+    gproc:reg({p, l, {chunter, vm}}, UUID),
+    gproc:reg({n, l, {vm, UUID}}, self()),
+    {noreply, State};
+
 handle_cast(refresh, #state{uuid=UUID} = State) ->
     Data = chunter_server:get_vm(UUID),
     {noreply, State#state{data = Data}};
@@ -183,10 +188,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-reregister_int(UUID) ->
-    gproc:reg({p, l, {chunter, vm}}, UUID),
-    gproc:reg({n, l, {vm, UUID}}, self()).
 
 
 %if we don't know yet everything is OK

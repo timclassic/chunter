@@ -8,7 +8,6 @@
 load() ->
     application:start(sasl),
     application:start(lager),
-    application:start(alog),
     application:start(nicedecimal),
     application:start(jsx),
     application:start(crypto),

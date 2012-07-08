@@ -368,7 +368,7 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
 handle_cast(backyard_connect, #state{name = Name} = State) ->
     libsniffle:join_client_channel(),
     try
-	libsniffle:register(system, chunter, Name, self()),
+	libsniffle:register(system, chunter, Name, self())
     catch
 	_:_ ->
 	    ok

@@ -13,6 +13,7 @@
                   inets,
                   erlsom,
                   libsniffle,
+		  statsderl,
                   libsnarl
                  ]},
   {mod, { chunter_app, []}},

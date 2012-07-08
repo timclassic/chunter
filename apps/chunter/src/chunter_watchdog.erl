@@ -153,22 +153,48 @@ handle_info({_Port, {data, {eol, Data}}},
 	    {noreply, State#state{mpstat=[]}}
     end;
 handle_info({_Port, {data, {eol, Data}}}, 
-	    #state{mpstat_port=_Port, mpstat=MPStat} = State) ->
+	    #state{name=Name, mpstat_port=_Port, mpstat=MPStat} = State) ->
     case parse_mpstat(Data) of
-	{stats, Stats} ->
+	{stats, {[CPU, 
+		  Minf, Mjf, Xcal, 
+		  Intr, Ithr, Csw, 
+		  Icsw, Migr, Smtx, 
+		  Srw, Syscl, Usr, 
+		  Sys, _Wt, Idl], 
+		 Stats}} ->
+	    statsderl:increment([Name, ".cpu_", CPU, ".minf"], Minf, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".mjf"], Mjf, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".xcal"], Xcal, 1),
+
+	    statsderl:increment([Name, ".cpu_", CPU, ".intr"], Intr, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".Ithr"], Ithr, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".Csw"], Csw, 1),
+
+	    statsderl:increment([Name, ".cpu_", CPU, ".intr"], Icsw, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".migr"], Migr, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".smtx"], Smtx, 1),
+
+	    statsderl:increment([Name, ".cpu_", CPU, ".srw"], Srw, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".syscl"], Syscl, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".usr"], Usr, 1),
+	    statsderl:increment([Name, ".cpu_", CPU, ".sys"], Sys, 1),
+
 	    lager:debug("watchdog:mpstat - State: ~p", [Stats]),
 	    {noreply, State#state{mpstat=[Stats|MPStat]}};
 	_ ->
 	    {noreply, State}
     end;
 
-handle_info({_Port, {data, {eol, Data}}}, #state{zoneport=_Port} = State) ->
+handle_info({_Port, {data, {eol, Data}}}, #state{name=Name, zoneport=_Port} = State) ->
     case parse_data(Data) of
 	{error, unknown} ->
+	    statsderl:increment([Name, ".vm.zonewatchdog_error"], 1, 1),
 	    lager:error("watchdog:zone - unknwon message: ~p", [Data]);
 	{UUID, crate} ->
+	    statsderl:increment([Name, ".vm.create"], 1, 1),
 	    chunter_vm_sup:start_child(UUID);
 	{UUID, Action} ->
+	    statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
 	    Pid = chunter_server:get_vm_pid(UUID),
 	    chunter_vm:set_state(Pid, simplifie_state(Action))
     end,
@@ -277,21 +303,23 @@ parse_mpstat(D) ->
 	     end,
     [CPU, Minf, Mjf, Xcal, Intr, Ithr, Csw, Icsw, Migr, Smtx, Srw, Syscl, Usr, Sys, _Wt, Idl] = 
 	[V || {V,_} <- [string:to_integer(binary_to_list(R)) || R <- Values]],
-    {stats, [{cpi_id, CPU},
-	     {minor_faults, Minf},
-	     {major_faults, Mjf},
-	     {chross_calls, Xcal},
-	     {interrupts, Intr},
-	     {thread_interrupts, Ithr},
-	     {context_switches, Csw},
-	     {involuntary_context_switches, Icsw},
-	     {thread_migrations, Migr},
-	     {mutexe_spins, Smtx},
-	     {rw_spins, Srw},
-	     {system_calls, Syscl},
-	     {user, Usr},
-	     {system, Sys},
-	     {idel, Idl}]}.
+    {stats, {
+       [CPU, Minf, Mjf, Xcal, Intr, Ithr, Csw, Icsw, Migr, Smtx, Srw, Syscl, Usr, Sys, _Wt, Idl],
+       [{cpi_id, CPU},
+	{minor_faults, Minf},
+	{major_faults, Mjf},
+	{chross_calls, Xcal},
+	{interrupts, Intr},
+	{thread_interrupts, Ithr},
+	{context_switches, Csw},
+	{involuntary_context_switches, Icsw},
+	{thread_migrations, Migr},
+	{mutexe_spins, Smtx},
+	{rw_spins, Srw},
+	{system_calls, Syscl},
+	{user, Usr},
+	{system, Sys},
+	{idel, Idl}]}}.
 
 parse_stat(<<" k", _R/binary>>, _, _, _) ->
     skip;

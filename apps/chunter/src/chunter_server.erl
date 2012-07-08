@@ -58,6 +58,7 @@ list() ->
 %%--------------------------------------------------------------------
 init([]) ->
     ok = backyard_srv:register_connect_handler(backyard_connect),
+    ok = backyard_srv:register_disconnect_handler(backyard_disconnect),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init.", []),
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
@@ -81,13 +82,16 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({call, Auth, {machines, list}}, _From, State) ->
+handle_call({call, Auth, {machines, list}}, _From,  #state{name=Name} = State) ->
+    statsderl:increment([Name, ".call.machines.list"], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "machines:list.", []),
     Reply = list_vms(Auth),
     {reply, {ok, Reply}, State};
 
-handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
+handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  State) ->
+    statsderl:increment([Name, ".call.machines.get.", UUID], 1, 1),
+
     lager:info([{fifi_component, chunter}],
 	       "machines:get - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, get]) of
@@ -102,7 +106,8 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, State) ->
     end;
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
-	    #state{datasets=Ds} = State) ->
+	    #state{datasets=Ds, name=Name} = State) ->
+    statsderl:increment([Name, ".call.machines.create"], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [Name, PackageUUID, DatasetUUID]),
     lager:debug([{fifi_component, chunter}],
@@ -156,6 +161,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			       end,
 	    Reply2 = case proplists:get_value(os, Dataset) of
 			 <<"smartos">> = OS ->
+			     statsderl:increment([Name, ".call.machines.create.smartos"], 1, 1),
 			     lager:info([{fifi_component, chunter}],
 					"machines:create - os type ~s.", 
 					[OS]),
@@ -165,6 +171,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			      {dataset_uuid, DatasetUUID}
 			      |Reply1];
 			 <<"linux">> = OS ->
+			     statsderl:increment([Name, ".call.machines.create.kvm"], 1, 1),
 			     lager:info([{fifi_component, chunter}],
 					"machines:create - os type ~s.", 
 					[OS]),
@@ -193,7 +200,8 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
     end;
 
 % TODO
-handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
+handle_call({call, Auth, {machines, info, UUID}}, _From, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".call.machines.info.", UUID], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "machines:info - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, info]) of
@@ -207,7 +215,8 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, State) ->
 	    {reply, {ok, Reply}, State}
     end;
 
-handle_call({call, Auth, {packages, list}}, _From, State) ->
+handle_call({call, Auth, {packages, list}}, _From, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".call.packages.list"], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "packages:list", []),
     case libsnarl:allowed(system, Auth, [package, list]) of
@@ -220,13 +229,15 @@ handle_call({call, Auth, {packages, list}}, _From, State) ->
 	    {reply, {ok,  Reply}, State}
     end;
 
-handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds} = State) ->
+handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds, name=Name} = State) ->
+    statsderl:increment([Name, ".call.datasets.list"], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "datasets:list", []),
     {Reply, Ds1} = list_datasets(Ds, Auth), 
     {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
-handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = State) ->
+handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds, name=Name} = State) ->
+    statsderl:increment([Name, ".call.datasets.get.", UUID], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "datasets:get - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [dataset, UUID, get]) of
@@ -240,7 +251,8 @@ handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds} = St
     end;
 
 
-handle_call({call, Auth, {keys, list}}, _From, State) ->
+handle_call({call, Auth, {keys, list}}, _From, #state{name=Name} = State) ->
+    statsderl:increment([Name, ".call.keys.list"], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "keys:list", []),
     case libsnarl:allowed(system, Auth, [key, list]) of
@@ -254,7 +266,8 @@ handle_call({call, Auth, {keys, list}}, _From, State) ->
     end;
 
 
-handle_call({call, _Auth, Call}, _From, State) ->
+handle_call({call, _Auth, Call}, _From, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".call.unknown"], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "unsupported call - ~p", [Call]),
     Reply = {error, {unsupported, Call}},
@@ -274,7 +287,8 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({cast, Auth, {machines, start, UUID}}, State) ->
+handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".cast.machines.start.", UUID], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "machines:start - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
@@ -287,7 +301,8 @@ handle_cast({cast, Auth, {machines, start, UUID}}, State) ->
 	    {noreply, State}
     end;
 
-handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
+handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".cast.machines.delete"], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "machines:delete - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, delete]) of
@@ -324,7 +339,8 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, State) ->
     end;
 
 
-handle_cast({cast, Auth, {machines, start, UUID, Image}}, State) ->
+handle_cast({cast, Auth, {machines, start, UUID, Image}}, #state{name = Name} =State) ->
+    statsderl:increment([Name, ".cast.machines.start_image.", UUID], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "machines:start - UUID: ~s, Image: ~s.", [UUID, Image]),
 
@@ -339,7 +355,8 @@ handle_cast({cast, Auth, {machines, start, UUID, Image}}, State) ->
     end;
 
 
-handle_cast({cast, Auth, {machines, stop, UUID}}, State) ->
+handle_cast({cast, Auth, {machines, stop, UUID}}, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".cast.machines.stop.", UUID], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "machines:stop - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, stop]) of
@@ -352,7 +369,8 @@ handle_cast({cast, Auth, {machines, stop, UUID}}, State) ->
 	    {noreply, State}
     end;
 
-handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
+handle_cast({cast, Auth, {machines, reboot, UUID}}, #state{name = Name} =State) ->
+    statsderl:increment([Name, ".cast.machines.reboot.", UUID], 1, 1),
     lager:info([{fifi_component, chunter}],
 	       "machines:reboot - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, reboot]) of
@@ -365,7 +383,12 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, State) ->
 	    {noreply, State}
     end;
 
+handle_cast(backyard_disconnect, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".net.split"], 1, 1),
+    {noreply, State};
+
 handle_cast(backyard_connect, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".net.join"], 1, 1),
     libsniffle:join_client_channel(),
     try
 	libsniffle:register(system, chunter, Name, self())
@@ -375,7 +398,8 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
     end,
     {noreply, State};
 
-handle_cast(_Msg, State) ->
+handle_cast(_Msg, #state{name = Name} = State) ->
+    statsderl:increment([Name, ".cast.unknown"], 1, 1),
     {noreply, State}.
 
 

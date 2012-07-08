@@ -35,12 +35,11 @@
     </dependency>
 
     <dependency 
-	name='zones'
+	name='epmd'
 	grouping='require_all' 
 	restart_on='none' type='service'>
-      <service_fmri value='svc:/system/zones:default'/>
+      <service_fmri value='svc:/network/epmd:default'/>
     </dependency>
-
 
     <exec_method
       type='method'

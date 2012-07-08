@@ -124,7 +124,6 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
-
     [chunter_vm:set_state(chunter_server:get_vm_pid(UUID),simplifie_state(list_to_atom((binary_to_list(VMState))))) ||
 	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 

@@ -495,11 +495,16 @@ binary_to_atom(B) ->
     
 
 get_vm_pid(UUID) ->
-    try gproc:lookup_pid({n, l, {vm, UUID}}) of
-	Pid ->
-	    Pid
-    catch
-	_T:_E ->
-	    {ok, Pid} = chunter_vm_sup:start_child(UUID),
-	    Pid
+    case backyard_srv:status() of
+	connected ->
+	    try gproc:lookup_pid({n, l, {vm, UUID}}) of
+		Pid ->
+		    Pid
+	    catch
+		_T:_E ->
+		    {ok, Pid} = chunter_vm_sup:start_child(UUID),
+		    Pid
+	    end;
+	disconnected ->
+	    undefined
     end.

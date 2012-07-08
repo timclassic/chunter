@@ -146,7 +146,7 @@ handle_info({_Port, {data, {eol, Data}}},
 	{stat, Stats} ->
 	    lager:debug("watchdog:stat - State: ~p", [Stats]),
 	    try
-		gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats}),
+		gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats})
 	    catch
 		_:_ ->
 		    ok

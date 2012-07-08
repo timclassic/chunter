@@ -131,11 +131,11 @@ handle_cast({force_state, NewMachineState}, #state{uuid=UUID,
 						   data=Data}=State) ->
     io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
     try
-	gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState}),
+	gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState})
     catch
 	_:_ ->
 	    ok
-    end
+    end,
     Data1 = [{state, list_to_binary(atom_to_list(NewMachineState))}|proplists:delete(state, Data)],
     {noreply, State#state{state=NewMachineState,
 			  data=Data1}};

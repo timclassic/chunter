@@ -83,14 +83,14 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({call, Auth, {machines, list}}, _From,  #state{name=Name} = State) ->
-    statsderl:increment([Name, ".call.machines.list"], 1, 1),
+    statsderl:increment([Name, ".call.machines.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:list.", []),
     Reply = list_vms(Auth),
     {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  State) ->
-    statsderl:increment([Name, ".call.machines.get.", UUID], 1, 1),
+    statsderl:increment([Name, ".call.machines.get.", UUID], 1, 1.0),
 
     lager:info([{fifi_component, chunter}],
 	       "machines:get - UUID: ~s.", [UUID]),
@@ -107,7 +107,7 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  Sta
 
 handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds, name=Name} = State) ->
-    statsderl:increment([Name, ".call.machines.create"], 1, 1),
+    statsderl:increment([Name, ".call.machines.create"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [Name, PackageUUID, DatasetUUID]),
     lager:debug([{fifi_component, chunter}],
@@ -161,7 +161,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			       end,
 	    Reply2 = case proplists:get_value(os, Dataset) of
 			 <<"smartos">> = OS ->
-			     statsderl:increment([Name, ".call.machines.create.smartos"], 1, 1),
+			     statsderl:increment([Name, ".call.machines.create.smartos"], 1, 1.0),
 			     lager:info([{fifi_component, chunter}],
 					"machines:create - os type ~s.", 
 					[OS]),
@@ -171,7 +171,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 			      {dataset_uuid, DatasetUUID}
 			      |Reply1];
 			 <<"linux">> = OS ->
-			     statsderl:increment([Name, ".call.machines.create.kvm"], 1, 1),
+			     statsderl:increment([Name, ".call.machines.create.kvm"], 1, 1.0),
 			     lager:info([{fifi_component, chunter}],
 					"machines:create - os type ~s.", 
 					[OS]),
@@ -201,7 +201,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".call.machines.info.", UUID], 1, 1),
+    statsderl:increment([Name, ".call.machines.info.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:info - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, info]) of
@@ -216,7 +216,7 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, #state{name = Name} = S
     end;
 
 handle_call({call, Auth, {packages, list}}, _From, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".call.packages.list"], 1, 1),
+    statsderl:increment([Name, ".call.packages.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "packages:list", []),
     case libsnarl:allowed(system, Auth, [package, list]) of
@@ -230,14 +230,14 @@ handle_call({call, Auth, {packages, list}}, _From, #state{name = Name} = State) 
     end;
 
 handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds, name=Name} = State) ->
-    statsderl:increment([Name, ".call.datasets.list"], 1, 1),
+    statsderl:increment([Name, ".call.datasets.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "datasets:list", []),
     {Reply, Ds1} = list_datasets(Ds, Auth), 
     {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds, name=Name} = State) ->
-    statsderl:increment([Name, ".call.datasets.get.", UUID], 1, 1),
+    statsderl:increment([Name, ".call.datasets.get.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "datasets:get - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [dataset, UUID, get]) of
@@ -252,7 +252,7 @@ handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds, name
 
 
 handle_call({call, Auth, {keys, list}}, _From, #state{name=Name} = State) ->
-    statsderl:increment([Name, ".call.keys.list"], 1, 1),
+    statsderl:increment([Name, ".call.keys.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "keys:list", []),
     case libsnarl:allowed(system, Auth, [key, list]) of
@@ -267,7 +267,7 @@ handle_call({call, Auth, {keys, list}}, _From, #state{name=Name} = State) ->
 
 
 handle_call({call, _Auth, Call}, _From, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".call.unknown"], 1, 1),
+    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "unsupported call - ~p", [Call]),
     Reply = {error, {unsupported, Call}},
@@ -288,7 +288,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".cast.machines.start.", UUID], 1, 1),
+    statsderl:increment([Name, ".cast.machines.start.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:start - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
@@ -302,7 +302,7 @@ handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) 
     end;
 
 handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".cast.machines.delete"], 1, 1),
+    statsderl:increment([Name, ".cast.machines.delete"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:delete - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, delete]) of
@@ -340,7 +340,7 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State)
 
 
 handle_cast({cast, Auth, {machines, start, UUID, Image}}, #state{name = Name} =State) ->
-    statsderl:increment([Name, ".cast.machines.start_image.", UUID], 1, 1),
+    statsderl:increment([Name, ".cast.machines.start_image.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:start - UUID: ~s, Image: ~s.", [UUID, Image]),
 
@@ -356,7 +356,7 @@ handle_cast({cast, Auth, {machines, start, UUID, Image}}, #state{name = Name} =S
 
 
 handle_cast({cast, Auth, {machines, stop, UUID}}, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".cast.machines.stop.", UUID], 1, 1),
+    statsderl:increment([Name, ".cast.machines.stop.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:stop - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, stop]) of
@@ -370,7 +370,7 @@ handle_cast({cast, Auth, {machines, stop, UUID}}, #state{name = Name} = State) -
     end;
 
 handle_cast({cast, Auth, {machines, reboot, UUID}}, #state{name = Name} =State) ->
-    statsderl:increment([Name, ".cast.machines.reboot.", UUID], 1, 1),
+    statsderl:increment([Name, ".cast.machines.reboot.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:reboot - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [vm, UUID, reboot]) of
@@ -384,11 +384,11 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, #state{name = Name} =State) 
     end;
 
 handle_cast(backyard_disconnect, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".net.split"], 1, 1),
+    statsderl:increment([Name, ".net.split"], 1, 1.0),
     {noreply, State};
 
 handle_cast(backyard_connect, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".net.join"], 1, 1),
+    statsderl:increment([Name, ".net.join"], 1, 1.0),
     libsniffle:join_client_channel(),
     try
 	libsniffle:register(system, chunter, Name, self())
@@ -399,7 +399,7 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
     {noreply, State};
 
 handle_cast(_Msg, #state{name = Name} = State) ->
-    statsderl:increment([Name, ".cast.unknown"], 1, 1),
+    statsderl:increment([Name, ".cast.unknown"], 1, 1.0),
     {noreply, State}.
 
 

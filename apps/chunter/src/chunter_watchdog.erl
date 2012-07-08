@@ -145,7 +145,12 @@ handle_info({_Port, {data, {eol, Data}}},
 	    {noreply, State#state{statspec=NewSpec}};
 	{stat, Stats} ->
 	    lager:debug("watchdog:stat - State: ~p", [Stats]),
-	    gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats}),
+	    try
+		gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats}),
+	    catch
+		_:_ ->
+		    ok
+	    end,
 	    {noreply, State#state{mpstat=[]}}
     end;
 handle_info({_Port, {data, {eol, Data}}}, 

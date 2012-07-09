@@ -25,7 +25,7 @@ start_link() ->
 
 init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
-    application:set_env(statsderl, base_key, <<"chunter."/string, Name>>),
+    application:set_env(statsderl, base_key, <<"chunter.", Name/binary>>),
     {ok, {{one_for_one, 5, 10}, [?CHILD(vmstats_sup, supervisor),
 				 ?CHILD(chunter_vm_sup, supervisor),
 				 ?CHILD(chunter_server, worker),

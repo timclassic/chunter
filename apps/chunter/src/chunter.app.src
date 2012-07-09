@@ -12,9 +12,8 @@
                   jsx,
                   inets,
                   erlsom,
-                  libsniffle,
 		  statsderl,
-		  vmstats,
+                  libsniffle,
                   libsnarl
                  ]},
   {mod, { chunter_app, []}},

@@ -24,6 +24,9 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, {{one_for_one, 5, 10}, [?CHILD(chunter_vm_sup, supervisor),
+    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    application:set_env(statsderl, base_key, <<"chunter."/string, Name>>),
+    {ok, {{one_for_one, 5, 10}, [?CHILD(vmstats_sup, supervisor),
+				 ?CHILD(chunter_vm_sup, supervisor),
 				 ?CHILD(chunter_server, worker),
 				 ?CHILD(chunter_watchdog, worker)]}}.

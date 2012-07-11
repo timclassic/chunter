@@ -385,9 +385,14 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, #state{name = Name} =State) 
 
 handle_cast(backyard_disconnect, #state{name = Name} = State) ->
     statsderl:increment([Name, ".net.split"], 1, 1.0),
+    application:stop(statsderl),
     {noreply, State};
 
 handle_cast(backyard_connect, #state{name = Name} = State) ->
+    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
+    application:set_env(statsderl, hostname, Host),
+    application:start(statsderl),
+    
     statsderl:increment([Name, ".net.join"], 1, 1.0),
     libsniffle:join_client_channel(),
     try

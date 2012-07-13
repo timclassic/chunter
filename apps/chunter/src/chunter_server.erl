@@ -17,6 +17,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
+-define(CPU_CAP_MULTIPLYER, 8).
+
 -define(SERVER, ?MODULE). 
 
 -record(state, {name, port, datasets=[]}).
@@ -167,6 +169,8 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 					[OS]),
 			     [{max_physical_memory, Memory},
 			      {quota, Disk},
+			      {cpu_share, Memory},
+			      {cpu_cap, Memory * ?CPU_CAP_MULTIPLYER},
 			      {max_swap, Swap},
 			      {dataset_uuid, DatasetUUID}
 			      |Reply1];

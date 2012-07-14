@@ -107,11 +107,11 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  Sta
 	    {reply, {ok, Reply}, State}
     end;
 
-handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
+handle_call({call, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Metadata, Tags}}, From, 
 	    #state{datasets=Ds, name=Name} = State) ->
     statsderl:increment([Name, ".call.machines.create"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
-	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [Name, PackageUUID, DatasetUUID]),
+	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [VMName, PackageUUID, DatasetUUID]),
     lager:debug([{fifi_component, chunter}],
 		"machines:create - Meta Data: ~p, Tags: ~p.", [Metadata, Tags]),
     case libsnarl:allowed(system, Auth, [vm, create]) of
@@ -131,7 +131,7 @@ handle_call({call, Auth, {machines, create, Name, PackageUUID, DatasetUUID, Meta
 		       "machines:create - Memroy: ~pMB, Disk: ~pGB, Swap: ~pMB.", [Memory, Disk, Swap]),
 	    Reply = [{tags, Tags},
 		     {customer_metadata, Metadata},
-		     {alias, Name}],
+		     {alias, VMName}],
 	    DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
 	    NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
 	    lager:info([{fifi_component, chunter}],

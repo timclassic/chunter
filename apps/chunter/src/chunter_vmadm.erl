@@ -14,7 +14,7 @@
          stop/1,
 	 info/1,
          reboot/1,
-	 delete/1,
+	 delete/2,
 	 create/4
 	]).
 
@@ -36,13 +36,14 @@ start(UUID) ->
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
-delete(UUID) ->
+delete(UUID, Mem) ->
     lager:info([{fifi_component, chunter}],
 	       "vmadm:delete - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
 		"vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
+    os:cmd(binary_to_list(Cmd)),
+    chunter_server:unprovision_memory(Mem).
 
 info(UUID) ->
     lager:info([{fifi_component, chunter}],
@@ -91,7 +92,10 @@ create(Data, Caller, Owner, Rights) ->
 		  [libsnarl:group_grant(system, Owners, Perm) ||
 		      Perm <- [[vm, UUID, '...'] | Rights]],
 		  libsnarl:user_add_to_group(system, Owner, Owners),
+		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
+		  chunter_server:provision_memory(Mem),
 		  {ok, chunter_server:get_vm(UUID)};
+
 	      E ->
 		  lager:error([{fifi_component, chunter}],
 			      "vmad:create - Failed: ~p.", [E]),

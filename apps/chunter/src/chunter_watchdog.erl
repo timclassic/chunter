@@ -73,6 +73,7 @@ init([]) ->
 
     lager:info("chunter:watchdog - stats watchdog started.", []),
     {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    chunter_server:set_total_mem(Mem),
     {ok, #state{
        memory=Mem*1024,
        name=Name,
@@ -179,6 +180,7 @@ handle_info({_Port, {data, {eol, Data}}},
 	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".syscl"], Syscl, 1),
 	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".usr"], Usr, 1),
 	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".sys"], Sys, 1),
+	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".idl"], Idl, 1),
 
 	    lager:debug("watchdog:mpstat - State: ~p", [Stats]),
 	    {noreply, State#state{mpstat=[Stats|MPStat]}};

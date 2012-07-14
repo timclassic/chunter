@@ -11,7 +11,11 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, list/0, get/1, get_vm/1, get_vm_pid/1, niceify_json/1]).
+-export([start_link/0, list/0, get/1, get_vm/1, get_vm_pid/1, niceify_json/1,
+	 set_total_mem/1,
+	 set_provisioned_mem/1,
+	 provision_memory/1,
+	 unprovision_memory/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -21,7 +25,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {name, port, datasets=[]}).
+-record(state, {name, port, datasets=[], total_memory = 0, provisioned_memory = 0}).
 
 %%%===================================================================
 %%% API
@@ -39,6 +43,18 @@ start_link() ->
 
 get(UUID) ->
     gen_server:call(?SERVER, {call, system, {machines, get, UUID}}).
+
+set_total_mem(M) ->
+    gen_server:cast(?SERVER, {set_total_mem, M}).
+
+set_provisioned_mem(M) ->
+    gen_server:cast(?SERVER, {set_provisioned_mem, M}).
+
+provision_memory(M) ->
+    gen_server:cast(?SERVER, {prov_mem, M}).
+
+unprovision_memory(M) ->
+    gen_server:cast(?SERVER, {unprov_mem, M}).
 
 list() ->
     gen_server:call(?SERVER, {call, system, {machines, list}}).
@@ -67,6 +83,7 @@ init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Name]),
+    spawn(chunter_server, list, []),
     {ok, #state{name=Name}}.
 
 
@@ -88,7 +105,13 @@ handle_call({call, Auth, {machines, list}}, _From,  #state{name=Name} = State) -
     statsderl:increment([Name, ".call.machines.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:list.", []),
-    Reply = list_vms(Auth),
+    VMS = list_vms(Auth),
+    ProvMem = lists:foldl(fun (VM, Mem) ->
+				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
+				  Mem + M
+			  end, 0, VMS),
+    set_provisioned_mem(ProvMem),
+    Reply = VMS,
     {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  State) ->
@@ -203,6 +226,21 @@ handle_call({call, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Me
 	    {noreply,  State#state{datasets=Ds1}}
     end;
 
+handle_call({call, Auth, {info, memory}}, _From, #state{name = Name,
+							total_memory = T, 
+							provisioned_memory = P} = State) ->
+    statsderl:increment([Name, ".call.info.memory"], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "hypervisor:info.memory.", []),
+    case libsnarl:allowed(system, Auth, [hypervisor, Name, info, memory]) of
+	false ->
+	    lager:warning([{fifi_component, chunter}],
+			  "hypervisor:info.memory - forbidden Auth: ~p.", [Auth]),
+	    {reply, {error, forbidden}, State};
+	true ->
+	    {reply, {ok, {P, T}}, State}
+    end;
+
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, #state{name = Name} = State) ->
     statsderl:increment([Name, ".call.machines.info.", UUID], 1, 1.0),
@@ -291,6 +329,39 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({set_total_mem, M}, State = #state{name = Name}) ->
+    statsderl:gauge([Name, ".hypervisor.memory.total"], M, 1),
+    {noreply, State#state{total_memory= M}};
+
+
+handle_cast({set_provisioned_mem, M}, State = #state{name = Name,
+						     provisioned_memory = P,
+						     total_memory = T}) ->
+    Diff = P - M,
+    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], M, 1),
+    lager:info([{fifi_component, chunter}],
+	       "memory:provision - Privisioned: ~p, Total: ~p, Change: ~p.", [M, T, Diff]),    
+    {noreply, State#state{provisioned_memory = M}};
+
+
+handle_cast({prov_mem, M}, State = #state{name = Name,
+					  provisioned_memory = P,
+					  total_memory = T}) ->
+    Res = M + P,
+    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
+    lager:info([{fifi_component, chunter}],
+	       "memory:provision - Privisioned: ~p, Total: ~p, Change: +~p.", [Res, T, M]),    
+    {noreply, State#state{provisioned_memory = Res}};
+
+handle_cast({unprov_mem, M}, State = #state{name = Name,
+					    provisioned_memory = P, 
+					    total_memory = T}) ->
+    Res = M - P,
+    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
+    lager:info([{fifi_component, chunter}],
+	       "memory:unprovision - Privisioned: ~p, Total: ~p, Change: -~p.", [Res, T, M]),    
+    {noreply, State#state{provisioned_memory = Res}};
+
 handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) ->
     statsderl:increment([Name, ".cast.machines.start.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
@@ -316,7 +387,6 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State)
 	    {reply, {error, forbidden}, State};
 	true ->
 	    VM = get_vm(UUID),
-
 	    case proplists:get_value(nics, VM) of
 		undefined ->
 		    [];
@@ -338,7 +408,8 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State)
 		_ -> 
 		    ok
 	    end,
-	    spawn(chunter_vmadm, delete, [UUID]),
+	    {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, VM),
+	    spawn(chunter_vmadm, delete, [UUID, Mem]),
 	    {noreply, State}
     end;
 

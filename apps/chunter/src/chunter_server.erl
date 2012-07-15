@@ -83,7 +83,12 @@ init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Name]),
-    spawn(chunter_server, list, []),
+    VMS = list_vms(Auth),
+    ProvMem = lists:foldl(fun (VM, Mem) ->
+				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
+				  Mem + M
+			  end, 0, VMS),
+    set_provisioned_mem(ProvMem),
     {ok, #state{name=Name}}.
 
 

@@ -95,7 +95,6 @@ create(Data, Caller, Owner, Rights) ->
 		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
 		  chunter_server:provision_memory(Mem),
 		  {ok, chunter_server:get_vm(UUID)};
-
 	      E ->
 		  lager:error([{fifi_component, chunter}],
 			      "vmad:create - Failed: ~p.", [E]),

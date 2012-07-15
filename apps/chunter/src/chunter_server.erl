@@ -331,7 +331,7 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({set_total_mem, M}, State = #state{name = Name}) ->
     statsderl:gauge([Name, ".hypervisor.memory.total"], M, 1),
-    {noreply, State#state{total_memory= M}};
+    {noreply, State#state{total_memory= M*1024*1024}};
 
 
 handle_cast({set_provisioned_mem, M}, State = #state{name = Name,
@@ -356,10 +356,10 @@ handle_cast({prov_mem, M}, State = #state{name = Name,
 handle_cast({unprov_mem, M}, State = #state{name = Name,
 					    provisioned_memory = P, 
 					    total_memory = T}) ->
-    Res = M - P,
+    Res = P - M,
     statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
-	       "memory:unprovision - Privisioned: ~p, Total: ~p, Change: -~p.", [Res, T, M]),    
+	       "memory:unprovision - Privisioned: ~p, Total: ~p, Change: -~p.", [Res, T, M]),
     {noreply, State#state{provisioned_memory = Res}};
 
 handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) ->

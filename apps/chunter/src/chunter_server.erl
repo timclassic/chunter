@@ -83,15 +83,16 @@ init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Name]),
-    {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    chunter_server:set_total_mem(Mem*1024*1024),
+    {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     VMS = list_vms(system),
     ProvMem = lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
 			  end, 0, VMS),
-    set_provisioned_mem(ProvMem),
-    {ok, #state{name=Name}}.
+    {ok, #state{name=Name,
+		total_memory = TotalMem, 
+		provisioned_memory = ProvMem
+	       }}.
 
 
 %%--------------------------------------------------------------------

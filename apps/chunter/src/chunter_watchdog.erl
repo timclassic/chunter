@@ -73,7 +73,7 @@ init([]) ->
 
     lager:info("chunter:watchdog - stats watchdog started.", []),
     {Mem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    chunter_server:set_total_mem(Mem*1024*1024),
+    chunter_server:set_total_mem(Mem*1024),
     {ok, #state{
        memory=Mem*1024,
        name=Name,

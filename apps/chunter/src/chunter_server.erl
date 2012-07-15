@@ -331,7 +331,7 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({set_total_mem, M}, State = #state{name = Name}) ->
     statsderl:gauge([Name, ".hypervisor.memory.total"], M, 1),
-    {noreply, State#state{total_memory= M*1024*1024}};
+    {noreply, State#state{total_memory= M}};
 
 
 handle_cast({set_provisioned_mem, M}, State = #state{name = Name,

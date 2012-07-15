@@ -90,7 +90,7 @@ init([]) ->
 				  Mem + M
 			  end, 0, VMS),
     {ok, #state{name=Name,
-		total_memory = TotalMem, 
+		total_memory = TotalMem*1024*1024, 
 		provisioned_memory = ProvMem
 	       }}.
 

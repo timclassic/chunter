@@ -83,7 +83,7 @@ init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Name]),
-    VMS = list_vms(Auth),
+    VMS = list_vms(system),
     ProvMem = lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
@@ -111,13 +111,7 @@ handle_call({call, Auth, {machines, list}}, _From,  #state{name=Name} = State) -
     lager:info([{fifi_component, chunter}],
 	       "machines:list.", []),
     VMS = list_vms(Auth),
-    ProvMem = lists:foldl(fun (VM, Mem) ->
-				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
-				  Mem + M
-			  end, 0, VMS),
-    set_provisioned_mem(ProvMem),
-    Reply = VMS,
-    {reply, {ok, Reply}, State};
+    {reply, {ok, VMS}, State};
 
 handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  State) ->
     statsderl:increment([Name, ".call.machines.get.", UUID], 1, 1.0),

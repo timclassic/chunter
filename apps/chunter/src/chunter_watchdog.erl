@@ -143,12 +143,14 @@ handle_info({_Port, {data, {eol, Data}}},
 	    {noreply, State#state{statspec=NewSpec}};
 	{stat, Stats} ->
 	    
-	    lists:map(fun ({Topic, KVs}) ->
-			      Base = [Name, ".hypervisor.vmstat.", atom_to_list(Topic)],
-			      lists:map(fun ({K, V}) ->
-						statsderl:gauge([Base, ".", atom_to_list(K)], V, 1)
-					end, KVs)
-		      end, Stats),
+	    lists:map(
+	      fun ({Topic, KVs}) ->
+		      lists:map(
+			fun ({K, V}) ->
+				statsderl:gauge(
+				  [Name, ".hypervisor.vmstat.", atom_to_list(Topic), ".", atom_to_list(K)], V, 1)
+			end, KVs)
+	      end, Stats),
 	    try
 		gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats})
 	    catch

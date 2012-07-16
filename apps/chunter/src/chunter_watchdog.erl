@@ -147,6 +147,8 @@ handle_info({_Port, {data, {eol, Data}}},
 		      case Topic of
 			  disk ->
 			      ok;
+			  cpu ->
+			      ok;
 			  _ ->
 			      Base = [Name, ".hypervisor.vmstat.", atom_to_list(Topic), "."],
 			      lists:map(

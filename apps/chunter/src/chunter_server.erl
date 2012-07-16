@@ -482,7 +482,7 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
 	    ok
     end,
     {noreply, State#state{
-		total_memory = TotalMem
+		total_memory = TotalMem,
 		provisioned_memory = ProvMem
 	       }};
 

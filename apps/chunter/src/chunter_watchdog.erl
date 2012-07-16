@@ -141,10 +141,14 @@ handle_info({_Port, {data, {eol, Data}}},
 	    {noreply, State};
 	{spec, NewSpec} ->
 	    {noreply, State#state{statspec=NewSpec}};
-	{stat, Vals, Stats} ->
-	    lists:map(fun ({K, V}) ->
-			      statsderl:gauge([Name, ".hypervisor.vmstat.", K], V, 1)
-		      end, lists:zip(Spec, Vals)),
+	{stat, Stats} ->
+	    
+	    lists:map(fun ({Topic, KVs}) ->
+			      Base = [Name, ".hypervisor.vmstat.", atom_to_list(Topic)],
+			      lists:map(fun ({K, V}) ->
+						statsderl:gauge([Base, ".", list_to_atom(K)], V, 1)
+					end, KVs)
+		      end, Stats),
 	    try
 		gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats})
 	    catch
@@ -330,7 +334,7 @@ parse_stat(<<" r ", Specs/binary>>, _, _, _) ->
 parse_stat(<<" ", Data/binary>>, Mem, Specs, MPStat) ->
     Res = re:split(Data, "\s+"),
     Vals = [V || {V,_} <- [string:to_integer(binary_to_list(R)) || R <- Res]],
-    {stat, Vals, build_stat(Specs, Vals, Mem, MPStat)};
+    {stat, build_stat(Specs, Vals, Mem, MPStat)};
 
 parse_stat(_, _, _, _) ->
     unknown.

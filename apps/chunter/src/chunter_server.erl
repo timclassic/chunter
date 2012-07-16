@@ -465,10 +465,10 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
     application:start(statsderl),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     VMS = list_vms(system),
-    ProvMem = lists:foldl(fun (VM, Mem) ->
+    ProvMem = round(lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
-			  end, 0, VMS) / (1024*1024),
+			  end, 0, VMS) / (1024*1024)),
 
     statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
     statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),

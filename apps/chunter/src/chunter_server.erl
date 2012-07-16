@@ -330,29 +330,32 @@ handle_cast({set_total_mem, M}, State = #state{name = Name}) ->
 handle_cast({set_provisioned_mem, M}, State = #state{name = Name,
 						     provisioned_memory = P,
 						     total_memory = T}) ->
-    Diff = P - M,
-    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], M, 1),
+    MinMB = M / (1024*1024),
+    Diff = P - MinMB,
+    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], MinMB, 1),
     lager:info([{fifi_component, chunter}],
-	       "memory:provision - Privisioned: ~p, Total: ~p, Change: ~p.", [M, T, Diff]),    
-    {noreply, State#state{provisioned_memory = M}};
+	       "memory:provision - Privisioned: ~p, Total: ~p, Change: ~p.", [MinMB, T, Diff]),    
+    {noreply, State#state{provisioned_memory = MinMB}};
 
 
 handle_cast({prov_mem, M}, State = #state{name = Name,
 					  provisioned_memory = P,
 					  total_memory = T}) ->
-    Res = M + P,
+    MinMB = M / (1024*1024),
+    Res = MinMB + P,
     statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
-	       "memory:provision - Privisioned: ~p, Total: ~p, Change: +~p.", [Res, T, M]),    
+	       "memory:provision - Privisioned: ~p, Total: ~p, Change: +~p.", [Res, T, MinMB]),    
     {noreply, State#state{provisioned_memory = Res}};
 
 handle_cast({unprov_mem, M}, State = #state{name = Name,
 					    provisioned_memory = P, 
 					    total_memory = T}) ->
-    Res = P - M,
+    MinMB = M / (1024*1024),
+    Res = P - MinMB,
     statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
-	       "memory:unprovision - Privisioned: ~p, Total: ~p, Change: -~p.", [Res, T, M]),
+	       "memory:unprovision - Privisioned: ~p, Total: ~p, Change: -~p.", [Res, T, MinMB]),
     {noreply, State#state{provisioned_memory = Res}};
 
 handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) ->
@@ -465,7 +468,7 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
     ProvMem = lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
-			  end, 0, VMS),
+			  end, 0, VMS) / (1024*1024),
 
     statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
     statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
@@ -479,7 +482,7 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
 	    ok
     end,
     {noreply, State#state{
-		total_memory = TotalMem*1024*1024, 
+		total_memory = TotalMem
 		provisioned_memory = ProvMem
 	       }};
 

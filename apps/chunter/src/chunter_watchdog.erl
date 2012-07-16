@@ -140,10 +140,8 @@ handle_info({_Port, {data, {eol, Data}}},
 	skip ->
 	    {noreply, State};
 	{spec, NewSpec} ->
-	    lager:debug("watchdog:stat - Spec: ~p", [NewSpec]),
 	    {noreply, State#state{statspec=NewSpec}};
 	{stat, Stats} ->
-	    lager:debug("watchdog:stat - State: ~p", [Stats]),
 	    try
 		gproc:send({p,g,{host,Name}}, {host, stats, Name, Stats})
 	    catch
@@ -181,7 +179,6 @@ handle_info({_Port, {data, {eol, Data}}},
 	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".sys"], Sys, 1),
 	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".idl"], Idl, 1),
 
-	    lager:debug("watchdog:mpstat - State: ~p", [Stats]),
 	    {noreply, State#state{mpstat=[Stats|MPStat]}};
 	_ ->
 	    {noreply, State}

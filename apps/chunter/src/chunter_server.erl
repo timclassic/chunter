@@ -83,16 +83,7 @@ init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Name]),
-    {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    VMS = list_vms(system),
-    ProvMem = lists:foldl(fun (VM, Mem) ->
-				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
-				  Mem + M
-			  end, 0, VMS),
-    {ok, #state{name=Name,
-		total_memory = TotalMem*1024*1024, 
-		provisioned_memory = ProvMem
-	       }}.
+    {ok, #state{name=Name}}.
 
 
 %%--------------------------------------------------------------------
@@ -469,6 +460,15 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
     {ok, Host} = libsnarl:option_get(system, statsd, hostname),
     application:set_env(statsderl, hostname, Host),
     application:start(statsderl),
+    {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    VMS = list_vms(system),
+    ProvMem = lists:foldl(fun (VM, Mem) ->
+				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
+				  Mem + M
+			  end, 0, VMS),
+
+    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
+    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
     
     statsderl:increment([Name, ".net.join"], 1, 1.0),
     libsniffle:join_client_channel(),
@@ -478,7 +478,10 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
 	_:_ ->
 	    ok
     end,
-    {noreply, State};
+    {noreply, State#state{
+		total_memory = TotalMem*1024*1024, 
+		provisioned_memory = ProvMem
+	       }};
 
 handle_cast(_Msg, #state{name = Name} = State) ->
     statsderl:increment([Name, ".cast.unknown"], 1, 1.0),

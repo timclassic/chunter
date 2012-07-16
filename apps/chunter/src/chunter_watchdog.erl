@@ -146,7 +146,7 @@ handle_info({_Port, {data, {eol, Data}}},
 	    lists:map(fun ({Topic, KVs}) ->
 			      Base = [Name, ".hypervisor.vmstat.", atom_to_list(Topic)],
 			      lists:map(fun ({K, V}) ->
-						statsderl:gauge([Base, ".", list_to_atom(K)], V, 1)
+						statsderl:gauge([Base, ".", atom_to_list(K)], V, 1)
 					end, KVs)
 		      end, Stats),
 	    try

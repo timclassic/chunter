@@ -15,7 +15,7 @@
 	 info/1,
          reboot/1,
 	 delete/2,
-	 create/4
+	 create/5
 	]).
 
 %%%===================================================================
@@ -77,7 +77,8 @@ reboot(UUID) ->
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
-create(Data, Caller, Owner, Rights) ->
+create(Data, Caller, Owner, Rights, DatasetUUID) ->
+    os:cmd(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
@@ -90,7 +91,7 @@ create(Data, Caller, Owner, Rights) ->
 	      {ok, UUID} ->
 		  {ok, Owners} = libsnarl:group_add(system, <<"vm_", UUID/binary, "_owner">>),
 		  [libsnarl:group_grant(system, Owners, Perm) ||
-		      Perm <- [[vm, UUID, '...'] | Rights]],
+		      Perm <- [[host, '_', vm, UUID, '...'] | Rights]],
 		  libsnarl:user_add_to_group(system, Owner, Owners),
 		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
 		  chunter_server:provision_memory(Mem),

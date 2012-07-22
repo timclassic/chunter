@@ -112,7 +112,7 @@ handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  Sta
 
     lager:info([{fifi_component, chunter}],
 	       "machines:get - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [vm, UUID, get]) of
+    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, get]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:info - forbidden Auth: ~p.", [Auth]),
@@ -130,12 +130,8 @@ handle_call({call, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Me
 	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [VMName, PackageUUID, DatasetUUID]),
     lager:debug([{fifi_component, chunter}],
 		"machines:create - Meta Data: ~p, Tags: ~p.", [Metadata, Tags]),
-    case libsnarl:allowed(system, Auth, [vm, create]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:create - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
+    case libsnarl:allowed(system, Auth, [host, Name, vm, create]) of
+	{true, true} ->
 	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
 	    lager:debug([{fifi_component, chunter}],
 		"machines:create - Dataset Data: ~p.", [Dataset]),
@@ -215,8 +211,13 @@ handle_call({call, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Me
 	    lager:debug([{fifi_component, chunter}],
 			"machines:create - final spec: ~p.", 
 			[Reply2]),
-	    spawn(chunter_vmadm, create, [Reply2, From, Auth, Rights]),
-	    {noreply,  State#state{datasets=Ds1}}
+	    spawn(chunter_vmadm, create, [Reply2, From, Auth, Rights, DatasetUUID]),
+	    {noreply,  State#state{datasets=Ds1}};
+	_ ->
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:create - forbidden Auth: ~p.", [Auth]),
+	    {reply, {error, forbidden}, State}
+
     end;
 
 handle_call({call, Auth, {info, memory}}, _From, #state{name = Name,
@@ -225,7 +226,7 @@ handle_call({call, Auth, {info, memory}}, _From, #state{name = Name,
     statsderl:increment([Name, ".call.info.memory"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "hypervisor:info.memory.", []),
-    case libsnarl:allowed(system, Auth, [hypervisor, Name, info, memory]) of
+    case libsnarl:allowed(system, Auth, [host, Name, info, memory]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "hypervisor:info.memory - forbidden Auth: ~p.", [Auth]),
@@ -239,7 +240,7 @@ handle_call({call, Auth, {machines, info, UUID}}, _From, #state{name = Name} = S
     statsderl:increment([Name, ".call.machines.info.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:info - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [vm, UUID, info]) of
+    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, info]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:info - forbidden Auth: ~p.", [Auth]),
@@ -290,7 +291,7 @@ handle_call({call, Auth, {keys, list}}, _From, #state{name=Name} = State) ->
     statsderl:increment([Name, ".call.keys.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "keys:list", []),
-    case libsnarl:allowed(system, Auth, [key, list]) of
+    case libsnarl:allowed(system, Auth, [host, Name, key, list]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "keys:list - forbidden Auth: ~p.", [Auth]),
@@ -362,7 +363,7 @@ handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) 
     statsderl:increment([Name, ".cast.machines.start.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:start - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
+    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, start]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:start - forbidden Auth: ~p.", [Auth]),
@@ -376,7 +377,7 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State)
     statsderl:increment([Name, ".cast.machines.delete"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:delete - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [vm, UUID, delete]) of
+    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, delete]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:delete - forbidden Auth: ~p.", [Auth]),
@@ -415,7 +416,7 @@ handle_cast({cast, Auth, {machines, start, UUID, Image}}, #state{name = Name} =S
     lager:info([{fifi_component, chunter}],
 	       "machines:start - UUID: ~s, Image: ~s.", [UUID, Image]),
 
-    case libsnarl:allowed(system, Auth, [vm, UUID, start]) of
+    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, start]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:start - forbidden Auth: ~p.", [Auth]),
@@ -430,7 +431,7 @@ handle_cast({cast, Auth, {machines, stop, UUID}}, #state{name = Name} = State) -
     statsderl:increment([Name, ".cast.machines.stop.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:stop - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [vm, UUID, stop]) of
+    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, stop]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:stop - forbidden Auth: ~p.", [Auth]),
@@ -444,7 +445,7 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, #state{name = Name} =State) 
     statsderl:increment([Name, ".cast.machines.reboot.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:reboot - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [vm, UUID, reboot]) of
+    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, reboot]) of
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:reboot - forbidden Auth: ~p.", [Auth]),
@@ -557,7 +558,7 @@ list_vms(Auth) ->
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 	ID =/= <<"0">> andalso
-	    libsnarl:allowed(system, AuthC, [vm, UUID, get]) == true].
+	    libsnarl:allowed(system, AuthC, [host, Name, vm, UUID, get]) == true].
 
 get_dataset(UUID, Ds) ->
     read_dsmanifest(filename:join(<<"/var/db/imgadm">>, <<UUID/binary, ".json">>), Ds).

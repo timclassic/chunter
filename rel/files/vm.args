@@ -1,5 +1,5 @@
 ## Name of the node
--name chunter@_OWN_IP_
+-name chunter@_HOST_
 
 ## Cookie for distributed erlang
 -setcookie _FIFOCOOKIE_

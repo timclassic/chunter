@@ -78,7 +78,7 @@ reboot(UUID) ->
     os:cmd(binary_to_list(Cmd)).
 
 create(Data, Caller, Owner, Rights, DatasetUUID) ->
-    os:cmd(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>),
+    os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>)),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",

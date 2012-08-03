@@ -131,7 +131,7 @@ handle_call({call, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Me
     lager:debug([{fifi_component, chunter}],
 		"machines:create - Meta Data: ~p, Tags: ~p.", [Metadata, Tags]),
     case libsnarl:allowed(system, Auth, [host, Name, vm, create]) of
-	{true, true} ->
+	true ->
 	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
 	    lager:debug([{fifi_component, chunter}],
 		"machines:create - Dataset Data: ~p.", [Dataset]),

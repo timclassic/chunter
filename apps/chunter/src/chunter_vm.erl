@@ -129,7 +129,9 @@ handle_cast({force_state, MachineState}, #state{state = MachineState} = State) -
 
 handle_cast({force_state, NewMachineState}, #state{uuid=UUID,
 						   data=Data}=State) ->
-    io:format("State change of ~s to ~s.~n", [UUID, NewMachineState]),
+    lager:info([{fifi_component, chunter},
+		{vm, UUID}],
+	       "[VM: ~s] State changed to ~s.~n", [UUID, NewMachineState]),
     try
 	gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState})
     catch

@@ -94,7 +94,7 @@ create(Data, Caller, Owner, Rights, DatasetUUID) ->
 		      Perm <- [[host, '_', vm, UUID, '...'] | Rights]],
 		  libsnarl:user_add_to_group(system, Owner, Owners),
 		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
-		  chunter_server:provision_memory(Mem),
+		  chunter_server:provision_memory(Mem*1024*1024), % provision memory does not take MB!
 		  {ok, chunter_server:get_vm(UUID)};
 	      E ->
 		  lager:error([{fifi_component, chunter}],

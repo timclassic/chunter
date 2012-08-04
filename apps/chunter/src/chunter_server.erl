@@ -335,7 +335,7 @@ handle_cast({set_provisioned_mem, M}, State = #state{name = Name,
     Diff = P - MinMB,
     statsderl:gauge([Name, ".hypervisor.memory.provisioned"], MinMB, 1),
     lager:info([{fifi_component, chunter}],
-	       "memory:provision - Privisioned: ~p, Total: ~p, Change: ~p.", [MinMB, T, Diff]),    
+	       "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: ~p .", [MinMB, M, T, Diff]),    
     {noreply, State#state{provisioned_memory = MinMB}};
 
 
@@ -346,7 +346,7 @@ handle_cast({prov_mem, M}, State = #state{name = Name,
     Res = MinMB + P,
     statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
-	       "memory:provision - Privisioned: ~p, Total: ~p, Change: +~p.", [Res, T, MinMB]),    
+	       "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: +~p.", [Res, M, T, MinMB]),    
     {noreply, State#state{provisioned_memory = Res}};
 
 handle_cast({unprov_mem, M}, State = #state{name = Name,
@@ -356,7 +356,7 @@ handle_cast({unprov_mem, M}, State = #state{name = Name,
     Res = P - MinMB,
     statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
-	       "memory:unprovision - Privisioned: ~p, Total: ~p, Change: -~p.", [Res, T, MinMB]),
+	       "memory:unprovision - Unprivisioned: ~p(~p) , Total: ~p, Change: -~p.", [Res, M, T, MinMB]),
     {noreply, State#state{provisioned_memory = Res}};
 
 handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) ->

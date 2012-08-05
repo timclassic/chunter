@@ -24,7 +24,7 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {uuid, state=unknown, data}).
+-record(state, {uuid, state=unknown, data, host}).
 
 %%%===================================================================
 %%% API
@@ -73,8 +73,9 @@ start_link(UUID) ->
 %%--------------------------------------------------------------------
 init([UUID]) ->
     ok = backyard_srv:register_connect_handler(backyard_connect),
+    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
     refresh(self()),
-    {ok, #state{uuid=UUID}}.
+    {ok, #state{uuid=UUID, host=Name}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -99,8 +100,8 @@ handle_call(info, _From, #state{uuid = UUID, data = Data} = State) ->
 	    {reply, {error, not_supported}, State}
     end;
 
-handle_call(get, _From, #state{data = Data} = State) ->
-    {reply, {ok, Data}, State};
+handle_call(get, _From, #state{data = Data, host = Host} = State) ->
+    {reply, {ok, [{hypervisor=Host}|Data]}, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.

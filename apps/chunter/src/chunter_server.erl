@@ -104,7 +104,7 @@ handle_call({call, Auth, {machines, list}}, _From,  #state{name=Name} = State) -
     statsderl:increment([Name, ".call.machines.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:list.", []),
-    VMS = list_vms(Auth),
+    VMS = list_vms(Auth, Name),
     {reply, {ok, VMS}, State};
 
 handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  State) ->
@@ -466,7 +466,7 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
     application:set_env(statsderl, hostname, Host),
     application:start(statsderl),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    VMS = list_vms(system),
+    VMS = list_vms(system, Name),
     ProvMem = round(lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
@@ -552,9 +552,10 @@ get_vm(ZUUID) ->
 	       ID =/= <<"0">>],
     VM.
 
-list_vms(Auth) ->
+list_vms(Auth, Hypervisor) ->
     {ok, AuthC} = libsnarl:user_cache(system, Auth),
-    [chunter_zoneparser:load([{name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
+
+    [chunter_zoneparser:load([{hypervisor, Hypervisor}, {name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],

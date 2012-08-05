@@ -141,7 +141,7 @@ handle_call({call, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Me
 	    {Swap,[]} = string:to_integer(binary_to_list(proplists:get_value(swap, Package))),
 	    lager:info([{fifi_component, chunter}],
 		       "machines:create - Memroy: ~pMB, Disk: ~pGB, Swap: ~pMB.", [Memory, Disk, Swap]),
-	    UserUUID = libsnarl:user_get(system, Auth),
+	    {ok, UserUUID} = libsnarl:user_get(system, Auth),
 	    Reply = [{owner_uuid, UserUUID},
 		     {tags, Tags},
 		     {customer_metadata, Metadata},

@@ -101,7 +101,7 @@ handle_call(info, _From, #state{uuid = UUID, data = Data} = State) ->
     end;
 
 handle_call(get, _From, #state{data = Data, host = Host} = State) ->
-    {reply, {ok, [{hypervisor=Host}|Data]}, State};
+    {reply, {ok, [{hypervisor, Host}|Data]}, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.

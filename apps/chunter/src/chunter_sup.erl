@@ -31,4 +31,6 @@ init([]) ->
 				 ?CHILD(chunter_vm_sup, supervisor),
 				 ?CHILD(chunter_zfs_reporter, worker),
 				 ?CHILD(chunter_server, worker),
-				 ?CHILD(chunter_watchdog, worker)]}}.
+				 ?CHILD(chunter_sysstat, worker),
+				 ?CHILD(chunter_zonemon, worker),
+				 ?CHILD(chunter_vfsstat, worker)]}}.

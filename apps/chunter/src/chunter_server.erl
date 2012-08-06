@@ -490,7 +490,8 @@ handle_cast(backyard_connect, #state{name = Name} = State) ->
 		provisioned_memory = ProvMem
 	       }};
 
-handle_cast(_Msg, #state{name = Name} = State) ->
+handle_cast(Msg, #state{name = Name} = State) ->
+    lager:warning("Unknwn cast: ~p", Msg),
     statsderl:increment([Name, ".cast.unknown"], 1, 1.0),
     {noreply, State}.
 

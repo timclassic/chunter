@@ -96,8 +96,8 @@ create(Data, Owner, Rights, DatasetUUID) ->
 		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
 		  chunter_server:provision_memory(Mem*1024*1024), % provision memory does not take MB!
 		  gproc:send({p, g, {user, Owner}}, {msg, <<"success">>, <<"VM ", UUID/binary, " successfully created!">>}),
-		  Data = make_frontend_json(chunter_server:get_vm(UUID)),
-		  gproc:send({p, g, {user, Owner}}, {vm, add});
+		  ResData = make_frontend_json(chunter_server:get_vm(UUID)),
+		  gproc:send({p, g, {user, Owner}}, {vm, add, ResData});
 	      E ->
 		  gproc:send({p, g, {user, Owner}}, {msg, <<"error">>, <<"Failed to create VM!">>}),
 		  lager:error([{fifi_component, chunter}],

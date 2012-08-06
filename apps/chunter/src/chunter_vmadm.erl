@@ -15,7 +15,7 @@
 	 info/1,
          reboot/1,
 	 delete/2,
-	 create/5
+	 create/4
 	]).
 
 %%%===================================================================
@@ -77,7 +77,7 @@ reboot(UUID) ->
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
-create(Data, Caller, Owner, Rights, DatasetUUID) ->
+create(Data, Owner, Rights, DatasetUUID) ->
     os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>)),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),
@@ -95,13 +95,15 @@ create(Data, Caller, Owner, Rights, DatasetUUID) ->
 		  libsnarl:user_add_to_group(system, Owner, Owners),
 		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
 		  chunter_server:provision_memory(Mem*1024*1024), % provision memory does not take MB!
-		  {ok, chunter_server:get_vm(UUID)};
+		  gproc:send({p, g, {user, Owner}}, {msg, <<"success">>, <<"VM ", UUID/binary, " successfully created!">>}),
+		  Data = make_frontend_json(chunter_server:get_vm(UUID)),
+		  gproc:send({p, g, {user, Owner}}, {vm, add});
 	      E ->
+		  gproc:send({p, g, {user, Owner}}, {msg, <<"error">>, <<"Failed to create VM!">>}),
 		  lager:error([{fifi_component, chunter}],
 			      "vmad:create - Failed: ~p.", [E]),
 		  E
 	  end,
-    gen_server:reply(Caller, Res),
     Res.
 
 wait_for_tex(Port) ->
@@ -128,3 +130,45 @@ wait_for_tex(Port) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+    
+
+
+
+make_frontend_json([{nics, Ns} | R]) ->
+    IPs = lists:map(fun (N) ->
+			    proplists:get_value(ip, N)
+		    end,Ns),
+    [{ips, IPs}|make_frontend_json(R)];
+
+make_frontend_json([{zonename, N} | R]) ->
+    Rest = make_frontend_json(R),
+    case proplists:get_value(name, Rest) of
+	undefined ->
+	    [{name, N}|make_frontend_json(R)];
+	_ ->
+	    Rest
+    end;
+make_frontend_json([{max_physical_memory, N} | R]) ->
+    Rest = make_frontend_json(R),
+    M = N/(1024*1024),
+    case proplists:get_value(memory, Rest) of
+	undefined ->
+	    [{memory, M},
+	     {max_physical_memory, M}
+	     |Rest];
+	_ ->
+	    [{max_physical_memory, M}
+	     |Rest]
+	end;
+make_frontend_json([{state, <<"installed">>} | R]) ->
+    [{state, <<"stopped">>}|make_frontend_json(R)];
+make_frontend_json([{alias, N} | R]) ->
+    [{name, N}|make_frontend_json(R)];
+make_frontend_json([{ram, R} | R]) ->
+    [{memory, R}|proplists:delete(memory,make_frontend_json(R))];
+make_frontend_json([]) ->
+    [];
+make_frontend_json([{K, V}|R]) ->
+    [{K, V}|make_frontend_json(R)].

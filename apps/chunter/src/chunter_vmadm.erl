@@ -78,6 +78,8 @@ reboot(UUID) ->
     os:cmd(binary_to_list(Cmd)).
 
 create(Data, Owner, Rights, DatasetUUID) ->
+    {alias, Alias} = lists:keyfind(alias, 1, Data),
+    lbisnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>)),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),
@@ -95,11 +97,11 @@ create(Data, Owner, Rights, DatasetUUID) ->
 		  libsnarl:user_add_to_group(system, Owner, Owners),
 		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
 		  chunter_server:provision_memory(Mem*1024*1024), % provision memory does not take MB!
-		  gproc:send({p, g, {user, Owner}}, {msg, <<"success">>, <<"VM ", UUID/binary, " successfully created!">>}),
+		  lbisnarl:msg(Owner, <<"success">>, <<"Your VM '", Alias/binary, "' was successfully created.">>),
 		  ResData = make_frontend_json(chunter_server:get_vm(UUID)),
 		  gproc:send({p, g, {user, Owner}}, {vm, add, ResData});
 	      E ->
-		  gproc:send({p, g, {user, Owner}}, {msg, <<"error">>, <<"Failed to create VM!">>}),
+		  lbisnarl:msg(Owner, <<"error">>, <<"Your VM '", Alias/binary, "' failed to create.">>),
 		  lager:error([{fifi_component, chunter}],
 			      "vmad:create - Failed: ~p.", [E]),
 		  E

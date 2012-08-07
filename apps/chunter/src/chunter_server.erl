@@ -384,6 +384,7 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State)
 	false ->
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:delete - forbidden Auth: ~p.", [Auth]),
+	    libsnarl:msg(Auth, error, <<"You don't have the permissions to delete the VM '", UUID/binary,"'.">>),
 	    {reply, {error, forbidden}, State};
 	true ->
 	    VM = get_vm(UUID),
@@ -409,6 +410,7 @@ handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State)
 		    ok
 	    end,
 	    {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, VM),
+	    libsnarl:msg(Auth, success, <<"VM '", UUID/binary,"' is being deleted.">>),
 	    spawn(chunter_vmadm, delete, [UUID, Mem]),
 	    {noreply, State}
     end;
@@ -421,6 +423,7 @@ handle_cast({cast, Auth, {machines, start, UUID, Image}}, #state{name = Name} =S
 
     case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, start]) of
 	false ->
+	    libsnarl:msg(Auth, error, <<"You don't have the permissions to start the VM '", UUID/binary,"'.">>),
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:start - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
@@ -436,6 +439,7 @@ handle_cast({cast, Auth, {machines, stop, UUID}}, #state{name = Name} = State) -
 	       "machines:stop - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, stop]) of
 	false ->
+	    libsnarl:msg(Auth, error, <<"You don't have the permissions to stop the VM '", UUID/binary,"'.">>),
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:stop - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};
@@ -450,6 +454,7 @@ handle_cast({cast, Auth, {machines, reboot, UUID}}, #state{name = Name} =State) 
 	       "machines:reboot - UUID: ~s.", [UUID]),
     case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, reboot]) of
 	false ->
+	    libsnarl:msg(Auth, error, <<"You don't have the permissions to reboot the VM '", UUID/binary,"'.">>),
 	    lager:warning([{fifi_component, chunter}],
 			  "machines:reboot - forbidden Auth: ~p.", [Auth]),
 	    {reply, {error, forbidden}, State};

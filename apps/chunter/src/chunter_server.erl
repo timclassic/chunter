@@ -290,7 +290,7 @@ handle_cast({cast, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Me
 			      {max_swap, Swap},
 			      {dataset_uuid, DatasetUUID}
 			      |Reply1];
-			 <<"linux">> = OS ->
+			 OS ->
 			     statsderl:increment([Name, ".call.machines.create.kvm"], 1, 1.0),
 			     lager:info([{fifi_component, chunter}],
 					"machines:create - os type ~s.", 
@@ -306,11 +306,7 @@ handle_cast({cast, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Me
 				    {nic_driver, NicDrv},
 				    {max_swap, Swap}
 				    |Reply1],
-			     Res;
-			 OS ->
-			     lager:debug([{fifi_component, chunter}],
-					 "machines:create - unknown OS: ~p.", 
-					 [OS])
+			     Res
 		     end,
 	    lager:debug([{fifi_component, chunter}],
 			"machines:create - final spec: ~p.", 

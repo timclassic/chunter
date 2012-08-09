@@ -79,6 +79,7 @@ reboot(UUID) ->
 
 create(Data, Owner, Rights, DatasetUUID) ->
     {alias, Alias} = lists:keyfind(alias, 1, Data),
+    lager:info("message: ~p, ~p, ~p", [Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>]),
     libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>)),
     lager:info([{fifi_component, chunter}],

@@ -15,7 +15,8 @@
 	 set_total_mem/1,
 	 set_provisioned_mem/1,
 	 provision_memory/1,
-	 unprovision_memory/1]).
+	 unprovision_memory/1,
+	 create_vm/8]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -228,99 +229,8 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({cast, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Metadata, Tags}},
 	    #state{datasets=Ds, name=Name} = State) ->
-    statsderl:increment([Name, ".call.machines.create"], 1, 1.0),
-    lager:info([{fifi_component, chunter}],
-	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [VMName, PackageUUID, DatasetUUID]),
-    lager:debug([{fifi_component, chunter}],
-		"machines:create - Meta Data: ~p, Tags: ~p.", [Metadata, Tags]),
-    case libsnarl:allowed(system, Auth, [host, Name, vm, create]) of
-	true ->
-	    {Dataset, Ds1} = get_dataset(DatasetUUID, Ds),
-	    lager:debug([{fifi_component, chunter}],
-		"machines:create - Dataset Data: ~p.", [Dataset]),
-	    {ok, Package} = libsnarl:option_get(system, <<"packages">>, PackageUUID),
-	    {Memory, []} = string:to_integer(binary_to_list(proplists:get_value(memory, Package))),
-	    {Disk, []} = string:to_integer(binary_to_list(proplists:get_value(disk, Package))),
-	    {Swap,[]} = string:to_integer(binary_to_list(proplists:get_value(swap, Package))),
-	    lager:info([{fifi_component, chunter}],
-		       "machines:create - Memroy: ~pMB, Disk: ~pGB, Swap: ~pMB.", [Memory, Disk, Swap]),
-	    Reply = [{owner_uuid, Auth},
-		     {tags, Tags},
-		     {customer_metadata, Metadata},
-		     {alias, VMName}],
-	    DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
-	    NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
-	    lager:info([{fifi_component, chunter}],
-		       "machines:create - Disk driver: ~s, net driver: ~s.", 
-		       [DiskDrv, NicDrv]),
-	    
-	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"admin">>) of
-			       {ok, IP} ->
-				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"admin">>),
-				       IPStr = libsnarl:ip_to_str(IP),
-				       MaskStr = libsnarl:ip_to_str(Mask),
-				       GWStr = libsnarl:ip_to_str(Gateway),
-				       lager:info([{fifi_component, chunter}],
-						  "machines:create -  ~s mask ~s gw ~s.", 
-						  [IPStr, MaskStr, GWStr]),
-				       {[{nics, 
-					  [[
-					    {nic_tag, <<"admin">>},
-					    {ip, IPStr},
-					    {netmask, MaskStr},
-					    {gateway, GWStr},
-					    {model, NicDrv}
-					   ]]}|Reply],
-					[[network, <<"admin">>, release, libsnarl:ip_to_str(IP)]]};
-				   _ ->
-				       lager:warning([{fifi_component, chunter}],
-						     "create machines - could not obtain IP.", []),
-				       {Reply, []}
-			       end,
-	    Reply2 = case proplists:get_value(os, Dataset) of
-			 <<"smartos">> = OS ->
-			     statsderl:increment([Name, ".call.machines.create.smartos"], 1, 1.0),
-			     lager:info([{fifi_component, chunter}],
-					"machines:create - os type ~s.", 
-					[OS]),
-			     [{max_physical_memory, Memory},
-			      {quota, Disk},
-			      {cpu_share, Memory},
-			      {cpu_cap, Memory * ?CPU_CAP_MULTIPLYER},
-			      {max_swap, Swap},
-			      {dataset_uuid, DatasetUUID}
-			      |Reply1];
-			 OS ->
-			     statsderl:increment([Name, ".call.machines.create.kvm"], 1, 1.0),
-			     lager:info([{fifi_component, chunter}],
-					"machines:create - os type ~s.", 
-					[OS]),
-			     Res = [{max_physical_memory, Memory+1024},
-				    {ram, Memory},
-				    {brand, <<"kvm">>},
-				    {disks,
-				     [[{size, Disk*1024},
-				       {model, DiskDrv},
-				       {image_uuid, DatasetUUID}]]},
-				    {disk_driver, DiskDrv},
-				    {nic_driver, NicDrv},
-				    {max_swap, Swap}
-				    |Reply1],
-			     Res
-		     end,
-	    lager:debug([{fifi_component, chunter}],
-			"machines:create - final spec: ~p.", 
-			[Reply2]),
-	    spawn(chunter_vmadm, create, [Reply2, Auth, Rights, DatasetUUID]),
-	    {noreply,  State#state{datasets=Ds1}};
-	_ ->
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:create - forbidden Auth: ~p.", [Auth]),
-	    msg(Auth, <<"error">>, <<"Could not create VM!">>),
-	    {noreply, State}
-
-    end;
-
+    spawn(chunter_server, create_vm, [Auth, VMName, PackageUUID, DatasetUUID, Metadata, Tags, Ds, Name]),
+    {noreply, State};
 
 handle_cast({set_total_mem, M}, State = #state{name = Name}) ->
     statsderl:gauge([Name, ".hypervisor.memory.total"], M, 1),
@@ -634,9 +544,102 @@ get_vm_pid(UUID) ->
 	    undefined
     end.
 
-
-msg({Auth, _}, Type, Msg) ->
-    msg(Auth, Type, Msg);
-
-msg(Auth, Type, Msg) ->
-    gproc:send({p, g, {user, Auth}}, {msg, Type, Msg}).
+create_vm(Auth, VMName, PackageUUID, DatasetUUID, Metadata, Tags, Ds, Name) ->
+    statsderl:increment([Name, ".call.machines.create"], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [VMName, PackageUUID, DatasetUUID]),
+    lager:debug([{fifi_component, chunter}],
+		"machines:create - Meta Data: ~p, Tags: ~p.", [Metadata, Tags]),
+    case libsnarl:allowed(system, Auth, [host, Name, vm, create]) of
+	true ->
+	    case filelib:is_regular(filename:join(<<"/var/db/imgadm">>, <<DatasetUUID/binary, ".json">>)) of
+		true ->
+		    ok;
+		false ->
+		    libsnarl:msg(Auth, <<"warning">>, <<"Dataset needs to be imported!">>),
+		    os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
+	    end,
+	    {Dataset, _Ds} = get_dataset(DatasetUUID, Ds),
+	    lager:debug([{fifi_component, chunter}],
+			"machines:create - Dataset Data: ~p.", [Dataset]),
+	    {ok, Package} = libsnarl:option_get(system, <<"packages">>, PackageUUID),
+	    {Memory, []} = string:to_integer(binary_to_list(proplists:get_value(memory, Package))),
+	    {Disk, []} = string:to_integer(binary_to_list(proplists:get_value(disk, Package))),
+	    {Swap,[]} = string:to_integer(binary_to_list(proplists:get_value(swap, Package))),
+	    lager:info([{fifi_component, chunter}],
+		       "machines:create - Memroy: ~pMB, Disk: ~pGB, Swap: ~pMB.", [Memory, Disk, Swap]),
+	    Reply = [{owner_uuid, Auth},
+		     {tags, Tags},
+		     {customer_metadata, Metadata},
+		     {alias, VMName}],
+	    DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
+	    NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
+	    lager:info([{fifi_component, chunter}],
+		       "machines:create - Disk driver: ~s, net driver: ~s.", 
+		       [DiskDrv, NicDrv]),
+	    
+	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"admin">>) of
+				   {ok, IP} ->
+				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"admin">>),
+				       IPStr = libsnarl:ip_to_str(IP),
+				       MaskStr = libsnarl:ip_to_str(Mask),
+				       GWStr = libsnarl:ip_to_str(Gateway),
+				       lager:info([{fifi_component, chunter}],
+						  "machines:create -  ~s mask ~s gw ~s.", 
+						  [IPStr, MaskStr, GWStr]),
+				       {[{nics, 
+					  [[
+					    {nic_tag, <<"admin">>},
+					    {ip, IPStr},
+					    {netmask, MaskStr},
+					    {gateway, GWStr},
+					    {model, NicDrv}
+					   ]]}|Reply],
+					[[network, <<"admin">>, release, libsnarl:ip_to_str(IP)]]};
+				   _ ->
+				       lager:warning([{fifi_component, chunter}],
+						     "create machines - could not obtain IP.", []),
+				       {Reply, []}
+			       end,
+	    Reply2 = case proplists:get_value(os, Dataset) of
+			 <<"smartos">> = OS ->
+			     statsderl:increment([Name, ".call.machines.create.smartos"], 1, 1.0),
+			     lager:info([{fifi_component, chunter}],
+					"machines:create - os type ~s.", 
+					[OS]),
+			     [{max_physical_memory, Memory},
+			      {quota, Disk},
+			      {cpu_share, Memory},
+			      {cpu_cap, Memory * ?CPU_CAP_MULTIPLYER},
+			      {max_swap, Swap},
+			      {dataset_uuid, DatasetUUID}
+			      |Reply1];
+			 OS ->
+			     statsderl:increment([Name, ".call.machines.create.kvm"], 1, 1.0),
+			     lager:info([{fifi_component, chunter}],
+					"machines:create - os type ~s.", 
+					[OS]),
+			     Res = [{max_physical_memory, Memory+1024},
+				    {ram, Memory},
+				    {brand, <<"kvm">>},
+				    {disks,
+				     [[{size, Disk*1024},
+				       {model, DiskDrv},
+				       {image_uuid, DatasetUUID}]]},
+				    {disk_driver, DiskDrv},
+				    {nic_driver, NicDrv},
+				    {max_swap, Swap}
+				    |Reply1],
+			     Res
+		     end,
+	    lager:debug([{fifi_component, chunter}],
+			"machines:create - final spec: ~p.", 
+			[Reply2]),
+	    chunter_vmadm:create(Reply2, Auth, Rights),
+	    ok;
+	_ ->
+	    lager:warning([{fifi_component, chunter}],
+			  "machines:create - forbidden Auth: ~p.", [Auth]),
+	    libsnarl:msg(Auth, <<"error">>, <<"Could not create VM!">>),
+	    ok
+    end.

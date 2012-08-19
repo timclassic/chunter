@@ -15,7 +15,7 @@
 	 info/1,
          reboot/1,
 	 delete/2,
-	 create/4
+	 create/3
 	]).
 
 %%%===================================================================
@@ -77,11 +77,10 @@ reboot(UUID) ->
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
-create(Data, Owner, Rights, DatasetUUID) ->
+create(Data, Owner, Rights) ->
     {alias, Alias} = lists:keyfind(alias, 1, Data),
     lager:info("message: ~p, ~p, ~p", [Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>]),
     libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
-    os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>)),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",

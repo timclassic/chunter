@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 11 May 2012 by Heinz N. Gies <heinz@licenser.net>
 %%%-------------------------------------------------------------------
--module(chunter_watchdog).
+-module(chunter_zonemon).
 
 -behaviour(gen_server).
 
@@ -19,7 +19,8 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {name, zoneport, statport, statspec=[]}).
+-record(state, {name, 
+		port}).
 
 %%%===================================================================
 %%% API
@@ -52,17 +53,16 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
-    lager:info("chunter:watchdog - initializing: ~s", [Name]),
-    Cmd = code:priv_dir(chunter) ++ "/zonemon.sh",
-    timer:send_interval(5000, zonecheck),
-    ZonePort = erlang:open_port({spawn, Cmd},[exit_status, use_stdio, binary, {line, 1000}]),
-    lager:info("chunter:watchdog - zone watchdog started.", []),
-    StatPort = erlang:open_port({spawn, "/usr/bin/vmstat 5"},[exit_status, use_stdio, binary, {line, 1000}]),
-    lager:info("chunter:watchdog - stats watchdog started.", []),
+    lager:info("chunter:zonemon - initializing: ~s", [Name]),
+    Zonemon = code:priv_dir(chunter) ++ "/zonemon.sh",
+    timer:send_interval(1000, zonecheck),
+    PortOpts = [exit_status, use_stdio, binary, {line, 1000}],
+    ZonePort = erlang:open_port({spawn, Zonemon}, PortOpts),
+    lager:info("chunter:zonemon - stats watchdog started.", []),
     {ok, #state{
        name=Name,
-       zoneport=ZonePort,
-       statport=StatPort}}.
+       port=ZonePort
+      }}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -106,36 +106,24 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
-
-    [chunter_vm:set_state(chunter_server:get_vm_pid(UUID),simplifie_state(list_to_atom((binary_to_list(VMState))))) ||
+    [chunter_vm:force_state(chunter_server:get_vm_pid(UUID),simplifie_state(list_to_atom((binary_to_list(VMState))))) ||
 	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 	ID =/= <<"0">>],
     {noreply, State};
 
-handle_info({_Port, {data, {eol, Data}}}, #state{statport=_Port, statspec=Spec, name=Name} = State) ->
-    case parse_stat(Data, Spec) of
-	unknown ->
-	    lager:error("watchdog:stat - unknwon message: ~p", [Data]),
-	    {noreply, State};
-	skip ->
-	    {noreply, State};
-	{spec, NewSpec} ->
-	    lager:debug("watchdog:stat - Spec: ~p", [NewSpec]),
-	    {noreply, State#state{statspec=NewSpec}};
-	{stat, Stats} ->
-	    lager:debug("watchdog:stat - State: ~p", [Stats]),
-	    gproc:send({p,g,{node,Name}}, {stat, Stats}),
-	    {noreply, State}
-    end;
-handle_info({_Port, {data, {eol, Data}}}, #state{zoneport=_Port} = State) ->
+
+handle_info({_Port, {data, {eol, Data}}}, #state{name=Name, port=_Port} = State) ->
     case parse_data(Data) of
 	{error, unknown} ->
+	    statsderl:increment([Name, ".vm.zonewatchdog_error"], 1, 1),
 	    lager:error("watchdog:zone - unknwon message: ~p", [Data]);
 	{UUID, crate} ->
+	    statsderl:increment([Name, ".vm.create"], 1, 1),
 	    chunter_vm_sup:start_child(UUID);
 	{UUID, Action} ->
+	    statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
 	    Pid = chunter_server:get_vm_pid(UUID),
 	    chunter_vm:set_state(Pid, simplifie_state(Action))
     end,
@@ -155,9 +143,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{statport=SPort,
-			  zoneport=Zport}) ->
-    erlang:port_close(SPort),
+terminate(_Reason, #state{port=Zport}) ->
     erlang:port_close(Zport),
     ok.
 
@@ -227,77 +213,3 @@ parse_data(<<"S12: ", UUID/binary>>) ->
     {UUID, destroying};
 parse_data(_) ->
     {error, unknown}.
-
-parse_stat(<<" k", _R/binary>>, _) ->
-    skip;
-parse_stat(<<" r ", Specs/binary>>, _) ->
-    {spec, [<<"r">> | re:split(Specs, "\s+")]};
-parse_stat(<<" ", Data/binary>>, Specs) ->
-    Res = re:split(Data, "\s+"),
-    {stat, build_stat(Specs, Res)};
-
-parse_stat(_, _) ->
-    unknown.
-
-build_stat(S, D) ->
-    build_stat(S, D, kthr, [], [], [], [], [], []).
-
-build_stat([], _, _Cat, K, M, P, D, F, C) ->
-    [{kthr, K},
-     {memory, M},
-     {page, P},
-     {disk, D},
-     {faults, F},
-     {cpu, C}];
-build_stat(_, [], _Cat, K, M, P, D, F, C) ->
-    [{kthr, K},
-     {memory, M},
-     {page, P},
-     {disk, D},
-     {faults, F},
-     {cpu, C}];
-
-build_stat([<<"r">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
-    build_stat(R, RV, kthr, [{queue, V}|K], M, P, D, F, C);
-build_stat([<<"b">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
-    build_stat(R, RV, kthr, [{blocked, V}|K], M, P, D, F, C);
-build_stat([<<"w">>|R], [V|RV], kthr, K, M, P, D, F, C) ->
-    build_stat(R, RV, memory, [{swapped, V}|K], M, P, D, F, C);
-
-build_stat([<<"swap">>|R], [V|RV], memory, K, M, P, D, F, C) ->
-    build_stat(R, RV, memory, K, [{swap, V}|M], P, D, F, C);
-build_stat([<<"free">>|R], [V|RV], memory, K, M, P, D, F, C) ->
-    build_stat(R, RV, page, K, [{free, V}|M], P, D, F, C);
-
-
-build_stat([<<"re">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    build_stat(R, RV, page, K, M, [{reclaims, V}|P], D, F, C);
-build_stat([<<"mf">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    build_stat(R, RV, page, K, M, [{minor_faults, V}|P], D, F, C);
-build_stat([<<"pi">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    build_stat(R, RV, page, K, M, [{in, V}|P], D, F, C);
-build_stat([<<"po">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    build_stat(R, RV, page, K, M, [{out, V}|P], D, F, C);
-build_stat([<<"fr">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    build_stat(R, RV, page, K, M, [{freed, V}|P], D, F, C);
-build_stat([<<"de">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    build_stat(R, RV, page, K, M, [{memory_shortfall, V}|P], D, F, C);
-build_stat([<<"sr">>|R], [V|RV], page, K, M, P, D, F, C) ->
-    build_stat(R, RV, disk, K, M, [{scanned, V}|P], D, F, C);
-
-build_stat([<<"in">>|R], [V|RV], disk, K, M, P, D, F, C) ->
-    build_stat(R, RV, faults, K, M, P, D, [{interrupts, V}|F], C);
-build_stat([_|R], [V|RV], disk, K, M, P, D, F, C) ->
-    build_stat(R, RV, disk, K, M, P, [V|D], F, C);
-
-build_stat([<<"sy">>|R], [V|RV], faults, K, M, P, D, F, C) ->
-    build_stat(R, RV, faults, K, M, P, D, [{system_calls, V}|F], C);
-build_stat([<<"cs">>|R], [V|RV], faults, K, M, P, D, F, C) ->
-    build_stat(R, RV, cpu, K, M, P, D, [{system_calls, V}|F], C);
-
-build_stat([<<"us">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
-    build_stat(R, RV, cpu, K, M, P, D, F, [{user, V}|C]);
-build_stat([<<"sy">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
-    build_stat(R, RV, cpu, K, M, P, D, F, [{system, V}|C]);
-build_stat([<<"id">>|R], [V|RV], cpu, K, M, P, D, F, C) ->
-    build_stat(R, RV, cpu, K, M, P, D, F, [{idel, V}|C]).

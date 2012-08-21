@@ -4,19 +4,14 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 19 May 2012 by Heinz N. Gies <heinz@licenser.net>
+%%% Created : 11 May 2012 by Heinz N. Gies <heinz@licenser.net>
 %%%-------------------------------------------------------------------
--module(chunter_vm).
+-module(chunter_vfsstat).
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, 
-	 refresh/1, 
-	 get/1,
-	 info/1,
-	 set_state/2,
-	 force_state/2]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -24,27 +19,12 @@
 
 -define(SERVER, ?MODULE). 
 
--record(state, {uuid, state=unknown, data, host}).
+-record(state, {name, 
+		port}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-set_state(Pid, State) ->
-    gen_server:cast(Pid, {state, State}).
-
-force_state(Pid, State) ->
-    gen_server:cast(Pid, {force_state, State}).
-
-refresh(Pid) ->
-    gen_server:cast(Pid, refresh).
-
-get(Pid) ->
-    gen_server:call(Pid, get).
-
-info(Pid) ->
-    gen_server:call(Pid, info).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -53,8 +33,8 @@ info(Pid) ->
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(UUID) ->
-    gen_server:start_link(?MODULE, [UUID], []).
+start_link() ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -71,11 +51,17 @@ start_link(UUID) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([UUID]) ->
-    ok = backyard_srv:register_connect_handler(backyard_connect),
+init([]) ->
     [Name|_] = re:split(os:cmd("uname -n"), "\n"),
-    refresh(self()),
-    {ok, #state{uuid=UUID, host=Name}}.
+    lager:info("chunter:vfsstat - initializing: ~s", [Name]),
+    PortOpts = [exit_status, use_stdio, binary, {line, 1000}],
+    timer:send_interval(1000, zonecheck),
+    VFSStat = code:priv_dir(chunter) ++ "/vfsstat.sh",
+    VFSStatPort = erlang:open_port({spawn, VFSStat}, PortOpts),
+    lager:info("chunter:vfsstat - stats watchdog started.", []),
+    {ok, #state{
+       port=VFSStatPort
+      }}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -91,17 +77,6 @@ init([UUID]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(info, _From, #state{uuid = UUID, data = Data} = State) ->
-    case proplists:get_value(brand, Data) of
-	<<"kvm">> ->
-	    Info = chunter_vmadm:info(UUID),
-	    {reply, {ok, Info}, State};
-	_ ->
-	    {reply, {error, not_supported}, State}
-    end;
-
-handle_call(get, _From, #state{data = Data, host = Host} = State) ->
-    {reply, {ok, [{hypervisor, Host}|Data]}, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -116,42 +91,6 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(backyard_connect,  #state{uuid = UUID} = State) ->
-    gproc:reg({p, l, {chunter, vm}}, UUID),
-    gproc:reg({n, l, {vm, UUID}}, self()),
-    {noreply, State};
-
-handle_cast(refresh, #state{uuid=UUID} = State) ->
-    Data = chunter_server:get_vm(UUID),
-    {noreply, State#state{data = Data}};
-
-handle_cast({force_state, MachineState}, #state{state = MachineState} = State) ->
-    {noreply, State};
-
-handle_cast({force_state, NewMachineState}, #state{uuid=UUID,
-						   data=Data}=State) ->
-    lager:info([{fifi_component, chunter},
-		{vm, UUID}],
-	       "[VM: ~s] State changed to ~s.~n", [UUID, NewMachineState]),
-    try
-	gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState})
-    catch
-	_:_ ->
-	    ok
-    end,
-    Data1 = [{state, list_to_binary(atom_to_list(NewMachineState))}|proplists:delete(state, Data)],
-    {noreply, State#state{state=NewMachineState,
-			  data=Data1}};
-
-handle_cast({state, NewMachineState}, #state{state=OldMachineState}=State) ->
-    case allowed_transitions(OldMachineState, NewMachineState) of
-	true ->
-	    force_state(self(), NewMachineState);
-	false ->
-	    ok
-    end,
-    {noreply, State};
-
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -165,6 +104,10 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+
+handle_info({_Port, {data, {eol, _Data}}}, #state{name=_Name, port=_Port} = State) ->
+    {noreply, State};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -179,7 +122,8 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{port=VFSSPort}) ->
+    erlang:port_close(VFSSPort),
     ok.
 
 %%--------------------------------------------------------------------
@@ -196,24 +140,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%if we don't know yet everything is OK
-allowed_transitions(unknown, _) ->
-    true;
-%default transitions
-allowed_transitions(stopped, booting) ->
-    true;
-allowed_transitions(booting, running) ->
-    true;
-allowed_transitions(running, shutting_down) ->
-    true;
-allowed_transitions(shutting_down, stopped) ->
-    true;
-%escape if something runs off during powerup
-allowed_transitions(booting, shutting_down) ->
-    true;
-allowed_transitions(_From, _To) ->
-    false.
-
-

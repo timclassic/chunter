@@ -14,8 +14,8 @@
          stop/1,
 	 info/1,
          reboot/1,
-	 delete/1,
-	 create/4
+	 delete/2,
+	 create/3
 	]).
 
 %%%===================================================================
@@ -36,13 +36,14 @@ start(UUID) ->
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
-delete(UUID) ->
+delete(UUID, Mem) ->
     lager:info([{fifi_component, chunter}],
 	       "vmadm:delete - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
 		"vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
+    os:cmd(binary_to_list(Cmd)),
+    chunter_server:unprovision_memory(Mem).
 
 info(UUID) ->
     lager:info([{fifi_component, chunter}],
@@ -76,7 +77,10 @@ reboot(UUID) ->
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
-create(Data, Caller, Owner, Rights) ->
+create(Data, Owner, Rights) ->
+    {alias, Alias} = lists:keyfind(alias, 1, Data),
+    lager:info("message: ~p, ~p, ~p", [Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>]),
+    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
@@ -89,15 +93,19 @@ create(Data, Caller, Owner, Rights) ->
 	      {ok, UUID} ->
 		  {ok, Owners} = libsnarl:group_add(system, <<"vm_", UUID/binary, "_owner">>),
 		  [libsnarl:group_grant(system, Owners, Perm) ||
-		      Perm <- [[vm, UUID, '...'] | Rights]],
+		      Perm <- [[host, '_', vm, UUID, '...'] | Rights]],
 		  libsnarl:user_add_to_group(system, Owner, Owners),
-		  {ok, chunter_server:get_vm(UUID)};
+		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
+		  chunter_server:provision_memory(Mem*1024*1024), % provision memory does not take MB!
+		  libsnarl:msg(Owner, <<"success">>, <<"Your VM '", Alias/binary, "' was successfully created.">>),
+		  ResData = make_frontend_json(chunter_server:get_vm(UUID)),
+		  gproc:send({p, g, {user, Owner}}, {vm, add, ResData});
 	      E ->
+		  libsnarl:msg(Owner, <<"error">>, <<"Your VM '", Alias/binary, "' failed to create.">>),
 		  lager:error([{fifi_component, chunter}],
 			      "vmad:create - Failed: ~p.", [E]),
 		  E
 	  end,
-    gen_server:reply(Caller, Res),
     Res.
 
 wait_for_tex(Port) ->
@@ -124,3 +132,45 @@ wait_for_tex(Port) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+    
+
+
+
+make_frontend_json([{nics, Ns} | R]) ->
+    IPs = lists:map(fun (N) ->
+			    proplists:get_value(ip, N)
+		    end,Ns),
+    [{ips, IPs}|make_frontend_json(R)];
+
+make_frontend_json([{zonename, N} | R]) ->
+    Rest = make_frontend_json(R),
+    case proplists:get_value(name, Rest) of
+	undefined ->
+	    [{name, N}|make_frontend_json(R)];
+	_ ->
+	    Rest
+    end;
+make_frontend_json([{max_physical_memory, N} | R]) ->
+    Rest = make_frontend_json(R),
+    M = N/(1024*1024),
+    case proplists:get_value(memory, Rest) of
+	undefined ->
+	    [{memory, M},
+	     {max_physical_memory, M}
+	     |Rest];
+	_ ->
+	    [{max_physical_memory, M}
+	     |Rest]
+	end;
+make_frontend_json([{state, <<"installed">>} | R]) ->
+    [{state, <<"stopped">>}|make_frontend_json(R)];
+make_frontend_json([{alias, N} | R]) ->
+    [{name, N}|make_frontend_json(R)];
+make_frontend_json([{ram, R} | R]) ->
+    [{memory, R}|proplists:delete(memory,make_frontend_json(R))];
+make_frontend_json([]) ->
+    [];
+make_frontend_json([{K, V}|R]) ->
+    [{K, V}|make_frontend_json(R)].

@@ -24,6 +24,13 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, {{one_for_one, 5, 10}, [?CHILD(chunter_vm_sup, supervisor),
+    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    %application:set_env(statsderl, base_key, BaseKey),
+    {ok, {{one_for_one, 5, 10}, [{vmstats_sup, 
+				  {vmstats_sup, start_link, [<<Name/binary, ".vmstats">>]}, permanent, 5000, supervisor, [vmstats_sup]},
+				 ?CHILD(chunter_vm_sup, supervisor),
+				 ?CHILD(chunter_zfs_reporter, worker),
 				 ?CHILD(chunter_server, worker),
-				 ?CHILD(chunter_watchdog, worker)]}}.
+				 ?CHILD(chunter_sysstat, worker),
+				 ?CHILD(chunter_zonemon, worker),
+				 ?CHILD(chunter_vfsstat, worker)]}}.

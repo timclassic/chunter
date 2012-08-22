@@ -4,8 +4,8 @@ OBJ=$(shell ls $(APP_DIR)/src/*.erl | sed -e 's/\.erl$$/.beam/' | sed -e 's;^$(A
 DEPS=$(shell cat rebar.config  |sed -e 's/%.*//'| sed -e '/{\(\w\+\), [^,]\+, {\w\+, [^,]\+, {[^,]\+, [^}]\+}}},\?/!d' | sed -e 's;{\(\w\+\), [^,]\+, {\w\+, [^,]\+, {[^,]\+, [^}]\+}}},\?;deps/\1/rebar.config;')
 ERL=erl
 PA=$(shell pwd)/$(APP_DIR)/ebin
-ERL_LIBS=`pwd`/deps/
-REBAR=./rebar
+ERL_LIBS=$(shell pwd)/deps/
+REBAR=$(shell pwd)/rebar
 
 all: $(DEPS) $(OBJ)
 
@@ -38,6 +38,9 @@ shell: all
 	ERL_LIBS="$(ERL_LIBS)" $(ERL) -pa $(PA) -config standalone -sname $(APP_NAME)
 	rm *.beam || true
 	[ -f erl_crash.dump ] && rm erl_crash.dump || true
+
+test: all
+	$(REBAR) skip_deps=true eunit
 
 FORCE:
 

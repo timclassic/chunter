@@ -16,34 +16,70 @@
 	 get/1,
 	 info/1,
 	 set_state/2,
+	 connect/1,
+	 disconnect/1,
 	 force_state/2]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+-export([init/1,
+	 handle_call/3, 
+	 handle_cast/2, 
+	 handle_info/2,
 	 terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE). 
 
--record(state, {uuid, state=unknown, data, host}).
+-record(state, {uuid, 
+		connected = false,
+		state = unknown, 
+		data, 
+		host}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-set_state(Pid, State) ->
-    gen_server:cast(Pid, {state, State}).
 
-force_state(Pid, State) ->
-    gen_server:cast(Pid, {force_state, State}).
+set_state(Pid, State) when is_pid(Pid) ->
+    gen_server:cast(Pid, {state, State});
 
-refresh(Pid) ->
-    gen_server:cast(Pid, refresh).
+set_state(UUID, State) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    set_state(Pid, State).
 
-get(Pid) ->
-    gen_server:call(Pid, get).
+force_state(Pid, State) when is_pid(Pid) ->
+    gen_server:cast(Pid, {force_state, State});
 
-info(Pid) ->
-    gen_server:call(Pid, info).
+force_state(UUID, State) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    force_state(Pid, State).
+
+refresh(Pid) when is_pid(Pid) ->
+    gen_server:cast(Pid, refresh);
+
+refresh(UUID) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    refresh(Pid).
+
+get(Pid) when is_pid(Pid) ->
+    gen_server:call(Pid, get);
+
+get(UUID) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    chunter_vm:get(Pid).
+
+info(Pid) when is_pid(Pid) ->
+    gen_server:call(Pid, info);
+
+info(UUID) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    info(Pid).
+
+connect(Pid) ->
+    gen_server:cast(Pid, connect).
+
+disconnect(Pid) ->
+    gen_server:cast(Pid, disconnect).
 
 
 %%--------------------------------------------------------------------
@@ -72,10 +108,12 @@ start_link(UUID) ->
 %% @end
 %%--------------------------------------------------------------------
 init([UUID]) ->
-    ok = backyard_srv:register_connect_handler(backyard_connect),
-    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    gproc:reg({p, l, {chunter, vm}}, UUID),
+    gproc:reg({n, l, {vm, UUID}}, self()),
+    [Host|_] = re:split(os:cmd("uname -n"), "\n"),
     refresh(self()),
-    {ok, #state{uuid=UUID, host=Name}}.
+    libsniffle:vm_register(UUID, Host),
+    {ok, #state{uuid=UUID, host=Host}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -102,6 +140,7 @@ handle_call(info, _From, #state{uuid = UUID, data = Data} = State) ->
 
 handle_call(get, _From, #state{data = Data, host = Host} = State) ->
     {reply, {ok, [{hypervisor, Host}|Data]}, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -116,13 +155,21 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(backyard_connect,  #state{uuid = UUID} = State) ->
-    gproc:reg({p, l, {chunter, vm}}, UUID),
-    gproc:reg({n, l, {vm, UUID}}, self()),
-    {noreply, State};
+handle_cast(connect,  #state{
+	      uuid = UUID,
+	      host = Host,
+	      data = Data
+	     } = State) ->
+    libsniffle:vm_register(UUID, Host),
+    libsniffle:vm_attribute_set(UUID, <<"config">>, Data),
+    {noreply, State#state{connected = true}};
+
+handle_cast(disconnect,  State) ->
+    {noreply, State#state{connected = false}};
 
 handle_cast(refresh, #state{uuid=UUID} = State) ->
     Data = chunter_server:get_vm(UUID),
+    libsniffle:vm_attribute_set(UUID, <<"config">>, Data),
     {noreply, State#state{data = Data}};
 
 handle_cast({force_state, MachineState}, #state{state = MachineState} = State) ->
@@ -133,15 +180,9 @@ handle_cast({force_state, NewMachineState}, #state{uuid=UUID,
     lager:info([{fifi_component, chunter},
 		{vm, UUID}],
 	       "[VM: ~s] State changed to ~s.~n", [UUID, NewMachineState]),
-    try
-	gproc:send({p,g,{vm,UUID}}, {vm, state, UUID, NewMachineState})
-    catch
-	_:_ ->
-	    ok
-    end,
-    Data1 = [{state, list_to_binary(atom_to_list(NewMachineState))}|proplists:delete(state, Data)],
-    {noreply, State#state{state=NewMachineState,
-			  data=Data1}};
+    libsniffle:vm_attribute_set(UUID, <<"state">>, NewMachineState),
+
+    {noreply, State#state{state=NewMachineState}};
 
 handle_cast({state, NewMachineState}, #state{state=OldMachineState}=State) ->
     case allowed_transitions(OldMachineState, NewMachineState) of

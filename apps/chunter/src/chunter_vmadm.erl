@@ -80,7 +80,7 @@ reboot(UUID) ->
 create(Data, Owner, Rights) ->
     {alias, Alias} = lists:keyfind(alias, 1, Data),
     lager:info("message: ~p, ~p, ~p", [Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>]),
-    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
+%    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
@@ -97,11 +97,11 @@ create(Data, Owner, Rights) ->
 		  libsnarl:user_add_to_group(system, Owner, Owners),
 		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
 		  chunter_server:provision_memory(Mem*1024*1024), % provision memory does not take MB!
-		  libsnarl:msg(Owner, <<"success">>, <<"Your VM '", Alias/binary, "' was successfully created.">>),
+%		  libsnarl:msg(Owner, <<"success">>, <<"Your VM '", Alias/binary, "' was successfully created.">>),
 		  ResData = make_frontend_json(chunter_server:get_vm(UUID)),
 		  gproc:send({p, g, {user, Owner}}, {vm, add, ResData});
 	      E ->
-		  libsnarl:msg(Owner, <<"error">>, <<"Your VM '", Alias/binary, "' failed to create.">>),
+%		  libsnarl:msg(Owner, <<"error">>, <<"Your VM '", Alias/binary, "' failed to create.">>),
 		  lager:error([{fifi_component, chunter}],
 			      "vmad:create - Failed: ~p.", [E]),
 		  E

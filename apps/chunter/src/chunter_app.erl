@@ -11,10 +11,9 @@ load() ->
     application:start(nicedecimal),
     application:start(jsx),
     application:start(crypto),
-    application:start(nodefnder),
-    application:start(backyard),
     application:start(inets),
     application:start(erlsom),
+    application:start(zmq_mdns_client),
     application:start(libsniffle),
     application:start(libsnarl),
     application:start(chunter).

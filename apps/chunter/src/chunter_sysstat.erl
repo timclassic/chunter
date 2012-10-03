@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, connect/0, disconnect/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -23,6 +23,7 @@
 		vmstat_port,
 		mpstat_port,
 		mpstat=undefiend,
+		connected = false,
 		statspec=[], memory=0}).
 
 %%%===================================================================
@@ -38,6 +39,13 @@
 %%--------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+connect() ->
+    gen_server:cast(?SERVER, connect).
+
+disconnect() ->
+    gen_server:cast(?SERVER, disconnect).
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -86,6 +94,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -100,6 +109,12 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast(connect,  State) ->
+    {noreply, State#state{connected = true}};
+
+handle_cast(disconnect,  State) ->
+    {noreply, State#state{connected = false}};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -133,11 +148,12 @@ handle_info({_Port, {data, {eol, Data}}},
 			  cpu ->
 			      ok;
 			  _ ->
-			      Base = [Name, ".hypervisor.vmstat.", atom_to_list(Topic), "."],
+			      _Base = [Name, ".hypervisor.vmstat.", atom_to_list(Topic), "."],
 			      lists:map(
-				fun ({K, V}) ->
-					statsderl:gauge(
-					  [Base, atom_to_list(K)], V, 1)
+				fun ({_K, _V}) ->
+%					statsderl:gauge(
+%					  [Base, atom_to_list(K)], V, 1),
+					ok
 				end, KVs)
 		      end
 	      end, Stats),
@@ -150,33 +166,34 @@ handle_info({_Port, {data, {eol, Data}}},
 	    {noreply, State#state{mpstat=[]}}
     end;
 handle_info({_Port, {data, {eol, Data}}}, 
-	    #state{name=Name, mpstat_port=_Port, mpstat=MPStat} = State) ->
+	    #state{name=_Name, mpstat_port=_Port, mpstat=MPStat} = State) ->
     case parse_mpstat(Data) of
 	{stats, {[CPU, 
-		  Minf, Mjf, Xcal, 
-		  Intr, Ithr, Csw, 
-		  Icsw, Migr, Smtx, 
-		  Srw, Syscl, Usr, 
-		  Sys, _Wt, Idl], 
+		  _Minf, _Mjf, _Xcal, 
+		  _Intr, _Ithr, _Csw, 
+		  _Icsw, _Migr, _Smtx, 
+		  _Srw, _Syscl, _Usr, 
+		  _Sys, 
+		  _Wt, _Idl], 
 		 Stats}} ->
-	    CPUS = integer_to_list(CPU),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".minf"], Minf, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".mjf"], Mjf, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".xcal"], Xcal, 1),
+	    _CPUS = integer_to_list(CPU),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".minf"], Minf, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".mjf"], Mjf, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".xcal"], Xcal, 1),
 
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".intr"], Intr, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".Ithr"], Ithr, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".Csw"], Csw, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".intr"], Intr, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".Ithr"], Ithr, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".Csw"], Csw, 1),
 
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".intr"], Icsw, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".migr"], Migr, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".smtx"], Smtx, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".intr"], Icsw, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".migr"], Migr, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".smtx"], Smtx, 1),
 
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".srw"], Srw, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".syscl"], Syscl, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".usr"], Usr, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".sys"], Sys, 1),
-	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".idl"], Idl, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".srw"], Srw, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".syscl"], Syscl, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".usr"], Usr, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".sys"], Sys, 1),
+%	    statsderl:gauge([Name, ".hypervisor.cpu.", CPUS, ".idl"], Idl, 1),
 
 	    {noreply, State#state{mpstat=[Stats|MPStat]}};
 	_ ->

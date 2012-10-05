@@ -25,7 +25,8 @@
 	 handle_call/3, 
 	 handle_cast/2, 
 	 handle_info/2,
-	 terminate/2, code_change/3]).
+	 terminate/2, 
+	 code_change/3]).
 
 -define(SERVER, ?MODULE). 
 
@@ -175,13 +176,13 @@ handle_cast(refresh, #state{uuid=UUID} = State) ->
 handle_cast({force_state, MachineState}, #state{state = MachineState} = State) ->
     {noreply, State};
 
-handle_cast({force_state, NewMachineState}, #state{uuid=UUID,
-						   data=Data}=State) ->
+handle_cast({force_state, NewMachineState}, 
+	    #state{uuid=UUID,
+		   data=Data}=State) ->
     lager:info([{fifi_component, chunter},
 		{vm, UUID}],
 	       "[VM: ~s] State changed to ~s.~n", [UUID, NewMachineState]),
     libsniffle:vm_attribute_set(UUID, <<"state">>, NewMachineState),
-
     {noreply, State#state{state=NewMachineState}};
 
 handle_cast({state, NewMachineState}, #state{state=OldMachineState}=State) ->

@@ -30,8 +30,8 @@ init([]) ->
 %				  {vmstats_sup, start_link, [<<Name/binary, ".vmstats">>]}, permanent, 5000, supervisor, [vmstats_sup]},
 				 ?CHILD(chunter_vm_sup, supervisor),
 %				 ?CHILD(chunter_zfs_reporter, worker),
-				 ?CHILD(chunter_server, worker)%,
+				 ?CHILD(chunter_server, worker),
 %				 ?CHILD(chunter_sysstat, worker),
-%				 ?CHILD(chunter_zonemon, worker),
+				 ?CHILD(chunter_zonemon, worker)%,
 %				 ?CHILD(chunter_vfsstat, worker)
 				]}}.

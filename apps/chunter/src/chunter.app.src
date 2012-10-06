@@ -10,6 +10,7 @@
                   nicedecimal,
                   jsx,
                   inets,
+                  gproc,
                   erlsom,
                   libsniffle,
                   libsnarl

@@ -9,7 +9,7 @@
 -module(chunter).
 
 %% API
--export([]).
+-export([start/0]).
 
 %%%===================================================================
 %%% API
@@ -20,6 +20,20 @@
 %% @spec
 %% @end
 %%--------------------------------------------------------------------
+start() ->
+    application:start(sasl),
+    application:start(lager),
+    application:start(nicedecimal),
+    application:start(jsx),
+    application:start(crypto),
+    application:start(inets),
+    application:start(erlsom),
+    application:start(zmq_mdns_client),
+    application:start(libsniffle),
+    application:start(libsnarl),
+    application:start(gproc),
+    application:start(ranch),
+    application:start(chunter).
 
 %%%===================================================================
 %%% Internal functions

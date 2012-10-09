@@ -3,27 +3,18 @@
 -behaviour(application).
 
 %% Application callbacks
--export([start/2, stop/1, load/0]).
-
-load() ->
-    application:start(sasl),
-    application:start(lager),
-    application:start(nicedecimal),
-    application:start(jsx),
-    application:start(crypto),
-    application:start(inets),
-    application:start(erlsom),
-    application:start(zmq_mdns_client),
-    application:start(libsniffle),
-    application:start(libsnarl),
-    application:start(chunter).
+-export([start/2, stop/1]).
 
 %% ===================================================================
 %% Application callbacks
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    lager:warning("chunter:load - start.", []),
+    {ok, Port} = application:get_env(chunter, port),
+    {ok, _} = ranch:start_listener(chunter_server, 1,
+				   ranch_tcp, [{port, Port}], chunter_protocol, []),
+
+    lager:info("chunter:load - start.", []),
     chunter_sup:start_link().
 
 stop(_State) ->

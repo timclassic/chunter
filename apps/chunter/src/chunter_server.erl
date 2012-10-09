@@ -477,7 +477,7 @@ get_vm(ZUUID) ->
 	       ID =/= <<"0">>],
     VM.
 
-list_vms(Auth, Hypervisor) ->
+list_vms(_Auth, Hypervisor) ->
 %    {ok, AuthC} = libsnarl:user_cache(system, Auth),
     [chunter_zoneparser:load([{hypervisor, Hypervisor}, {name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 

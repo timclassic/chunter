@@ -13,8 +13,9 @@
                   gproc,
                   erlsom,
                   libsniffle,
-                  libsnarl
+                  libsnarl,
+		  ranch
                  ]},
   {mod, { chunter_app, []}},
-  {env, []}
+  {env, [{port, 4200}]}
  ]}.

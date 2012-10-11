@@ -36,27 +36,36 @@ loop(Socket, Transport, HandlerState) ->
 	    ok = Transport:close(Socket)
     end.
 
-
-
-
 handle_message({machines, start, UUID}, State) ->
     io:format("start~n"),
+    chunter_server:start(UUID),
     {stop, State};
+
 handle_message({machines, start, UUID, Image}, State) ->
     io:format("start1~n"),
+    chunter_server:start(UUID, Image),
     {stop, State};
+
 handle_message({machines, stop, UUID}, State) ->
     io:format("stop~n"),
+    chunter_server:stop(UUID),
     {stop, State};
+
 handle_message({machines, reboot, UUID}, State) ->
     io:format("reboot~n"),
+    chunter_server:reboot(UUID),
     {stop, State};
-handle_message({machines, create, Name, PackageUUID, DatasetUUID, Metadata, Tags}, State) ->
+
+handle_message({machines, create, UUID, Name, PackageUUID, DatasetUUID, Metadata, Tags}, State) ->
     io:format("create~n"),
+    chunter_server:create(UUID, Name, PackageUUID, DatasetUUID, Metadata, Tags),
     {stop, State};
+
 handle_message({machines, delete, UUID}, State) ->
     io:format("delete~n"),
+    chunter_server:delete(UUID),
     {stop, State};
+
 handle_message(Oops, State) ->
     io:format("oops: ~p~n", [Oops]),
     {stop, State}.

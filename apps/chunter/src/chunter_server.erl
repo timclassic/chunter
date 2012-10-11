@@ -14,6 +14,12 @@
 -export([start_link/0, 
 	 list/0, 
 	 get/1, 
+	 start/1,
+	 start/2,
+	 stop/1,
+	 reboot/1,
+	 delete/1,
+	 create/6,
 	 get_vm/1, 
 	 get_vm_pid/1, 
 	 niceify_json/1,
@@ -56,7 +62,25 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 get(UUID) ->
-    gen_server:call(?SERVER, {call, system, {machines, get, UUID}}).
+    gen_server:call(?SERVER, {machines, get, UUID}).
+
+start(UUID) ->
+    gen_server:cast(?SERVER, {machines, start, UUID}).
+
+start(UUID, Image) ->
+    gen_server:cast(?SERVER, {machines, start, UUID, Image}).
+
+stop(UUID) ->
+    gen_server:cast(?SERVER, {machines, stop, UUID}).
+
+reboot(UUID) ->
+    gen_server:cast(?SERVER, {machines, reboot, UUID}).
+
+delete(UUID) ->
+    gen_server:cast(?SERVER, {machines, delete, UUID}).
+
+create(UUID, VMName, PackageUUID, DatasetUUID, Metadata, Tags) ->
+    gen_server:cast(?SERVER, {machines, create, UUID, VMName, PackageUUID, DatasetUUID, Metadata, Tags}).
 
 set_total_mem(M) ->
     gen_server:cast(?SERVER, {set_total_mem, M}).
@@ -77,7 +101,7 @@ disconnect() ->
     gen_server:cast(?SERVER, disconnect).
 
 list() ->
-    gen_server:call(?SERVER, {call, system, {machines, list}}).
+    gen_server:call(?SERVER, {machines, list}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -120,28 +144,20 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({call, Auth, {machines, list}}, _From,  #state{name=Name} = State) ->
+handle_call({machines, list}, _From,  #state{name=Name} = State) ->
 %    statsderl:increment([Name, ".call.machines.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:list.", []),
-    VMS = list_vms(Auth, Name),
+    VMS = list_vms(Name),
     {reply, {ok, VMS}, State};
 
-handle_call({call, Auth, {machines, get, UUID}}, _From, #state{name=Name} =  State) ->
+handle_call({machines, get, UUID}, _From, #state{name = _Name} =  State) ->
 %    statsderl:increment([Name, ".call.machines.get.", UUID], 1, 1.0),
-
     lager:info([{fifi_component, chunter}],
 	       "machines:get - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, get]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:info - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    Pid = get_vm_pid(UUID),
-	    {ok, Reply} = chunter_vm:get(Pid),
-	    {reply, {ok, Reply}, State}
-    end;
+    Pid = get_vm_pid(UUID),
+    {ok, Reply} = chunter_vm:get(Pid),
+    {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {info, memory}}, _From, #state{name = Name,
 							total_memory = T, 
@@ -252,7 +268,7 @@ handle_cast(connect,  #state{name = Host} = State) ->
 %    application:set_env(statsderl, hostname, Host),
 %    application:start(statsderl),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    VMS = list_vms(system, Host),
+    VMS = list_vms(Host),
     ProvMem = round(lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
@@ -272,11 +288,6 @@ handle_cast(connect,  #state{name = Host} = State) ->
 
 handle_cast(disconnect,  State) ->
     {noreply, State#state{connected = false}};
-
-handle_cast({cast, Auth, {machines, create, VMName, PackageUUID, DatasetUUID, Metadata, Tags}},
-	    #state{datasets=Ds, name=Name} = State) ->
-    spawn(chunter_server, create_vm, [Auth, VMName, PackageUUID, DatasetUUID, Metadata, Tags, Ds, Name]),
-    {noreply, State};
 
 handle_cast({set_total_mem, M}, State = #state{name = _Name}) ->
 %    statsderl:gauge([Name, ".hypervisor.memory.total"], M, 1),
@@ -314,106 +325,70 @@ handle_cast({unprov_mem, M}, State = #state{name = _Name,
 	       "memory:unprovision - Unprivisioned: ~p(~p) , Total: ~p, Change: -~p.", [Res, M, T, MinMB]),
     {noreply, State#state{provisioned_memory = Res}};
 
-handle_cast({cast, Auth, {machines, start, UUID}}, #state{name = Name} = State) ->
-%    statsderl:increment([Name, ".cast.machines.start.", UUID], 1, 1.0),
-    lager:info([{fifi_component, chunter}],
-	       "machines:start - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, start]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:start - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    spawn(chunter_vmadm, start, [UUID]),
-	    {noreply, State}
-    end;
+handle_cast({machines, create, UUID, VMName, PackageUUID, DatasetUUID, Metadata, Tags},
+	    #state{datasets=Ds, name=Name} = State) ->
+    spawn(chunter_server, create_vm, [UUID, VMName, PackageUUID, DatasetUUID, Metadata, Tags, Ds, Name]),
+    {noreply, State};
 
-handle_cast({cast, Auth, {machines, delete, UUID}}, #state{name = Name} = State) ->
+
+handle_cast({machines, delete, UUID}, #state{name = _Name} = State) ->
 %    statsderl:increment([Name, ".cast.machines.delete"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:delete - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, delete]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:delete - forbidden Auth: ~p.", [Auth]),
-%	    libsnarl:msg(Auth, error, <<"You don't have the permissions to delete the VM '", UUID/binary,"'.">>),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    VM = get_vm(UUID),
-	    case proplists:get_value(nics, VM) of
-		undefined ->
-		    [];
-		Nics ->
-		    [try
-			 Net = proplists:get_value(nic_tag, Nic),
-			 IP = proplists:get_value(ip, Nic),
-			 libsnarl:network_release_ip(system, Net, IP),
-			 ok
-		     catch 
-			 _:_ ->
-			     ok
-		     end
-		     || Nic <- Nics]
-	    end,
-	    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
-		{ok, GUUID} ->
-		    libsnarl:group_delete(system, GUUID);
-		_ -> 
-		    ok
-	    end,
-	    {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, VM),
+    VM = get_vm(UUID),
+    case proplists:get_value(nics, VM) of
+	undefined ->
+	    [];
+	Nics ->
+	    [try
+		 Net = proplists:get_value(nic_tag, Nic),
+		 IP = proplists:get_value(ip, Nic),
+		 libsnarl:network_release_ip(system, Net, IP),
+		 ok
+	     catch 
+		 _:_ ->
+		     ok
+	     end
+	     || Nic <- Nics]
+    end,
+    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
+	{ok, GUUID} ->
+	    libsnarl:group_delete(system, GUUID);
+	_ -> 
+	    ok
+    end,
+    {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, VM),
 %	    libsnarl:msg(Auth, success, <<"VM '", UUID/binary,"' is being deleted.">>),
-	    spawn(chunter_vmadm, delete, [UUID, Mem]),
-	    {noreply, State}
-    end;
+    spawn(chunter_vmadm, delete, [UUID, Mem]),
+    {noreply, State};
 
+handle_cast({machines, start, UUID}, #state{name = _Name} = State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:start - UUID: ~s.", [UUID]),
+    spawn(chunter_vmadm, start, [UUID]),
+    {noreply, State};
 
-handle_cast({cast, Auth, {machines, start, UUID, Image}}, #state{name = Name} =State) ->
+handle_cast({machines, start, UUID, Image}, #state{name = _Name} =State) ->
 %    statsderl:increment([Name, ".cast.machines.start_image.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:start - UUID: ~s, Image: ~s.", [UUID, Image]),
-
-    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, start]) of
-	false ->
-%	    libsnarl:msg(Auth, error, <<"You don't have the permissions to start the VM '", UUID/binary,"'.">>),
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:start - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    spawn(chunter_vmadm, start, [UUID, Image]),
-	    {noreply, State}
-    end;
+    spawn(chunter_vmadm, start, [UUID, Image]),
+    {noreply, State};
 
 
-handle_cast({cast, Auth, {machines, stop, UUID}}, #state{name = Name} = State) ->
+handle_cast({machines, stop, UUID}, #state{name = _Name} = State) ->
 %    statsderl:increment([Name, ".cast.machines.stop.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:stop - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, stop]) of
-	false ->
-%	    libsnarl:msg(Auth, error, <<"You don't have the permissions to stop the VM '", UUID/binary,"'.">>),
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:stop - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    spawn(chunter_vmadm, stop, [UUID]),
-	    {noreply, State}
-    end;
+    spawn(chunter_vmadm, stop, [UUID]),
+    {noreply, State};
 
-handle_cast({cast, Auth, {machines, reboot, UUID}}, #state{name = Name} =State) ->
+handle_cast({machines, reboot, UUID}, #state{name = _Name} =State) ->
 %    statsderl:increment([Name, ".cast.machines.reboot.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:reboot - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, reboot]) of
-	false ->
-%	    libsnarl:msg(Auth, error, <<"You don't have the permissions to reboot the VM '", UUID/binary,"'.">>),
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:reboot - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    spawn(chunter_vmadm, reboot, [UUID]),
-	    {noreply, State}
-    end;
+    spawn(chunter_vmadm, reboot, [UUID]),
+    {noreply, State};
 
 
 handle_cast(Msg, #state{name = _Name} = State) ->
@@ -477,15 +452,12 @@ get_vm(ZUUID) ->
 	       ID =/= <<"0">>],
     VM.
 
-list_vms(_Auth, Hypervisor) ->
-%    {ok, AuthC} = libsnarl:user_cache(system, Auth),
+list_vms(Hypervisor) ->
     [chunter_zoneparser:load([{hypervisor, Hypervisor}, {name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
 	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-	ID =/= <<"0">> 
-%	    andalso libsnarl:allowed(system, AuthC, [host, Name, vm, UUID, get]) == true
-    ].
+	ID =/= <<"0">>].
 
 get_dataset(UUID, Ds) ->
     read_dsmanifest(filename:join(<<"/var/db/imgadm">>, <<UUID/binary, ".json">>), Ds).

@@ -19,7 +19,7 @@
 	 stop/1,
 	 reboot/1,
 	 delete/1,
-	 create/6,
+	 create/2,
 	 get_vm/1, 
 	 get_vm_pid/1, 
 	 niceify_json/1,
@@ -28,8 +28,7 @@
 	 provision_memory/1,
 	 unprovision_memory/1,
 	 connect/0,
-	 disconnect/0,
-	 create_vm/8]).
+	 disconnect/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -79,8 +78,8 @@ reboot(UUID) ->
 delete(UUID) ->
     gen_server:cast(?SERVER, {machines, delete, UUID}).
 
-create(UUID, VMName, PackageUUID, DatasetUUID, Metadata, Tags) ->
-    gen_server:cast(?SERVER, {machines, create, UUID, VMName, PackageUUID, DatasetUUID, Metadata, Tags}).
+create(UUID, Spec) ->
+    gen_server:cast(?SERVER, {machines, create, UUID, Spec}).
 
 set_total_mem(M) ->
     gen_server:cast(?SERVER, {set_total_mem, M}).
@@ -266,20 +265,25 @@ handle_call(_Request, _From, State) ->
 handle_cast(connect,  #state{name = Host} = State) ->
 %    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
 %    application:set_env(statsderl, hostname, Host),
-%    application:start(statsderl),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    {Networks, _} = re:split(os:cmd("cat /usbkey/config  | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
     VMS = list_vms(Host),
     ProvMem = round(lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
 			  end, 0, VMS) / (1024*1024)),
+    
 %    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
 %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
     
 %    statsderl:increment([Name, ".net.join"], 1, 1.0),
 %    libsniffle:join_client_channel(),
     libsniffle:hypervisor_register(Host, Host, 4200),
-
+    libsniffle:hypervisor_resource_set(Host, [{<<"networks">>, Networks},
+					      {<<"free-memory">>, TotalMem - ProvMem},
+					      {<<"provisioned-memory">>, ProvMem},
+					      {<<"total-memory">>, TotalMem}]),
+    
     {noreply, State#state{
 		total_memory = TotalMem,
 		provisioned_memory = ProvMem,
@@ -289,45 +293,54 @@ handle_cast(connect,  #state{name = Host} = State) ->
 handle_cast(disconnect,  State) ->
     {noreply, State#state{connected = false}};
 
-handle_cast({set_total_mem, M}, State = #state{name = _Name}) ->
+handle_cast({set_total_mem, M}, State = #state{provisioned_memory = P,
+					       name = Name}) ->
+    libsniffle:hypervisor_resource_set(Name, [{<<"free-memory">>, M - P},
+					      {<<"total-memory">>, M}]),
 %    statsderl:gauge([Name, ".hypervisor.memory.total"], M, 1),
     {noreply, State#state{total_memory= M}};
 
 
-handle_cast({set_provisioned_mem, M}, State = #state{name = _Name,
+handle_cast({set_provisioned_mem, M}, State = #state{name = Name,
 						     provisioned_memory = P,
 						     total_memory = T}) ->
     MinMB = round(M / (1024*1024)),
     Diff = round(P - MinMB),
+    libsniffle:hypervisor_resource_set(Name, [{<<"free-memory">>, T - MinMB},
+					      {<<"provisioned-memory">>, MinMB}]),
 %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], MinMB, 1),
     lager:info([{fifi_component, chunter}],
 	       "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: ~p .", [MinMB, M, T, Diff]),    
     {noreply, State#state{provisioned_memory = MinMB}};
 
 
-handle_cast({prov_mem, M}, State = #state{name = _Name,
+handle_cast({prov_mem, M}, State = #state{name = Name,
 					  provisioned_memory = P,
 					  total_memory = T}) ->
     MinMB = round(M / (1024*1024)),
     Res = round(MinMB + P),
+    libsniffle:hypervisor_resource_set(Name, [{<<"free-memory">>, T - Res},
+					      {<<"provisioned-memory">>, Res}]),
 %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
 	       "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: +~p.", [Res, M, T, MinMB]),    
     {noreply, State#state{provisioned_memory = Res}};
 
-handle_cast({unprov_mem, M}, State = #state{name = _Name,
+handle_cast({unprov_mem, M}, State = #state{name = Name,
 					    provisioned_memory = P, 
 					    total_memory = T}) ->
     MinMB = round(M / (1024*1024)),
     Res = round(P - MinMB),
+    libsniffle:hypervisor_resource_set(Name, [{<<"free-memory">>, T - Res},
+					      {<<"provisioned-memory">>, Res}]),
 %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
 	       "memory:unprovision - Unprivisioned: ~p(~p) , Total: ~p, Change: -~p.", [Res, M, T, MinMB]),
     {noreply, State#state{provisioned_memory = Res}};
 
-handle_cast({machines, create, UUID, VMName, PackageUUID, DatasetUUID, Metadata, Tags},
+handle_cast({machines, create, UUID, Spec},
 	    #state{datasets=Ds, name=Name} = State) ->
-    spawn(chunter_server, create_vm, [UUID, VMName, PackageUUID, DatasetUUID, Metadata, Tags, Ds, Name]),
+    spawn(chunter_server, create_vm, [UUID, Spec, Ds, Name]),
     {noreply, State};
 
 

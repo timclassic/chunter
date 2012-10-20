@@ -20,6 +20,7 @@
 %% @spec
 %% @end
 %%--------------------------------------------------------------------
+
 start() ->
     application:start(sasl),
     application:start(lager),

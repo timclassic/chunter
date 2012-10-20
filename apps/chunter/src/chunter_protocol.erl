@@ -56,9 +56,9 @@ handle_message({machines, reboot, UUID}, State) ->
     chunter_server:reboot(UUID),
     {stop, State};
 
-handle_message({machines, create, UUID, Name, PackageUUID, DatasetUUID, Metadata, Tags}, State) ->
+handle_message({machines, create, UUID, Spec}, State) ->
     io:format("create~n"),
-    chunter_server:create(UUID, Name, PackageUUID, DatasetUUID, Metadata, Tags),
+    chunter_server:create(UUID, Spec),
     {stop, State};
 
 handle_message({machines, delete, UUID}, State) ->

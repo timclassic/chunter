@@ -22,7 +22,6 @@
 	 create/4,
 	 get_vm/1, 
 	 get_vm_pid/1, 
-	 niceify_json/1,
 	 set_total_mem/1,
 	 set_provisioned_mem/1,
 	 provision_memory/1,
@@ -212,12 +211,14 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast(connect,  #state{name = Host} = State) ->
+handle_cast(connect,  #state{name = Host,
+			     datasets = Datasets} = State) ->
 %    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
 %    application:set_env(statsderl, hostname, Host),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     {Networks, _} = re:split(os:cmd("cat /usbkey/config  | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
     VMS = list_vms(Host),
+    publish_datasets(Datasets),
     ProvMem = round(lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
@@ -425,6 +426,26 @@ list_vms(Hypervisor) ->
 get_dataset(UUID, Ds) ->
     read_dsmanifest(filename:join(<<"/var/db/imgadm">>, <<UUID/binary, ".json">>), Ds).
 
+
+
+publish_datasets(Datasets) ->
+    lists:foreach(fun({_, JSON}) ->
+			  publish_dataset(JSON)
+		  end, Datasets).
+			  
+publish_dataset(JSON) ->
+    ID = proplists:get_value(<<"uuid">>, JSON),
+    libsniffle:dataset_create(ID),
+    libsniffle:dataset_attribute_set(
+      ID, 
+      [{<<"dataset">>, ID},
+       {<<"type">>, proplists:get_value(<<"type">>, JSON)},
+       {<<"name">>, proplists:get_value(<<"name">>, JSON)},
+       {<<"networks">>,
+	proplists:get_value(<<"networks">>,
+			    proplists:get_value(<<"requirements">>, JSON))}
+      ]).
+
 list_datasets(Datasets, Auth) ->
     filelib:fold_files("/var/db/imgadm", ".*json", false, 
 		       fun ("/var/db/imgadm/imgcache.json", R) ->
@@ -441,32 +462,14 @@ read_dsmanifest(F, Ds) ->
 	undefined ->
 	    {ok, Data} = file:read_file(F),
 	    JSON = jsx:json_to_term(Data),
-	    JSON1 = niceify_json(JSON),
-	    ID = proplists:get_value(uuid, JSON1),
-	    JSON2 = [{id, ID}|JSON1],
-	    {JSON2, [{F, JSON2}|Ds]};
+	    ID = proplists:get_value(<<"uuid">>, JSON),
+	    JSON1 = [{<<"id">>, ID}|JSON],
+	    publish_dataset(JSON1),
+	    {JSON1, [{F, JSON1}|Ds]};
 	JSON -> 
 	    {JSON, Ds}
     end.
 
-niceify_json([{K, V}|R]) when is_list(V), is_binary(K) ->
-    [{binary_to_atom(K), niceify_json(V)}|niceify_json(R)];
-
-niceify_json([{K, V}|R]) when is_list(V) ->
-    [{K, niceify_json(V)}|niceify_json(R)];
-
-niceify_json([{K, V}|R]) when is_binary(K) ->
-    [{binary_to_atom(K), V}|niceify_json(R)];
-
-niceify_json([H|R]) ->
-    [H|niceify_json(R)];
-
-niceify_json([]) ->
-    [].
-
-binary_to_atom(B) ->
-    list_to_atom(binary_to_list(B)).
-    
 
 get_vm_pid(UUID) ->
     try gproc:lookup_pid({n, l, {vm, UUID}}) of

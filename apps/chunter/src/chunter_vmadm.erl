@@ -51,7 +51,7 @@ info(UUID) ->
     Cmd = <<"/usr/sbin/vmadm info ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
 		"vmadm:cmd - ~s.", [Cmd]),
-    chunter_server:niceify_json(jsx:to_term(list_to_binary(os:cmd(binary_to_list(Cmd))))).
+    jsx:to_term(list_to_binary(os:cmd(binary_to_list(Cmd)))).
 
 start(UUID, Image) ->
     lager:info([{fifi_component, chunter}],

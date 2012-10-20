@@ -19,7 +19,7 @@
 	 stop/1,
 	 reboot/1,
 	 delete/1,
-	 create/2,
+	 create/4,
 	 get_vm/1, 
 	 get_vm_pid/1, 
 	 niceify_json/1,
@@ -28,6 +28,7 @@
 	 provision_memory/1,
 	 unprovision_memory/1,
 	 connect/0,
+	 create_vm/6,
 	 disconnect/0]).
 
 %% gen_server callbacks
@@ -78,8 +79,8 @@ reboot(UUID) ->
 delete(UUID) ->
     gen_server:cast(?SERVER, {machines, delete, UUID}).
 
-create(UUID, Spec) ->
-    gen_server:cast(?SERVER, {machines, create, UUID, Spec}).
+create(UUID, PSpec, DSpec, OSpec) ->
+    gen_server:cast(?SERVER, {machines, create, UUID, PSpec, DSpec, OSpec}).
 
 set_total_mem(M) ->
     gen_server:cast(?SERVER, {set_total_mem, M}).
@@ -122,7 +123,7 @@ init([]) ->
 	       "chunter:init.", []),
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     [Host|_] = re:split(os:cmd("uname -n"), "\n"),
-    zmq_mdns_connection_event:add_handler(chunter_connect_event),
+    mdns_client_lib_connection_event:add_handler(chunter_connect_event),
     libsniffle:hypervisor_register(Host, Host, 4200),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Host]),
@@ -164,44 +165,16 @@ handle_call({call, Auth, {info, memory}}, _From, #state{name = Name,
 %    statsderl:increment([Name, ".call.info.memory"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "hypervisor:info.memory.", []),
-    case libsnarl:allowed(system, Auth, [host, Name, info, memory]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "hypervisor:info.memory - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    {reply, {ok, {P, T}}, State}
-    end;
+    {reply, {ok, {P, T}}, State};
 
 % TODO
 handle_call({call, Auth, {machines, info, UUID}}, _From, #state{name = Name} = State) ->
 %    statsderl:increment([Name, ".call.machines.info.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "machines:info - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [host, Name, vm, UUID, info]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:info - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    Pid = get_vm_pid(UUID),
-	    {ok, Reply} = chunter_vm:info(Pid),
-	    {reply, {ok, Reply}, State}
-    end;
-
-handle_call({call, Auth, {packages, list}}, _From, #state{name = _Name} = State) ->
-%    statsderl:increment([Name, ".call.packages.list"], 1, 1.0),
-    lager:info([{fifi_component, chunter}],
-	       "packages:list", []),
-    case libsnarl:allowed(system, Auth, [package, list]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "packages:list - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    Reply = [], 
-	    {reply, {ok,  Reply}, State}
-    end;
+    Pid = get_vm_pid(UUID),
+    {ok, Reply} = chunter_vm:info(Pid),
+    {reply, {ok, Reply}, State};
 
 handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds, name=_Name} = State) ->
 %    statsderl:increment([Name, ".call.datasets.list"], 1, 1.0),
@@ -214,31 +187,8 @@ handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds, name
 %    statsderl:increment([Name, ".call.datasets.get.", UUID], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "datasets:get - UUID: ~s.", [UUID]),
-    case libsnarl:allowed(system, Auth, [dataset, UUID, get]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "datasets:get - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    {Reply, Ds1} = get_dataset(UUID, Ds), 
-	    {reply, {ok, Reply}, State#state{datasets=Ds1}}
-    end;
-
-
-handle_call({call, Auth, {keys, list}}, _From, #state{name=Name} = State) ->
-%    statsderl:increment([Name, ".call.keys.list"], 1, 1.0),
-    lager:info([{fifi_component, chunter}],
-	       "keys:list", []),
-    case libsnarl:allowed(system, Auth, [host, Name, key, list]) of
-	false ->
-	    lager:warning([{fifi_component, chunter}],
-			  "keys:list - forbidden Auth: ~p.", [Auth]),
-	    {reply, {error, forbidden}, State};
-	true ->
-	    Reply = [], 
-	    {reply, {ok, Reply}, State}
-    end;
-
+    {Reply, Ds1} = get_dataset(UUID, Ds), 
+    {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
 %    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
@@ -338,9 +288,9 @@ handle_cast({unprov_mem, M}, State = #state{name = Name,
 	       "memory:unprovision - Unprivisioned: ~p(~p) , Total: ~p, Change: -~p.", [Res, M, T, MinMB]),
     {noreply, State#state{provisioned_memory = Res}};
 
-handle_cast({machines, create, UUID, Spec},
+handle_cast({machines, create, UUID, PSpec, DSpec, OSpec},
 	    #state{datasets=Ds, name=Name} = State) ->
-    spawn(chunter_server, create_vm, [UUID, Spec, Ds, Name]),
+    spawn(chunter_server, create_vm, [UUID, PSpec, DSpec, OSpec, Ds, Name]),
     {noreply, State};
 
 
@@ -354,9 +304,9 @@ handle_cast({machines, delete, UUID}, #state{name = _Name} = State) ->
 	    [];
 	Nics ->
 	    [try
-		 Net = proplists:get_value(nic_tag, Nic),
-		 IP = proplists:get_value(ip, Nic),
-		 libsnarl:network_release_ip(system, Net, IP),
+		 Net = proplists:get_value(<<"nic_tag">>, Nic),
+		 IP = proplists:get_value(<<"ip">>, Nic),
+		 libsniffle:iprange_release(Net, IP),
 		 ok
 	     catch 
 		 _:_ ->
@@ -364,12 +314,12 @@ handle_cast({machines, delete, UUID}, #state{name = _Name} = State) ->
 	     end
 	     || Nic <- Nics]
     end,
-    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
-	{ok, GUUID} ->
-	    libsnarl:group_delete(system, GUUID);
-	_ -> 
-	    ok
-    end,
+%    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
+%	{ok, GUUID} ->
+%	    libsnarl:group_delete(system, GUUID);
+%	_ -> 
+%	    ok
+%   end,
     {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, VM),
 %	    libsnarl:msg(Auth, success, <<"VM '", UUID/binary,"' is being deleted.">>),
     spawn(chunter_vmadm, delete, [UUID, Mem]),
@@ -476,20 +426,14 @@ get_dataset(UUID, Ds) ->
     read_dsmanifest(filename:join(<<"/var/db/imgadm">>, <<UUID/binary, ".json">>), Ds).
 
 list_datasets(Datasets, Auth) ->
-    {ok, AuthC} = libsnarl:user_cache(system, Auth),
     filelib:fold_files("/var/db/imgadm", ".*json", false, 
 		       fun ("/var/db/imgadm/imgcache.json", R) ->
 			       R;
 			   (F, {Fs, DsA}) ->
 			       {match, [UUID]} = re:run(F, "/var/db/imgadm/(.*)\.json", 
 							[{capture, all_but_first, binary}]),
-			       case libsnarl:allowed(system, AuthC, [dataset, UUID, get]) of
-				   true ->
-				       {F1, DsA1} = read_dsmanifest(F, DsA),
-				       {[F1| Fs], DsA1};
-				   false ->
-				       {Fs, DsA}
-			       end
+			       {F1, DsA1} = read_dsmanifest(F, DsA),
+			       {[F1| Fs], DsA1}
 		       end, {[], Datasets}).
 			       
 read_dsmanifest(F, Ds) ->
@@ -543,96 +487,19 @@ install_image(DatasetUUID) ->
 	    os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
     end.
 
-create_vm(Auth, VMName, PackageUUID, DatasetUUID, Metadata, Tags, Ds, Name) ->
+create_vm(UUID, PSpec, DSpec, OSpec, Ds, Hypervisor) ->
 %    statsderl:increment([Name, ".call.machines.create"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
-	       "machines:create - Name: ~s, Package: ~s, Dataset: ~s.", [VMName, PackageUUID, DatasetUUID]),
+	       "machines:create - Name: ~s, UUID: ~s, PSpec: ~s, DSpec: ~s, OSpec: ~s.", [Hypervisor, UUID, PSpec, DSpec, OSpec]),
+    {<<"dataset_uuid">>, DatasetUUID} = lists:keyfind(<<"dataset_uuid">>, 1, DSpec),
+    install_image(DatasetUUID),
+    {Dataset, _Ds} = get_dataset(DatasetUUID, Ds),
     lager:debug([{fifi_component, chunter}],
-		"machines:create - Meta Data: ~p, Tags: ~p.", [Metadata, Tags]),
-    case libsnarl:allowed(system, Auth, [host, Name, vm, create]) of
-	true ->
-	    install_image(DatasetUUID),
-	    {Dataset, _Ds} = get_dataset(DatasetUUID, Ds),
-	    lager:debug([{fifi_component, chunter}],
-			"machines:create - Dataset Data: ~p.", [Dataset]),
-	    {ok, Package} = libsnarl:option_get(system, <<"packages">>, PackageUUID),
-	    {Memory, []} = string:to_integer(binary_to_list(proplists:get_value(memory, Package))),
-	    {Disk, []} = string:to_integer(binary_to_list(proplists:get_value(disk, Package))),
-	    {Swap,[]} = string:to_integer(binary_to_list(proplists:get_value(swap, Package))),
-	    lager:info([{fifi_component, chunter}],
-		       "machines:create - Memroy: ~pMB, Disk: ~pGB, Swap: ~pMB.", [Memory, Disk, Swap]),
-	    Reply = [{owner_uuid, Auth},
-		     {tags, Tags},
-		     {customer_metadata, Metadata},
-		     {alias, VMName}],
-	    DiskDrv = proplists:get_value(disk_driver, Dataset, <<"virtio">>),
-	    NicDrv = proplists:get_value(nic_driver, Dataset, <<"virtio">>),
-	    lager:info([{fifi_component, chunter}],
-		       "machines:create - Disk driver: ~s, net driver: ~s.", 
-		       [DiskDrv, NicDrv]),
-	    
-	    {Reply1, Rights} = case libsnarl:network_get_ip(Auth, <<"admin">>) of
-				   {ok, IP} ->
-				       {ok, {_, Mask, Gateway, _}} = libsnarl:network_get(Auth, <<"admin">>),
-				       IPStr = libsnarl:ip_to_str(IP),
-				       MaskStr = libsnarl:ip_to_str(Mask),
-				       GWStr = libsnarl:ip_to_str(Gateway),
-				       lager:info([{fifi_component, chunter}],
-						  "machines:create -  ~s mask ~s gw ~s.", 
-						  [IPStr, MaskStr, GWStr]),
-				       {[{nics, 
-					  [[
-					    {nic_tag, <<"admin">>},
-					    {ip, IPStr},
-					    {netmask, MaskStr},
-					    {gateway, GWStr},
-					    {model, NicDrv}
-					   ]]}|Reply],
-					[[network, <<"admin">>, release, libsnarl:ip_to_str(IP)]]};
-				   _ ->
-				       lager:warning([{fifi_component, chunter}],
-						     "create machines - could not obtain IP.", []),
-				       {Reply, []}
-			       end,
-	    Reply2 = case proplists:get_value(os, Dataset) of
-			 <<"smartos">> = OS ->
-%			     statsderl:increment([Name, ".call.machines.create.smartos"], 1, 1.0),
-			     lager:info([{fifi_component, chunter}],
-					"machines:create - os type ~s.", 
-					[OS]),
-			     [{max_physical_memory, Memory},
-			      {quota, Disk},
-			      {cpu_share, Memory},
-			      {cpu_cap, Memory * ?CPU_CAP_MULTIPLYER},
-			      {max_swap, Swap},
-			      {dataset_uuid, DatasetUUID}
-			      |Reply1];
-			 OS ->
-%			     statsderl:increment([Name, ".call.machines.create.kvm"], 1, 1.0),
-			     lager:info([{fifi_component, chunter}],
-					"machines:create - os type ~s.", 
-					[OS]),
-			     Res = [{max_physical_memory, Memory+1024},
-				    {ram, Memory},
-				    {brand, <<"kvm">>},
-				    {disks,
-				     [[{size, Disk*1024},
-				       {model, DiskDrv},
-				       {image_uuid, DatasetUUID}]]},
-				    {disk_driver, DiskDrv},
-				    {nic_driver, NicDrv},
-				    {max_swap, Swap}
-				    |Reply1],
-			     Res
-		     end,
-	    lager:debug([{fifi_component, chunter}],
-			"machines:create - final spec: ~p.", 
-			[Reply2]),
-	    chunter_vmadm:create(Reply2, Auth, Rights),
-	    ok;
-	_ ->
-	    lager:warning([{fifi_component, chunter}],
-			  "machines:create - forbidden Auth: ~p.", [Auth]),
-%	    libsnarl:msg(Auth, <<"error">>, <<"Could not create VM!">>),
-	    ok
-    end.
+		"machines:create - Dataset Data: ~p.", [Dataset]),
+
+    VMData = chunter_spec:to_vmadm(PSpec, DSpec, OSpec),
+    lager:debug([{fifi_component, chunter}],
+		"machines:create - final spec: ~p.", 
+		[VMData]),
+
+    chunter_vmadm:create(VMData).

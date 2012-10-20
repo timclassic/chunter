@@ -13,7 +13,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([to_vmadm/3]).
+-export([to_vmadm/3,
+	 to_sniffle/1]).
 
 to_vmadm(Package, Dataset, OwnerData) ->
     case lists:keyfind(<<"type">>, 1, Dataset) of

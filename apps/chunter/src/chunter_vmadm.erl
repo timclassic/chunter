@@ -15,7 +15,7 @@
 	 info/1,
          reboot/1,
 	 delete/2,
-	 create/3
+	 create/1
 	]).
 
 %%%===================================================================
@@ -77,9 +77,9 @@ reboot(UUID) ->
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
-create(Data, Owner, Rights) ->
+create(Data) ->
     {alias, Alias} = lists:keyfind(alias, 1, Data),
-    lager:info("message: ~p, ~p, ~p", [Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>]),
+    lager:info("message: ~p, ~p, ~p", [info, <<"Creation of VM '", Alias/binary, "' started.">>]),
 %    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),
@@ -91,15 +91,9 @@ create(Data, Owner, Rights) ->
     port_command(Port, "\nEOF\n"),
     Res = case wait_for_tex(Port) of
 	      {ok, UUID} ->
-		  {ok, Owners} = libsnarl:group_add(system, <<"vm_", UUID/binary, "_owner">>),
-		  [libsnarl:group_grant(system, Owners, Perm) ||
-		      Perm <- [[host, '_', vm, UUID, '...'] | Rights]],
-		  libsnarl:user_add_to_group(system, Owner, Owners),
-		  {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, Data),
-		  chunter_server:provision_memory(Mem*1024*1024), % provision memory does not take MB!
+		  {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, Data),
+		  chunter_server:provision_memory(Mem*1024*1024); % provision memory does not take MB!
 %		  libsnarl:msg(Owner, <<"success">>, <<"Your VM '", Alias/binary, "' was successfully created.">>),
-		  ResData = make_frontend_json(chunter_server:get_vm(UUID)),
-		  gproc:send({p, g, {user, Owner}}, {vm, add, ResData});
 	      E ->
 %		  libsnarl:msg(Owner, <<"error">>, <<"Your VM '", Alias/binary, "' failed to create.">>),
 		  lager:error([{fifi_component, chunter}],

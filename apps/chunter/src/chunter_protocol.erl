@@ -1,5 +1,9 @@
 -module(chunter_protocol).
+
 -export([start_link/4, init/4]).
+
+-ignore_xref([start_link/4]).
+
 
 start_link(ListenerPid, Socket, Transport, Opts) ->
     Pid = spawn_link(?MODULE, init, [ListenerPid, Socket, Transport, Opts]),
@@ -56,9 +60,9 @@ handle_message({machines, reboot, UUID}, State) ->
     chunter_server:reboot(UUID),
     {stop, State};
 
-handle_message({machines, create, UUID, Spec}, State) ->
+handle_message({machines, create, UUID, PSpec, DSpec, OSpec}, State) ->
     io:format("create~n"),
-    chunter_server:create(UUID, Spec),
+    chunter_server:create(UUID, PSpec, DSpec, OSpec),
     {stop, State};
 
 handle_message({machines, delete, UUID}, State) ->

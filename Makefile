@@ -42,6 +42,9 @@ shell: all
 test: all
 	$(REBAR) skip_deps=true eunit
 
+xref:
+	$(REBAR) xref skip_deps=true
+
 FORCE:
 
 manifest: rel

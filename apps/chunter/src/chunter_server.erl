@@ -126,7 +126,11 @@ init([]) ->
     libsniffle:hypervisor_register(Host, Host, 4200),
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Host]),
-    {ok, #state{name=Host}}.
+    {_, DS} = list_datasets([]),
+    {ok, #state{
+       name = Host,
+       datasets = DS
+      }}.
 
 
 %%--------------------------------------------------------------------
@@ -179,7 +183,7 @@ handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds, name=_Nam
 %    statsderl:increment([Name, ".call.datasets.list"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
 	       "datasets:list", []),
-    {Reply, Ds1} = list_datasets(Ds, Auth), 
+    {Reply, Ds1} = list_datasets(Ds), 
     {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds, name=_Name} = State) ->
@@ -446,7 +450,7 @@ publish_dataset(JSON) ->
 			    proplists:get_value(<<"requirements">>, JSON))}
       ]).
 
-list_datasets(Datasets, Auth) ->
+list_datasets(Datasets) ->
     filelib:fold_files("/var/db/imgadm", ".*json", false, 
 		       fun ("/var/db/imgadm/imgcache.json", R) ->
 			       R;

@@ -224,6 +224,7 @@ handle_cast(connect,  #state{name = Host,
     Networks1 = lists:delete(<<>>, Networks),
     VMS = list_vms(Host),
     publish_datasets(Datasets),
+    list_datasets(Datasets),
     ProvMem = round(lists:foldl(fun (VM, Mem) ->
 				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
 				  Mem + M
@@ -441,10 +442,16 @@ publish_datasets(Datasets) ->
 publish_dataset(JSON) ->
     ID = proplists:get_value(<<"uuid">>, JSON),
     libsniffle:dataset_create(ID),
+    Type = case proplists:get_value(<<"is">>, JSON) of
+	       <<"smartos">> ->
+		   <<"zone">>;
+	       _ ->
+		   <<"kvm">>
+	   end,
     libsniffle:dataset_attribute_set(
       ID, 
       [{<<"dataset">>, ID},
-       {<<"type">>, proplists:get_value(<<"type">>, JSON)},
+       {<<"type">>, Type},
        {<<"name">>, proplists:get_value(<<"name">>, JSON)},
        {<<"networks">>,
 	proplists:get_value(<<"networks">>,
@@ -504,10 +511,8 @@ create_vm(UUID, PSpec, DSpec, OSpec, Ds, Hypervisor) ->
     {Dataset, _Ds} = get_dataset(DatasetUUID, Ds),
     lager:debug([{fifi_component, chunter}],
 		"machines:create - Dataset Data: ~p.", [Dataset]),
-
     VMData = chunter_spec:to_vmadm(PSpec, DSpec, OSpec),
     lager:debug([{fifi_component, chunter}],
 		"machines:create - final spec: ~p.", 
 		[VMData]),
-
     chunter_vmadm:create(VMData).

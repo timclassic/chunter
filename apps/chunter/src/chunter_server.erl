@@ -504,15 +504,8 @@ install_image(DatasetUUID) ->
 
 create_vm(UUID, PSpec, DSpec, OSpec, Ds, Hypervisor) ->
 %    statsderl:increment([Name, ".call.machines.create"], 1, 1.0),
-    lager:info([{fifi_component, chunter}],
-	       "machines:create - Name: ~s, UUID: ~s, PSpec: ~s, DSpec: ~s, OSpec: ~s.", [Hypervisor, UUID, PSpec, DSpec, OSpec]),
-    {<<"dataset_uuid">>, DatasetUUID} = lists:keyfind(<<"dataset_uuid">>, 1, DSpec),
+    {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DSpec),
     install_image(DatasetUUID),
     {Dataset, _Ds} = get_dataset(DatasetUUID, Ds),
-    lager:debug([{fifi_component, chunter}],
-		"machines:create - Dataset Data: ~p.", [Dataset]),
-    VMData = chunter_spec:to_vmadm(PSpec, DSpec, OSpec),
-    lager:debug([{fifi_component, chunter}],
-		"machines:create - final spec: ~p.", 
-		[VMData]),
+    VMData = chunter_spec:to_vmadm(PSpec, DSpec, [{<<"uuid">>, UUID} | OSpec]),
     chunter_vmadm:create(VMData).

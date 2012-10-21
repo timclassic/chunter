@@ -442,7 +442,7 @@ publish_datasets(Datasets) ->
 publish_dataset(JSON) ->
     ID = proplists:get_value(<<"uuid">>, JSON),
     libsniffle:dataset_create(ID),
-    Type = case proplists:get_value(<<"is">>, JSON) of
+    Type = case proplists:get_value(<<"os">>, JSON) of
 	       <<"smartos">> ->
 		   <<"zone">>;
 	       _ ->

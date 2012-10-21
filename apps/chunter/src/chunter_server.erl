@@ -42,6 +42,7 @@
 		port, 
 		connected = false,
 		datasets = [],
+		capabilities = [],
 		total_memory = 0, 
 		provisioned_memory = 0}).
 
@@ -125,11 +126,18 @@ init([]) ->
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
     libsniffle:hypervisor_register(Host, Host, 4200),
     lager:info([{fifi_component, chunter}],
-	       "chunter:init - Host: ~s", [Host]),
+	       "chunter:init - Host: ~s", [Host]),	
     {_, DS} = list_datasets([]),
+    Capabilities = case os:cmd("ls /dev/kvm") of
+		       "/dev/kvm\n" ->
+			   [<<"zone">>, <<"kvm">>];
+		       _ ->
+			   [<<"zone">>]
+		   end,
     {ok, #state{
        name = Host,
-       datasets = DS
+       datasets = DS,
+       capabilities = Capabilities
       }}.
 
 
@@ -216,7 +224,8 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 handle_cast(connect,  #state{name = Host,
-			     datasets = Datasets} = State) ->
+			     datasets = Datasets,
+			     capabilities = Caps} = State) ->
 %    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
 %    application:set_env(statsderl, hostname, Host),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
@@ -239,7 +248,8 @@ handle_cast(connect,  #state{name = Host,
     libsniffle:hypervisor_resource_set(Host, [{<<"networks">>, Networks1},
 					      {<<"free-memory">>, TotalMem - ProvMem},
 					      {<<"provisioned-memory">>, ProvMem},
-					      {<<"total-memory">>, TotalMem}]),
+					      {<<"total-memory">>, TotalMem},
+					      {<<"virtualisation">>, Caps}]),
     
     {noreply, State#state{
 		total_memory = TotalMem,

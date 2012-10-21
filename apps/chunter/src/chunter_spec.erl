@@ -93,10 +93,10 @@ generate_spec(P, [{<<"networks">>, N} | D], O, T, DUUID, Spec) ->
     generate_spec(P, D, O, T, DUUID, [{<<"nics">>, generate_nics(N, [])} | Spec]);
 
 generate_spec([{<<"ram">>, V} | P], [], O, kvm = T, DUUID, Spec) ->
-    generate_spec(P, [], O, T, DUUID, [{<<"ram">>, V}, {<<"max_physical_memory">>, (V + 1024)*1024*1024} | Spec]);
+    generate_spec(P, [], O, T, DUUID, [{<<"ram">>, V}, {<<"max_physical_memory">>, V + 1024} | Spec]);
 
 generate_spec([{<<"ram">>, V} | P], [], O, zone = T, DUUID, Spec) ->
-    generate_spec(P, [], O, T, DUUID, [{<<"max_physical_memory">>, V*1024*1024} | Spec]);
+    generate_spec(P, [], O, T, DUUID, [{<<"max_physical_memory">>, V} | Spec]);
 
 generate_spec([{<<"quota">>, V} | P], [], O, kvm = T, DUUID, Spec) ->
     generate_spec(P, [], O, T, DUUID,

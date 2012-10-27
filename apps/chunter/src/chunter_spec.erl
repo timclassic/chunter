@@ -147,7 +147,10 @@ zone_ram_test() ->
     InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
     InO = [{<<"uuid">>, <<"zone uuid">>}],
     In = ordsets:from_list(InP ++ InD ++ InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+    VMData = to_vmadm(InP, InD, InO),
+    VMData1 = lists:keydelete(<<"max_physical_memory">>, 1, VMData),
+    VMData2 = [{<<"max_physical_memory">>, 1024*1024*1024} | VMData1],
+    ?assertEqual(In, ordsets:from_list(to_sniffle(VMData2))).
 
 kvm_ram_test() ->
     InP = [{<<"quota">>, 10}, {<<"ram">>, 1024}],
@@ -168,6 +171,9 @@ nics_test() ->
 						   {<<"nic_tag">>, <<"admin">>},
 						   {<<"ip">>, <<"127.0.0.1">>}]]}]
 			   ++ InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+    VMData = to_vmadm(InP, InD, InO),
+    VMData1 = lists:keydelete(<<"max_physical_memory">>, 1, VMData),
+    VMData2 = [{<<"max_physical_memory">>, 1024*1024*1024} | VMData1],
+    ?assertEqual(In, ordsets:from_list(to_sniffle(VMData2))).
 
 -endif.

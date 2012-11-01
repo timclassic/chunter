@@ -24,7 +24,7 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    [_Name|_] = re:split(os:cmd("uname -n"), "\n"),
     {ok, {{one_for_one, 5, 10}, [
 %				 {vmstats_sup, 
 %				  {vmstats_sup, start_link, [<<Name/binary, ".vmstats">>]}, permanent, 5000, supervisor, [vmstats_sup]},

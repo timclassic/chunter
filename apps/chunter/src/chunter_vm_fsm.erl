@@ -223,7 +223,8 @@ handle_event({force_state, NextState}, _, State) ->
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, StateName),
-    VMData = load_vm(State#state.uuid),
+    _VMData = load_vm(State#state.uuid),
+% TODO send teh data
     {next_state, StateName, State};
 
 handle_event(delete, StateName, State) ->
@@ -335,12 +336,12 @@ install_image(DatasetUUID) ->
 
 
 load_vm(ZUUID) ->
-    [Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
+    %[Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
     [VM] = [chunter_zoneparser:load([{<<"name">>,Name},
 				     {<<"state">>, VMState},
 				     {<<"zonepath">>, Path},
 				     {<<"type">>, Type}]) || 
-	       [ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
+	       [ID,Name,VMState,Path,_UUID,Type,_IP,_SomeNumber] <- 
 		   [ re:split(Line, ":") 
 		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
 	       ID =/= <<"0">>],

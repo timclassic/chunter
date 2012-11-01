@@ -313,7 +313,7 @@ list_datasets(Datasets) ->
 		       fun ("/var/db/imgadm/imgcache.json", R) ->
 			       R;
 			   (F, {Fs, DsA}) ->
-			       {match, [UUID]} = re:run(F, "/var/db/imgadm/(.*)\.json", 
+			       {match, [_UUID]} = re:run(F, "/var/db/imgadm/(.*)\.json", 
 							[{capture, all_but_first, binary}]),
 			       {F1, DsA1} = read_dsmanifest(F, DsA),
 			       {[F1| Fs], DsA1}

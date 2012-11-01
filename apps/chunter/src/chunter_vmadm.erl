@@ -90,7 +90,7 @@ create(Data) ->
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     Res = case wait_for_tex(Port) of
-	      {ok, UUID} ->
+	      {ok, _UUID} ->
 		  {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, Data),
 		  chunter_server:provision_memory(Mem*1024*1024); % provision memory does not take MB!
 %		  libsnarl:msg(Owner, <<"success">>, <<"Your VM '", Alias/binary, "' was successfully created.">>),
@@ -126,45 +126,3 @@ wait_for_tex(Port) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-    
-
-
-
-make_frontend_json([{nics, Ns} | R]) ->
-    IPs = lists:map(fun (N) ->
-			    proplists:get_value(ip, N)
-		    end,Ns),
-    [{ips, IPs}|make_frontend_json(R)];
-
-make_frontend_json([{zonename, N} | R]) ->
-    Rest = make_frontend_json(R),
-    case proplists:get_value(name, Rest) of
-	undefined ->
-	    [{name, N}|make_frontend_json(R)];
-	_ ->
-	    Rest
-    end;
-make_frontend_json([{max_physical_memory, N} | R]) ->
-    Rest = make_frontend_json(R),
-    M = N/(1024*1024),
-    case proplists:get_value(memory, Rest) of
-	undefined ->
-	    [{memory, M},
-	     {max_physical_memory, M}
-	     |Rest];
-	_ ->
-	    [{max_physical_memory, M}
-	     |Rest]
-	end;
-make_frontend_json([{state, <<"installed">>} | R]) ->
-    [{state, <<"stopped">>}|make_frontend_json(R)];
-make_frontend_json([{alias, N} | R]) ->
-    [{name, N}|make_frontend_json(R)];
-make_frontend_json([{ram, R} | R]) ->
-    [{memory, R}|proplists:delete(memory,make_frontend_json(R))];
-make_frontend_json([]) ->
-    [];
-make_frontend_json([{K, V}|R]) ->
-    [{K, V}|make_frontend_json(R)].

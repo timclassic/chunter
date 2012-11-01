@@ -12,11 +12,22 @@
 
 %% API
 -export([start_link/0, 
+	 list/0, 
+	 get/1, 
+	 start/1,
+	 start/2,
+	 stop/1,
+	 reboot/1,
+	 delete/1,
+	 create/4,
+	 get_vm/1, 
+	 get_vm_pid/1, 
 	 set_total_mem/1,
 	 set_provisioned_mem/1,
 	 provision_memory/1,
 	 unprovision_memory/1,
 	 connect/0,
+	 create_vm/6,
 	 disconnect/0]).
 
 %% gen_server callbacks
@@ -50,6 +61,27 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+get(UUID) ->
+    gen_server:call(?SERVER, {machines, get, UUID}).
+
+start(UUID) ->
+    gen_server:cast(?SERVER, {machines, start, UUID}).
+
+start(UUID, Image) ->
+    gen_server:cast(?SERVER, {machines, start, UUID, Image}).
+
+stop(UUID) ->
+    gen_server:cast(?SERVER, {machines, stop, UUID}).
+
+reboot(UUID) ->
+    gen_server:cast(?SERVER, {machines, reboot, UUID}).
+
+delete(UUID) ->
+    gen_server:cast(?SERVER, {machines, delete, UUID}).
+
+create(UUID, PSpec, DSpec, OSpec) ->
+    gen_server:cast(?SERVER, {machines, create, UUID, PSpec, DSpec, OSpec}).
+
 set_total_mem(M) ->
     gen_server:cast(?SERVER, {set_total_mem, M}).
 
@@ -67,6 +99,9 @@ connect() ->
 
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
+
+list() ->
+    gen_server:call(?SERVER, {machines, list}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -93,12 +128,6 @@ init([]) ->
     lager:info([{fifi_component, chunter}],
 	       "chunter:init - Host: ~s", [Host]),	
     {_, DS} = list_datasets([]),
-    lists:foldl(
-      fun (VM, _) ->
-	      {<<"uuid">>, UUID} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
-	      chunter_vm_fsm:load(UUID)
-      end, 0, list_vms()),
-
     Capabilities = case os:cmd("ls /dev/kvm") of
 		       "/dev/kvm\n" ->
 			   [<<"zone">>, <<"kvm">>];
@@ -126,6 +155,51 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({machines, list}, _From,  #state{name=Name} = State) ->
+%    statsderl:increment([Name, ".call.machines.list"], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "machines:list.", []),
+    VMS = list_vms(Name),
+    {reply, {ok, VMS}, State};
+
+handle_call({machines, get, UUID}, _From, #state{name = _Name} =  State) ->
+%    statsderl:increment([Name, ".call.machines.get.", UUID], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "machines:get - UUID: ~s.", [UUID]),
+    Pid = get_vm_pid(UUID),
+    {ok, Reply} = chunter_vm:get(Pid),
+    {reply, {ok, Reply}, State};
+
+handle_call({call, Auth, {info, memory}}, _From, #state{name = Name,
+							total_memory = T, 
+							provisioned_memory = P} = State) ->
+%    statsderl:increment([Name, ".call.info.memory"], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "hypervisor:info.memory.", []),
+    {reply, {ok, {P, T}}, State};
+
+% TODO
+handle_call({call, Auth, {machines, info, UUID}}, _From, #state{name = Name} = State) ->
+%    statsderl:increment([Name, ".call.machines.info.", UUID], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "machines:info - UUID: ~s.", [UUID]),
+    Pid = get_vm_pid(UUID),
+    {ok, Reply} = chunter_vm:info(Pid),
+    {reply, {ok, Reply}, State};
+
+handle_call({call, Auth, {datasets, list}}, _From, #state{datasets=Ds, name=_Name} = State) ->
+%    statsderl:increment([Name, ".call.datasets.list"], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "datasets:list", []),
+    {Reply, Ds1} = list_datasets(Ds), 
+    {reply, {ok, Reply}, State#state{datasets=Ds1}};
+
+handle_call({call, Auth, {datasets, get, UUID}}, _From, #state{datasets=Ds, name=_Name} = State) ->
+%    statsderl:increment([Name, ".call.datasets.get.", UUID], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "datasets:get - UUID: ~s.", [UUID]),
+    {Reply, Ds1} = get_dataset(UUID, Ds), 
+    {reply, {ok, Reply}, State#state{datasets=Ds1}};
 
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
 %    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
@@ -157,16 +231,13 @@ handle_cast(connect,  #state{name = Host,
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     Networks = re:split(os:cmd("cat /usbkey/config  | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
     Networks1 = lists:delete(<<>>, Networks),
-    VMS = list_vms(),
+    VMS = list_vms(Host),
     publish_datasets(Datasets),
     list_datasets(Datasets),
-    ProvMem = round(lists:foldl(
-		      fun (VM, Mem) ->
-			      {<<"uuid">>, UUID} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
-			      chunter_vm_fsm:load(UUID),
-			      {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
-			      Mem + M
-		      end, 0, VMS) / (1024*1024)),
+    ProvMem = round(lists:foldl(fun (VM, Mem) ->
+				  {max_physical_memory, M} = lists:keyfind(max_physical_memory, 1, VM),
+				  Mem + M
+			  end, 0, VMS) / (1024*1024)),
     
 %    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
 %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
@@ -234,8 +305,75 @@ handle_cast({unprov_mem, M}, State = #state{name = Name,
 	       "memory:unprovision - Unprivisioned: ~p(~p) , Total: ~p, Change: -~p.", [Res, M, T, MinMB]),
     {noreply, State#state{provisioned_memory = Res}};
 
+handle_cast({machines, create, UUID, PSpec, DSpec, OSpec},
+	    #state{datasets=Ds, name=Name} = State) ->
+    spawn(chunter_server, create_vm, [UUID, PSpec, DSpec, OSpec, Ds, Name]),
+    {noreply, State};
 
-handle_cast(_Msg, #state{name = _Name} = State) ->
+
+handle_cast({machines, delete, UUID}, #state{name = _Name} = State) ->
+%    statsderl:increment([Name, ".cast.machines.delete"], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "machines:delete - UUID: ~s.", [UUID]),
+    VM = get_vm(UUID),
+    case proplists:get_value(nics, VM) of
+	undefined ->
+	    [];
+	Nics ->
+	    [try
+		 Net = proplists:get_value(<<"nic_tag">>, Nic),
+		 IP = proplists:get_value(<<"ip">>, Nic),
+		 libsniffle:iprange_release(Net, IP),
+		 ok
+	     catch 
+		 _:_ ->
+		     ok
+	     end
+	     || Nic <- Nics]
+    end,
+%    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
+%	{ok, GUUID} ->
+%	    libsnarl:group_delete(system, GUUID);
+%	_ -> 
+%	    ok
+%   end,
+    {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, VM),
+%	    libsnarl:msg(Auth, success, <<"VM '", UUID/binary,"' is being deleted.">>),
+    spawn(chunter_vmadm, delete, [UUID, Mem]),
+    {noreply, State};
+
+handle_cast({machines, start, UUID}, #state{name = _Name} = State) ->
+    lager:info([{fifi_component, chunter}],
+	       "machines:start - UUID: ~s.", [UUID]),
+    spawn(chunter_vmadm, start, [UUID]),
+    {noreply, State};
+
+handle_cast({machines, start, UUID, Image}, #state{name = _Name} =State) ->
+%    statsderl:increment([Name, ".cast.machines.start_image.", UUID], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "machines:start - UUID: ~s, Image: ~s.", [UUID, Image]),
+    spawn(chunter_vmadm, start, [UUID, Image]),
+    {noreply, State};
+
+
+handle_cast({machines, stop, UUID}, #state{name = _Name} = State) ->
+%    statsderl:increment([Name, ".cast.machines.stop.", UUID], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "machines:stop - UUID: ~s.", [UUID]),
+    spawn(chunter_vmadm, stop, [UUID]),
+    {noreply, State};
+
+handle_cast({machines, reboot, UUID}, #state{name = _Name} =State) ->
+%    statsderl:increment([Name, ".cast.machines.reboot.", UUID], 1, 1.0),
+    lager:info([{fifi_component, chunter}],
+	       "machines:reboot - UUID: ~s.", [UUID]),
+    spawn(chunter_vmadm, reboot, [UUID]),
+    {noreply, State};
+
+
+handle_cast(Msg, #state{name = _Name} = State) ->
+    lager:warning("Unknwn cast: ~p", Msg),
+%    statsderl:increment([Name, ".cast.unknown"], 1, 1.0),
     {noreply, State}.
 
 
@@ -283,6 +421,28 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+get_vm(ZUUID) ->
+    [Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
+    [VM] = [chunter_zoneparser:load([{hypervisor, Hypervisor}, {name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
+	       [ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
+		   [ re:split(Line, ":") 
+		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
+	       ID =/= <<"0">>],
+    VM.
+
+list_vms(Hypervisor) ->
+    [chunter_zoneparser:load([{hypervisor, Hypervisor}, {name,Name},{state, VMState},{zonepath, Path},{uuid, UUID},{type, Type}]) || 
+	[ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
+	    [ re:split(Line, ":") 
+	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
+	ID =/= <<"0">>].
+
+get_dataset(UUID, Ds) ->
+    read_dsmanifest(filename:join(<<"/var/db/imgadm">>, <<UUID/binary, ".json">>), Ds).
+
+
 
 publish_datasets(Datasets) ->
     lists:foreach(fun({_, JSON}) ->
@@ -332,9 +492,30 @@ read_dsmanifest(F, Ds) ->
 	    {JSON, Ds}
     end.
 
-list_vms() ->
-    [chunter_zoneparser:load([{<<"uuid">>, UUID}]) || 
-	[ID,_Name,_VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
-	    [ re:split(Line, ":") 
-	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-	ID =/= <<"0">>].
+
+get_vm_pid(UUID) ->
+    try gproc:lookup_pid({n, l, {vm, UUID}}) of
+	Pid ->
+	    Pid
+    catch
+	_T:_E ->
+	    {ok, Pid} = chunter_vm_sup:start_child(UUID),
+	    Pid
+    end.
+
+install_image(DatasetUUID) ->
+    case filelib:is_regular(filename:join(<<"/var/db/imgadm">>, <<DatasetUUID/binary, ".json">>)) of
+	true ->
+	    ok;
+	false ->
+%	    libsnarl:msg(Auth, <<"warning">>, <<"Dataset needs to be imported!">>),
+	    os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
+    end.
+
+create_vm(UUID, PSpec, DSpec, OSpec, Ds, Hypervisor) ->
+%    statsderl:increment([Name, ".call.machines.create"], 1, 1.0),
+    {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DSpec),
+    install_image(DatasetUUID),
+    {Dataset, _Ds} = get_dataset(DatasetUUID, Ds),
+    VMData = chunter_spec:to_vmadm(PSpec, DSpec, [{<<"uuid">>, UUID} | OSpec]),
+    chunter_vmadm:create(VMData).

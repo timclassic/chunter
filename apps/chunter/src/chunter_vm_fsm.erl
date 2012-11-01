@@ -11,13 +11,20 @@
 -behaviour(gen_fsm).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
+
+-export([create/4,
+	 load/1,
+	 transition/2,
+	 force_state/2]).
 
 %% gen_fsm callbacks
 -export([init/1, state_name/3, handle_event/3,
 	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
--export([creating/2,
+-export([initialized/2,
+	 creating/2,
+	 loading/2,
 	 stopped/2,
 	 booting/2,
 	 running/2,
@@ -26,11 +33,35 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {uuid}).
+-record(state, {hypervisor, uuid}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
+    start_link(UUID),
+    gen_fsn:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
+
+load(UUID) ->
+    case global:whereis_name({vm, UUID}) of
+	undefined ->
+	    start_link(UUID),
+	    gen_fsn:send_event({global, {vm, UUID}}, load);
+	_ ->
+	    register(UUID)
+    end.
+
+transition(UUID, State) ->
+    gen_fsm:sync_send_event({global, {vm, UUID}}, {transition, State}).
+
+
+force_state(UUID, State) ->
+    gen_fsm:sync_send_event({global, {vm, UUID}}, {force_state, State}).
+
+register(UUID) ->
+    gen_fsm:sync_send_event({global, {vm, UUID}}, register).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -41,8 +72,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
-    gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(UUID) ->
+    gen_fsm:start_link({global, {vm, UUID}}, ?MODULE, [UUID], []).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -61,12 +92,10 @@ start_link() ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([{create, UUID, Spec}]) ->
-    {ok, creating, #state{uuid = UUID}};
-
-init([{load, UUID}]) ->
-    {ok, loading, #state{uuid = UUID}}.
-
+init([UUID]) ->
+    [Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
+    libsniffle:vm_register(UUID, Hypervisor),
+    {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor}}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -82,66 +111,65 @@ init([{load, UUID}]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-state_name(_Event, State) ->
-    {next_state, state_name, State}.
 
+initialized(load, State) ->
+    {next_state, loading, State};
 
-creating(_Event, State) ->
-    {next_state, creating, State}.
+initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{uuid=UUID}) ->
+    {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
+    VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
+    libsniffle:vm_attribute_set(UUID, <<"state">>, installing_dataset),
+    libsniffle:vm_attribute_set(UUID, <<"config">>, VMData),
+    install_image(DatasetUUID),
+    spawn(chunter_vmadm, create, [VMData]),
+    libsniffle:vm_attribute_set(UUID, <<"state">>, creating),
+    {next_state, creating, State};
 
-loading(_Event, State) ->
-    {next_state, loading, State}.
+initialized(_, State) ->
+    {next_state, initialized, State}.
 
-stopped({force_state, UUID, NextState}, State = #state{uuid = UUID}) ->
-    libsniffle:vm_attribute_set(UUID, <<"state">>, NextState),
-    {next_state, NextState, State};
+creating({transition, NextState}, State) ->
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    {next_state, NextState, State}.
+
+loading({transition, NextState}, State) ->
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    {next_state, NextState, State}.
 
 stopped({transition, NextState = booting}, State) ->
-    libsniffle:vm_attribute_set(State.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
     {next_state, NextState, State};
 
 stopped(start, State) ->
-    chunter_vmadm:start(State.uuid),
+    chunter_vmadm:start(State#state.uuid),
     {next_state, stopped, State};
 
 stopped(_, State) ->
     {next_state, stopped, State}.
 
 
-booting({force_state, NextState}, State) ->
-    libsniffle:vm_attribute_set(State.uuid, <<"state">>, NextState),
-    {next_state, NextState, State};
-
 booting({transition, NextState = shutting_down}, State) ->
-    libsniffle:vm_attribute_set(State.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
     {next_state, NextState, State};
 
 booting({transition, NextState = running}, State) ->
-    libsniffle:vm_attribute_set(State.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
     {next_state, NextState, State};
 
 booting(_, State) ->
     {next_state, booting, State}.
 
 
-running({force_state, NextState}, State) ->
-    libsniffle:vm_attribute_set(State.uuid, <<"state">>, NextState),
-    {next_state, NextState, State};
-
 running({transition, NextState = shutting_down}, State) ->
-    libsniffle:vm_attribute_set(State.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
     {next_state, NextState, State};
 
 running(_, State) ->
     {next_state, running, State}.
 
 
-shutting_down({force_state, NextState}, State) ->
-    libsniffle:vm_attribute_set(State.uuid, <<"state">>, NextState),
-    {next_state, NextState, State};
-
 shutting_down({transition, NextState = stopped}, State) ->
-    libsniffle:vm_attribute_set(State.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
     {next_state, NextState, State};
 
 shutting_down(_, State) ->
@@ -183,6 +211,51 @@ state_name(_Event, _From, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
+
+handle_event({force_state, StateName}, StateName, State) ->
+    {next_state, StateName, State};
+
+handle_event({force_state, NextState}, _, State) ->
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    {next_state, NextState, State};
+
+handle_event(register, StateName, State) ->
+    libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, StateName),
+    VMData = load_vm(State#state.uuid),
+    {next_state, StateName, State};
+
+handle_event(delete, StateName, State) ->
+    libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
+
+    VM = load_vm(State#state.uuid),
+    case proplists:get_value(nics, VM) of
+	undefined ->
+	    [];
+	Nics ->
+	    [try
+		 Net = proplists:get_value(<<"nic_tag">>, Nic),
+		 IP = proplists:get_value(<<"ip">>, Nic),
+		 libsniffle:iprange_release(Net, IP),
+		 ok
+	     catch 
+		 _:_ ->
+		     ok
+	     end
+	     || Nic <- Nics]
+    end,
+%    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
+%	{ok, GUUID} ->
+%	    libsnarl:group_delete(system, GUUID);
+%	_ -> 
+%	    ok
+%   end,
+    {max_physical_memory, Mem} = lists:keyfind(max_physical_memory, 1, VM),
+    spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
+    {next_state, StateName, State};
+
+
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
@@ -251,3 +324,24 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+install_image(DatasetUUID) ->
+    case filelib:is_regular(filename:join(<<"/var/db/imgadm">>, <<DatasetUUID/binary, ".json">>)) of
+	true ->
+	    ok;
+	false ->
+	    os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
+    end.
+
+
+load_vm(ZUUID) ->
+    [Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
+    [VM] = [chunter_zoneparser:load([{<<"name">>,Name},
+				     {<<"state">>, VMState},
+				     {<<"zonepath">>, Path},
+				     {<<"type">>, Type}]) || 
+	       [ID,Name,VMState,Path,UUID,Type,_IP,_SomeNumber] <- 
+		   [ re:split(Line, ":") 
+		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
+	       ID =/= <<"0">>],
+    VM.

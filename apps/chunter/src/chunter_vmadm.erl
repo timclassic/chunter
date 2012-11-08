@@ -36,6 +36,14 @@ start(UUID) ->
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
+start(UUID, Image) ->
+    lager:info([{fifi_component, chunter}],
+	       "vmadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
+    Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
+    lager:debug([{fifi_component, chunter}],
+		"vmadm:cmd - ~s.", [Cmd]),
+    os:cmd(binary_to_list(Cmd)).
+
 delete(UUID, Mem) ->
     lager:info([{fifi_component, chunter}],
 	       "vmadm:delete - UUID: ~s.", [UUID]),
@@ -52,14 +60,6 @@ info(UUID) ->
     lager:debug([{fifi_component, chunter}],
 		"vmadm:cmd - ~s.", [Cmd]),
     jsx:to_term(list_to_binary(os:cmd(binary_to_list(Cmd)))).
-
-start(UUID, Image) ->
-    lager:info([{fifi_component, chunter}],
-	       "vmadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
-    Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
-    lager:debug([{fifi_component, chunter}],
-		"vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
 
 stop(UUID) ->
     lager:info([{fifi_component, chunter}],

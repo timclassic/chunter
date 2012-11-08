@@ -11,16 +11,17 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, connect/0, disconnect/0]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
+-ignore_xref([start_link/0]).
+
 -define(SERVER, ?MODULE). 
 
 -record(state, {name,
-		connected = false,
 		port}).
 
 %%%===================================================================
@@ -36,12 +37,6 @@
 %%--------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-connect() ->
-    gen_server:cast(?SERVER, connect).
-
-disconnect() ->
-    gen_server:cast(?SERVER, disconnect).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -99,11 +94,6 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(connect,  State) ->
-    {noreply, State#state{connected = true}};
-
-handle_cast(disconnect,  State) ->
-    {noreply, State#state{connected = false}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -119,7 +109,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
-    [chunter_vm:force_state(chunter_server:get_vm_pid(UUID),simplifie_state(list_to_atom(binary_to_list(VMState)))) ||
+    [chunter_vm_fsm:force_state(UUID, simplifie_state(list_to_atom(binary_to_list(VMState)))) ||
 	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
@@ -137,8 +127,7 @@ handle_info({_Port, {data, {eol, Data}}}, #state{name=_Name, port=_Port} = State
 	    chunter_vm_sup:start_child(UUID);
 	{UUID, Action} ->
 %	    statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
-	    Pid = chunter_server:get_vm_pid(UUID),
-	    chunter_vm:set_state(Pid, simplifie_state(Action))
+	    chunter_vm_fsm:transition(UUID, simplifie_state(Action))
     end,
     {noreply, State};
 

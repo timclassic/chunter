@@ -14,14 +14,10 @@ init(_) ->
     {ok, stateless}.
 
 handle_event({connected, "sniffle"}, State) ->
-    [chunter_vm:connect(Pid)
-     || {_, Pid, _, _} <- supervisor:which_children(chunter_vm_sup)],
     chunter_server:connect(),
     {ok, State};
 
 handle_event({disconnected, "sniffle"}, State) ->
-    [chunter_vm:disconnect(Pid)
-     || {_, Pid, _, _} <- supervisor:which_children(chunter_vm_sup)],
     chunter_server:disconnect(),
     {ok, State};
 

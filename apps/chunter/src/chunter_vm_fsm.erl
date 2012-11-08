@@ -12,6 +12,14 @@
 
 %% API
 -export([start_link/1]).
+-ignore_xref([start_link/1,
+	      initialized/2,
+	      creating/2,
+	      loading/2,
+	      stopped/2,
+	      booting/2,
+	      running/2,
+	      shutting_down/2]).
 
 -export([create/4,
 	 load/1,
@@ -19,9 +27,11 @@
 	 force_state/2]).
 
 %% gen_fsm callbacks
--export([init/1, state_name/3, handle_event/3,
+-export([init/1, handle_event/3,
 	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
+
+% This functions have to be exported but are only used internally.
 -export([initialized/2,
 	 creating/2,
 	 loading/2,
@@ -29,7 +39,6 @@
 	 booting/2,
 	 running/2,
 	 shutting_down/2]).
-
 
 -define(SERVER, ?MODULE).
 
@@ -117,7 +126,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{uuid=UUID})
     {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
     libsniffle:vm_attribute_set(UUID, <<"state">>, installing_dataset),
-    libsniffle:vm_attribute_set(UUID, <<"config">>, VMData),
+    libsniffle:vm_attribute_set(UUID, <<"config">>, chunter_spec:to_sniffle(VMData)),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
     libsniffle:vm_attribute_set(UUID, <<"state">>, creating),
@@ -152,6 +161,8 @@ booting({transition, NextState = shutting_down}, State) ->
 
 booting({transition, NextState = running}, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    Info = chunter_vmadm:info(State#state.uuid),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
     {next_state, NextState, State};
 
 booting(_, State) ->
@@ -192,9 +203,6 @@ shutting_down(_, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-state_name(_Event, _From, State) ->
-    Reply = ok,
-    {reply, Reply, state_name, State}.
 
 %%--------------------------------------------------------------------
 %% @private

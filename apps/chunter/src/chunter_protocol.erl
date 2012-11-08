@@ -42,32 +42,33 @@ loop(Socket, Transport, HandlerState) ->
 
 handle_message({machines, start, UUID}, State) ->
     io:format("start~n"),
-    chunter_server:start(UUID),
+    chunter_vmadm:start(UUID),
     {stop, State};
 
 handle_message({machines, start, UUID, Image}, State) ->
     io:format("start1~n"),
-    chunter_server:start(UUID, Image),
+    chunter_vmadm:start(UUID, Image),
     {stop, State};
 
 handle_message({machines, stop, UUID}, State) ->
     io:format("stop~n"),
-    chunter_server:stop(UUID),
+    chunter_vmadm:stop(UUID),
     {stop, State};
 
 handle_message({machines, reboot, UUID}, State) ->
     io:format("reboot~n"),
-    chunter_server:reboot(UUID),
+    chunter_vmadm:reboot(UUID),
     {stop, State};
 
 handle_message({machines, create, UUID, PSpec, DSpec, OSpec}, State) ->
     io:format("create~n"),
-    chunter_server:create(UUID, PSpec, DSpec, OSpec),
+    chunter_vm_fsm:create(UUID, PSpec, DSpec, OSpec),
     {stop, State};
 
-handle_message({machines, delete, UUID}, State) ->
+handle_message({machines, delete, _UUID}, State) ->
     io:format("delete~n"),
-    chunter_server:delete(UUID),
+% TODO: implement this
+%    chunter_server:delete(UUID),
     {stop, State};
 
 handle_message(Oops, State) ->

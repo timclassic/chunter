@@ -42,10 +42,10 @@ shell: all
 	rm *.beam || true
 	[ -f erl_crash.dump ] && rm erl_crash.dump || true
 
-test: all
+test: all xref
 	$(REBAR) skip_deps=true eunit
 
-xref:
+xref: all
 	$(REBAR) xref skip_deps=true
 
 FORCE:

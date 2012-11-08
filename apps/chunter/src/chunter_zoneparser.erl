@@ -9,7 +9,7 @@
 -module(chunter_zoneparser).
 
 %% API
--export([convert/2, load/1]).
+-export([load/1]).
 
 
 -define(REMOVE(Key),

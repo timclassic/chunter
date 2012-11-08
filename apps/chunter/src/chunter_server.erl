@@ -12,16 +12,17 @@
 
 %% API
 -export([start_link/0, 
-	 set_total_mem/1,
-	 set_provisioned_mem/1,
 	 provision_memory/1,
 	 unprovision_memory/1,
 	 connect/0,
 	 disconnect/0]).
 
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
+
+-ignore_xref([start_link/0]).
 
 -define(CPU_CAP_MULTIPLYER, 8).
 
@@ -49,12 +50,6 @@
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-set_total_mem(M) ->
-    gen_server:cast(?SERVER, {set_total_mem, M}).
-
-set_provisioned_mem(M) ->
-    gen_server:cast(?SERVER, {set_provisioned_mem, M}).
 
 provision_memory(M) ->
     gen_server:cast(?SERVER, {prov_mem, M}).
@@ -188,27 +183,6 @@ handle_cast(connect,  #state{name = Host,
 
 handle_cast(disconnect,  State) ->
     {noreply, State#state{connected = false}};
-
-handle_cast({set_total_mem, M}, State = #state{provisioned_memory = P,
-					       name = Name}) ->
-    libsniffle:hypervisor_resource_set(Name, [{<<"free-memory">>, M - P},
-					      {<<"total-memory">>, M}]),
-%    statsderl:gauge([Name, ".hypervisor.memory.total"], M, 1),
-    {noreply, State#state{total_memory= M}};
-
-
-handle_cast({set_provisioned_mem, M}, State = #state{name = Name,
-						     provisioned_memory = P,
-						     total_memory = T}) ->
-    MinMB = round(M / (1024*1024)),
-    Diff = round(P - MinMB),
-    libsniffle:hypervisor_resource_set(Name, [{<<"free-memory">>, T - MinMB},
-					      {<<"provisioned-memory">>, MinMB}]),
-%    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], MinMB, 1),
-    lager:info([{fifi_component, chunter}],
-	       "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: ~p .", [MinMB, M, T, Diff]),    
-    {noreply, State#state{provisioned_memory = MinMB}};
-
 
 handle_cast({prov_mem, M}, State = #state{name = Name,
 					  provisioned_memory = P,

@@ -41,13 +41,13 @@
 
 create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
     start_link(UUID),
-    gen_fsn:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
+    gen_fsm:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
 
 load(UUID) ->
     case global:whereis_name({vm, UUID}) of
 	undefined ->
 	    start_link(UUID),
-	    gen_fsn:send_event({global, {vm, UUID}}, load);
+	    gen_fsm:send_event({global, {vm, UUID}}, load);
 	_ ->
 	    register(UUID)
     end.

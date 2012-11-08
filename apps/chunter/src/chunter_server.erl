@@ -159,7 +159,7 @@ handle_cast(connect,  #state{name = Host,
 		      fun (VM, Mem) ->
 			      {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
 			      chunter_vm_fsm:load(UUID),
-			      {<<"max-physical-memory">>, M} = lists:keyfind(<<"max-physical-memory">>, 1, VM),
+			      {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
 			      Mem + M
 		      end, 0, VMS) / (1024*1024)),
     

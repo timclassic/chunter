@@ -180,49 +180,49 @@ create_zone_data([{nic, Nic}|R], Disks, Nics, Datasets) ->
 create_zone_data([{dataset, Dataset}|R], Disks, Nics, Datasets) ->
    create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
 
-?REMOVE(<<"ip-type">>);
+?REMOVE(<<"ip_type">>);
 ?REMOVE(<<"debugid">>);
 ?RENAME_B64(<<"alias">>, <<"alias">>);
 ?RENAME_BOOL(<<"autoboot">>, <<"autoboot">>);
-?RENAME(<<"billing-id">>, <<"billing_id">>);
-?RENAME_INT(<<"cpu-cap">>, <<"cpu-cap">>);
-?RENAME_BOOL(<<"do-not-inventory">>, <<"do-not-inventory">>);
+?RENAME(<<"billing_id">>, <<"billing_id">>);
+?RENAME_INT(<<"cpu_cap">>, <<"cpu_cap">>);
+?RENAME_BOOL(<<"do_not_inventory">>, <<"do_not_inventory">>);
 ?RENAME(<<"name">>, <<"zonename">>);
-?RENAME_BOOL(<<"never-booted">>, <<"never-booted">>);
-?RENAME_B64(<<"qemu-extra-opts">>, <<"qemu-extra-opts">>);
-?RENAME_B64(<<"qemu-opts">>, <<"qemu-opts">>);
+?RENAME_BOOL(<<"never_booted">>, <<"never_booted">>);
+?RENAME_B64(<<"qemu_extra_opts">>, <<"qemu_extra_opts">>);
+?RENAME_B64(<<"qemu_opts">>, <<"qemu_opts">>);
 ?RENAME_INT(<<"ram">>, <<"ram">>);
 ?RENAME_SPLIT(<<"resolvers">>, <<"resolvers">>);
-?RENAME_B64(<<"spice-opts">>, <<"spice-opts">>);
-?RENAME_B64(<<"spice-password">>, <<"spice-password">>);
-?RENAME_INT(<<"spice-port">>, <<"spice-port">>);
+?RENAME_B64(<<"spice_opts">>, <<"spice_opts">>);
+?RENAME_B64(<<"spice_password">>, <<"spice_password">>);
+?RENAME_INT(<<"spice_port">>, <<"spice_port">>);
 ?RENAME_INT(<<"tempfs">>, <<"tempfs">>);
 ?RENAME_INT(<<"vcpus">>, <<"vcpus">>);
-?RENAME_INT(<<"virtio-txburst">>, <<"virtio-txburst">>);
-?RENAME_INT(<<"virtio-txtimer">>, <<"virtio-txtimer">>);
-?RENAME_BOOL(<<"vm-autoboot">>, <<"vm-autoboot">>);
-?RENAME_B64(<<"vnc-password">>, <<"vnc-password">>);
-?RENAME_INT(<<"vnc-port">>, <<"vnc-port">>);
+?RENAME_INT(<<"virtio_txburst">>, <<"virtio_txburst">>);
+?RENAME_INT(<<"virtio_txtimer">>, <<"virtio_txtimer">>);
+?RENAME_BOOL(<<"vm_autoboot">>, <<"vm_autoboot">>);
+?RENAME_B64(<<"vnc_password">>, <<"vnc_password">>);
+?RENAME_INT(<<"vnc_port">>, <<"vnc_port">>);
 ?RENAME_INT(<<"zoneid">>, <<"zoneid">>);
-?RENAME_INT(<<"zone.cpu-cap">>, <<"cpu-cap">>);
-?RENAME_INT(<<"zone.cpu-shares">>, <<"cpu-shares">>);
-?RENAME_INT(<<"zone.max-locked-memory">>, <<"max-locked-memory">>);
-?RENAME_INT(<<"zone.max-lwps">>, <<"max-lwps">>);
-?RENAME_INT(<<"zone.max-physical-memory">>, <<"max-physical-memory">>);
-?RENAME_INT(<<"zone.max-swap">>, <<"max-swap">>);
-?RENAME_INT(<<"zone.zfs-io-priority">>, <<"zfs-io-priority">>);
+?RENAME_INT(<<"zone.cpu_cap">>, <<"cpu_cap">>);
+?RENAME_INT(<<"zone.cpu_shares">>, <<"cpu_shares">>);
+?RENAME_INT(<<"zone.max_locked_memory">>, <<"max_locked_memory">>);
+?RENAME_INT(<<"zone.max_lwps">>, <<"max_lwps">>);
+?RENAME_INT(<<"zone.max_physical_memory">>, <<"max_physical_memory">>);
+?RENAME_INT(<<"zone.max_swap">>, <<"max_swap">>);
+?RENAME_INT(<<"zone.zfs_io_priority">>, <<"zfs_io_priority">>);
 create_zone_data([Pair|R], Disks, Nics, Datasets) ->
     [Pair|create_zone_data(R, Disks, Nics, Datasets)].
 
 
 ?NIC_RENAME(<<"ip">>, <<"ip">>);
-?NIC_RENAME(<<"mac-addr">>, <<"mac">>);
+?NIC_RENAME(<<"mac_addr">>, <<"mac">>);
 ?NIC_RENAME(<<"physical">>, <<"interface">>);
-?NIC_RENAME_INT(<<"vlan-id">>, <<"vlan-id">>);
-?NIC_RENAME(<<"global-nic">>, <<"nic-tag">>);
+?NIC_RENAME_INT(<<"vlan_id">>, <<"vlan_id">>);
+?NIC_RENAME(<<"global_nic">>, <<"nic_tag">>);
 ?NIC_RENAME_BOOL(<<"dhcp_server">>, <<"dhcp_server">>);
 
-?NIC_RENAME(<<"blocked-outgoing-ports">>, <<"blocked_outgoing_ports">>);
+?NIC_RENAME(<<"blocked_outgoing_ports">>, <<"blocked_outgoing_ports">>);
 create_nic([]) ->
     [];
 create_nic([T|R]) ->
@@ -231,10 +231,10 @@ create_nic([T|R]) ->
 
 ?DISK_RENAME(<<"match">>, <<"path">>);
 ?DISK_RENAME_BOOL(<<"boot">>, <<"bool">>);
-?DISK_RENAME_INT(<<"image-size">>, <<"image-size">>);
+?DISK_RENAME_INT(<<"image_size">>, <<"image_size">>);
 ?DISK_RENAME_INT(<<"size">>, <<"size">>);
-?DISK_RENAME(<<"image-uuid">>, <<"image-uuid">>);
-?DISK_RENAME(<<"image-name">>, <<"image-name">>);
+?DISK_RENAME(<<"image_uuid">>, <<"image_uuid">>);
+?DISK_RENAME(<<"image_name">>, <<"image_name">>);
 create_disk([]) ->
     [];
 create_disk([T|R]) ->

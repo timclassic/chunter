@@ -181,9 +181,7 @@ create_zone_data([{dataset, Dataset}|R], Disks, Nics, Datasets) ->
    create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
 
 ?REMOVE(<<"ip-type">>);
-?REMOVE(<<"id">>);
 ?REMOVE(<<"debugid">>);
-?RENAME(<<"uuid">>, <<"id">>);
 ?RENAME_B64(<<"alias">>, <<"alias">>);
 ?RENAME_BOOL(<<"autoboot">>, <<"autoboot">>);
 ?RENAME(<<"billing-id">>, <<"billing_id">>);

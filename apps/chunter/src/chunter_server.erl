@@ -162,7 +162,7 @@ handle_cast(connect,  #state{name = Host,
     list_datasets(Datasets),
     ProvMem = round(lists:foldl(
 		      fun (VM, Mem) ->
-			      {<<"uuid">>, UUID} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+			      {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
 			      chunter_vm_fsm:load(UUID),
 			      {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
 			      Mem + M

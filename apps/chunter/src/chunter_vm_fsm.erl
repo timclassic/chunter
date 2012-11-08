@@ -55,13 +55,11 @@ load(UUID) ->
 transition(UUID, State) ->
     gen_fsm:sync_send_event({global, {vm, UUID}}, {transition, State}).
 
-
 force_state(UUID, State) ->
     gen_fsm:sync_send_event({global, {vm, UUID}}, {force_state, State}).
 
 register(UUID) ->
     gen_fsm:sync_send_event({global, {vm, UUID}}, register).
-
 
 %%--------------------------------------------------------------------
 %% @doc

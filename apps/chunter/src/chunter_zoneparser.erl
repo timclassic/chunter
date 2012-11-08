@@ -206,9 +206,9 @@ create_zone_data([{dataset, Dataset}|R], Disks, Nics, Datasets) ->
 ?RENAME_INT(<<"zoneid">>, <<"zoneid">>);
 ?RENAME_INT(<<"zone.cpu-cap">>, <<"cpu_cap">>);
 ?RENAME_INT(<<"zone.cpu-shares">>, <<"cpu_shares">>);
-?RENAME_INT(<<"zone.max-locked_memory">>, <<"max_locked_memory">>);
+?RENAME_INT(<<"zone.max-locked-memory">>, <<"max_locked_memory">>);
 ?RENAME_INT(<<"zone.max-lwps">>, <<"max_lwps">>);
-?RENAME_INT(<<"zone.max-physical_memory">>, <<"max_physical_memory">>);
+?RENAME_INT(<<"zone.max-physical-memory">>, <<"max_physical_memory">>);
 ?RENAME_INT(<<"zone.max-swap">>, <<"max_swap">>);
 ?RENAME_INT(<<"zone.zfs-io-priority">>, <<"zfs_io_priority">>);
 create_zone_data([Pair|R], Disks, Nics, Datasets) ->

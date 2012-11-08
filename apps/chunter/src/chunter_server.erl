@@ -333,8 +333,8 @@ read_dsmanifest(F, Ds) ->
     end.
 
 list_vms() ->
-    [chunter_zoneparser:load([{<<"uuid">>, UUID}]) || 
-	[ID,_Name,_VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
+    [chunter_zoneparser:load([{<<"name">>, Name}, {<<"uuid">>, UUID}]) || 
+	[ID,Name,_VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
 	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 	ID =/= <<"0">>].

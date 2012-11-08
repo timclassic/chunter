@@ -93,7 +93,7 @@
 %%%===================================================================
 
 load(VM) ->
-    Name = proplists:get_value(<<"uuid">>, VM),
+    Name = proplists:get_value(<<"name">>, VM),
     convert(<<"/etc/zones/", Name/binary, ".xml">>, VM).
     
 convert(F, VM)->

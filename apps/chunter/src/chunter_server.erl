@@ -95,7 +95,7 @@ init([]) ->
     {_, DS} = list_datasets([]),
     lists:foldl(
       fun (VM, _) ->
-	      {<<"uuid">>, UUID} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+	      {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
 	      chunter_vm_fsm:load(UUID)
       end, 0, list_vms()),
 

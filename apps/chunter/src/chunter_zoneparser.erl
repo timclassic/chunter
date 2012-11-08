@@ -113,21 +113,21 @@ parse_xml([{"dataset",Attrib,_Value}|T])->
      |parse_xml(T)];
 
 parse_xml([{"attr",Attrib,_Value}|T])->
-    [{list_to_atom(proplists:get_value("name", Attrib)), 
+    [{list_to_binary(proplists:get_value("name", Attrib)), 
        list_to_binary(proplists:get_value("value", Attrib))}
      |parse_xml(T)];
 
 parse_xml([{"rctl",Attrib,[{"rctl-value",
 			   Values,
 			   _}]}|T])->
-    [{list_to_atom(proplists:get_value("name", Attrib)),
+    [{list_to_binary(proplists:get_value("name", Attrib)),
        list_to_binary(proplists:get_value("limit", Values))}
      |parse_xml(T)];
 
 parse_xml([{"net-attr",[{"name",Name},{"value",Value}],[]}|T])->
-    [{list_to_atom(Name), list_to_binary(Value)}|parse_xml(T)];
+    [{list_to_binary(Name), list_to_binary(Value)}|parse_xml(T)];
 parse_xml([{"net-attr",[{"value",Value},{"name",Name}],[]}|T])->
-    [{list_to_atom(Name), list_to_binary(Value)}|parse_xml(T)];
+    [{list_to_binary(Name), list_to_binary(Value)}|parse_xml(T)];
 
 parse_xml([{"device",
 	    [{"match",
@@ -152,7 +152,7 @@ parse_xml(Value)->
 
 map_attrs(Attrs) ->
     lists:map(fun ({K,V}) -> 
-		      {list_to_atom(K), list_to_binary(V)} 
+		      {list_to_binary(K), list_to_binary(V)} 
 	      end, Attrs).
 
 
@@ -180,73 +180,63 @@ create_zone_data([{nic, Nic}|R], Disks, Nics, Datasets) ->
 create_zone_data([{dataset, Dataset}|R], Disks, Nics, Datasets) ->
    create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
 
-?REMOVE('ip-type');
-?REMOVE('id');
-?REMOVE('debugid');
-?RENAME('uuid', 'id');
-?RENAME_B64('alias', 'alias');
-?RENAME_BOOL('autoboot', 'autoboot');
-?RENAME('billing-id', 'billing_id');
-?RENAME_INT('cpu-cap', 'cpu_cap');
-?RENAME('cpu-type', 'cpu_type');
-?RENAME('create-timestamp', 'create_timestamp');
-?RENAME('dataset-uuid', 'dataset_uuid');
-?RENAME('default-gateway', 'default_gateway');
-?RENAME('dns-domain', 'dns_domain');
-?RENAME_BOOL('do-not-inventory', 'do_not_inventory');
-?RENAME('fs-allowed', 'fs_allowed');
-?RENAME('limitpriv', 'limit_priv');
-?RENAME('name', 'zonename');
-?RENAME_BOOL('never-booted', 'never_booted');
-?RENAME('owner-uuid', 'owner_uuid');
-?RENAME('package-name', 'package_name');
-?RENAME('package-version', 'package_version');
-?RENAME_B64('qemu-extra-opts', 'qemu_extra_opts');
-?RENAME_B64('qemu-opts', 'qemu_opts');
-?RENAME_INT('ram', 'ram');
-?RENAME_SPLIT('resolvers', 'resolvers');
-?RENAME_B64('spice-opts', 'spice_opts');
-?RENAME_B64('spice-password', 'spice_password');
-?RENAME_INT('spice-port', 'spice_port');
-?RENAME_INT('tempfs', 'tempfs');
-?RENAME_INT('vcpus', 'vcpus');
-?RENAME_INT('virtio-txburst', 'virtio_txburst');
-?RENAME_INT('virtio-txtimer', 'virtio_txtimer');
-?RENAME_BOOL('vm-autoboot', 'vm_autoboot');
-?RENAME_B64('vnc-password', 'vnc_password');
-?RENAME_INT('vnc-port', 'vnc_port');
-?RENAME_INT('zoneid', 'zoneid');
-?RENAME_INT('zone.cpu-cap', 'cpu_cap');
-?RENAME_INT('zone.cpu-shares', 'cpu_shares');
-?RENAME_INT('zone.max-locked-memory', 'max_locked_memory');
-?RENAME_INT('zone.max-lwps', 'max_lwps');
-?RENAME_INT('zone.max-physical-memory', 'max_physical_memory');
-?RENAME_INT('zone.max-swap', 'max_swap');
-?RENAME_INT('zone.zfs-io-priority', 'zfs_io_priority');
+?REMOVE(<<"ip-type">>);
+?REMOVE(<<"id">>);
+?REMOVE(<<"debugid">>);
+?RENAME(<<"uuid">>, <<"id">>);
+?RENAME_B64(<<"alias">>, <<"alias">>);
+?RENAME_BOOL(<<"autoboot">>, <<"autoboot">>);
+?RENAME(<<"billing-id">>, <<"billing_id">>);
+?RENAME_INT(<<"cpu-cap">>, <<"cpu-cap">>);
+?RENAME_BOOL(<<"do-not-inventory">>, <<"do-not-inventory">>);
+?RENAME(<<"name">>, <<"zonename">>);
+?RENAME_BOOL(<<"never-booted">>, <<"never-booted">>);
+?RENAME_B64(<<"qemu-extra-opts">>, <<"qemu-extra-opts">>);
+?RENAME_B64(<<"qemu-opts">>, <<"qemu-opts">>);
+?RENAME_INT(<<"ram">>, <<"ram">>);
+?RENAME_SPLIT(<<"resolvers">>, <<"resolvers">>);
+?RENAME_B64(<<"spice-opts">>, <<"spice-opts">>);
+?RENAME_B64(<<"spice-password">>, <<"spice-password">>);
+?RENAME_INT(<<"spice-port">>, <<"spice-port">>);
+?RENAME_INT(<<"tempfs">>, <<"tempfs">>);
+?RENAME_INT(<<"vcpus">>, <<"vcpus">>);
+?RENAME_INT(<<"virtio-txburst">>, <<"virtio-txburst">>);
+?RENAME_INT(<<"virtio-txtimer">>, <<"virtio-txtimer">>);
+?RENAME_BOOL(<<"vm-autoboot">>, <<"vm-autoboot">>);
+?RENAME_B64(<<"vnc-password">>, <<"vnc-password">>);
+?RENAME_INT(<<"vnc-port">>, <<"vnc-port">>);
+?RENAME_INT(<<"zoneid">>, <<"zoneid">>);
+?RENAME_INT(<<"zone.cpu-cap">>, <<"cpu-cap">>);
+?RENAME_INT(<<"zone.cpu-shares">>, <<"cpu-shares">>);
+?RENAME_INT(<<"zone.max-locked-memory">>, <<"max-locked-memory">>);
+?RENAME_INT(<<"zone.max-lwps">>, <<"max-lwps">>);
+?RENAME_INT(<<"zone.max-physical-memory">>, <<"max-physical-memory">>);
+?RENAME_INT(<<"zone.max-swap">>, <<"max-swap">>);
+?RENAME_INT(<<"zone.zfs-io-priority">>, <<"zfs-io-priority">>);
 create_zone_data([Pair|R], Disks, Nics, Datasets) ->
     [Pair|create_zone_data(R, Disks, Nics, Datasets)].
 
 
-?NIC_RENAME('ip', 'ip');
-?NIC_RENAME('mac-addr', 'mac');
-?NIC_RENAME('physical', 'interface');
-?NIC_RENAME_INT('vlan-id', 'vlan_id');
-?NIC_RENAME('global-nic', 'nic_tag');
-?NIC_RENAME_BOOL('dhcp_server', 'dhcp_server');
+?NIC_RENAME(<<"ip">>, <<"ip">>);
+?NIC_RENAME(<<"mac-addr">>, <<"mac">>);
+?NIC_RENAME(<<"physical">>, <<"interface">>);
+?NIC_RENAME_INT(<<"vlan-id">>, <<"vlan-id">>);
+?NIC_RENAME(<<"global-nic">>, <<"nic-tag">>);
+?NIC_RENAME_BOOL(<<"dhcp_server">>, <<"dhcp_server">>);
 
-?NIC_RENAME('blocked-outgoing-ports', 'blocked_outgoing_ports');
+?NIC_RENAME(<<"blocked-outgoing-ports">>, <<"blocked_outgoing_ports">>);
 create_nic([]) ->
     [];
 create_nic([T|R]) ->
     [T|create_nic(R)].
 
 
-?DISK_RENAME('match', 'path');
-?DISK_RENAME_BOOL('boot', 'bool');
-?DISK_RENAME_INT('image-size', 'image_size');
-?DISK_RENAME_INT('size', 'size');
-?DISK_RENAME('image-uuid', 'image_uuid');
-?DISK_RENAME('image-name', 'image_name');
+?DISK_RENAME(<<"match">>, <<"path">>);
+?DISK_RENAME_BOOL(<<"boot">>, <<"bool">>);
+?DISK_RENAME_INT(<<"image-size">>, <<"image-size">>);
+?DISK_RENAME_INT(<<"size">>, <<"size">>);
+?DISK_RENAME(<<"image-uuid">>, <<"image-uuid">>);
+?DISK_RENAME(<<"image-name">>, <<"image-name">>);
 create_disk([]) ->
     [];
 create_disk([T|R]) ->

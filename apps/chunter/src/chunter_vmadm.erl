@@ -72,7 +72,7 @@ stop(UUID) ->
 reboot(UUID) ->
     lager:info([{fifi_component, chunter}],
 	       "vmadm:reboot - UUID: ~s.", [UUID]),
-    Cmd = <<"/usr/sbin/vmadm reboot", UUID/binary>>,
+    Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).

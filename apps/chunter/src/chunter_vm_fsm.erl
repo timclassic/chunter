@@ -23,6 +23,7 @@
 
 -export([create/4,
 	 load/1,
+	 delete/1,
 	 transition/2,
 	 force_state/2]).
 
@@ -63,6 +64,9 @@ load(UUID) ->
 
 transition(UUID, State) ->
     gen_fsm:send_event({global, {vm, UUID}}, {transition, State}).
+
+delete(UUID) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, delete).
 
 force_state(UUID, State) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State}).

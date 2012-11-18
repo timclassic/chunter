@@ -60,10 +60,10 @@ handle_message({machines, create, UUID, PSpec, DSpec, OSpec}, State) ->
     chunter_vm_fsm:create(UUID, PSpec, DSpec, OSpec),
     {stop, State};
 
-handle_message({machines, delete, _UUID}, State) ->
+handle_message( {machines, delete, UUID}, State) ->
     io:format("delete~n"),
-% TODO: implement this
-%    chunter_server:delete(UUID),
+    chunter_vm_fsm:delete(UUID),
+
     {stop, State};
 
 handle_message(Oops, State) ->

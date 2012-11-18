@@ -102,6 +102,7 @@ create(Data) ->
 	  end,
     Res.
 
+% This function reads the process's input untill it knows that the vm was created or failed.
 wait_for_tex(Port) ->
     receive
 	{Port, {data,{eol,<<"Successfully created ", UUID/binary>>}}} ->

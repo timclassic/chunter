@@ -137,7 +137,7 @@ initialized(_, State) ->
 
 creating({transition, NextState}, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
-    {next_state, NextState, State}.
+    {next_state, binary_to_atom(NextState), State}.
 
 loading({transition, NextState}, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
@@ -145,7 +145,7 @@ loading({transition, NextState}, State) ->
 
 stopped({transition, NextState = booting}, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
-    {next_state, NextState, State};
+    {next_state, binary_to_atom(NextState), State};
 
 stopped(start, State) ->
     chunter_vmadm:start(State#state.uuid),
@@ -157,13 +157,13 @@ stopped(_, State) ->
 
 booting({transition, NextState = shutting_down}, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
-    {next_state, NextState, State};
+    {next_state, binary_to_atom(NextState), State};
 
 booting({transition, NextState = running}, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
     Info = chunter_vmadm:info(State#state.uuid),
     libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
-    {next_state, NextState, State};
+    {next_state, binary_to_atom(NextState), State};
 
 booting(_, State) ->
     {next_state, booting, State}.
@@ -171,7 +171,7 @@ booting(_, State) ->
 
 running({transition, NextState = shutting_down}, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
-    {next_state, NextState, State};
+    {next_state, binary_to_atom(NextState), State};
 
 running(_, State) ->
     {next_state, running, State}.
@@ -179,7 +179,7 @@ running(_, State) ->
 
 shutting_down({transition, NextState = stopped}, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
-    {next_state, NextState, State};
+    {next_state, binary_to_atom(NextState), State};
 
 shutting_down(_, State) ->
     {next_state, shutting_down, State}.
@@ -224,7 +224,7 @@ handle_event({force_state, StateName}, StateName, State) ->
 
 handle_event({force_state, NextState}, _, State) ->
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
-    {next_state, NextState, State};
+    {next_state, binary_to_atom(NextState), State};
 
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
@@ -352,3 +352,7 @@ load_vm(ZUUID) ->
 		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
 	       ID =/= <<"0">>],
     VM.
+
+
+binary_to_atom(B) ->
+    list_to_atom(binary_to_list(B)).

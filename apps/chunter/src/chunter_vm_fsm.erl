@@ -24,6 +24,7 @@
 -export([create/4,
 	 load/1,
 	 delete/1,
+	 remove/1,
 	 transition/2,
 	 force_state/2]).
 
@@ -67,6 +68,10 @@ transition(UUID, State) ->
 
 delete(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, delete).
+
+remove(UUID) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, remove).
+
 
 force_state(UUID, State) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State}).
@@ -237,9 +242,11 @@ handle_event(register, StateName, State) ->
 % TODO send teh data
     {next_state, StateName, State};
 
-handle_event(delete, StateName, State) ->
-    libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
+handle_event(remove, _StateName, State) ->
+    libsniffle:vm_unregister(State#state.uuid),
+    {stop, normal, State};
 
+handle_event(delete, StateName, State) ->
     VM = load_vm(State#state.uuid),
     case proplists:get_value(nics, VM) of
 	undefined ->

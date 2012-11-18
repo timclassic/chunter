@@ -51,7 +51,8 @@ delete(UUID, Mem) ->
     lager:debug([{fifi_component, chunter}],
 		"vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)),
-    chunter_server:unprovision_memory(Mem).
+    chunter_server:unprovision_memory(Mem),
+    chunter_vm_fsm:remove(UUID).
 
 info(UUID) ->
     lager:info([{fifi_component, chunter}],

@@ -262,7 +262,7 @@ handle_event(delete, StateName, State) ->
 %	_ -> 
 %	    ok
 %   end,
-    {max_physical_memory, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+    {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
     spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
     {next_state, StateName, State};
 

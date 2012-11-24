@@ -134,18 +134,18 @@ initialized(load, State) ->
 initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{uuid=UUID}) ->
     {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
-    libsniffle:vm_attribute_set(UUID, <<"state">>, <<"installing_dataset">>),
+    change_state(UUID, <<"installing_dataset">>),
     libsniffle:vm_attribute_set(UUID, <<"config">>, chunter_spec:to_sniffle(VMData)),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
-    libsniffle:vm_attribute_set(UUID, <<"state">>, <<"creating">>),
+    change_state(UUID, <<"creating">>),
     {next_state, creating, State};
 
 initialized(_, State) ->
     {next_state, initialized, State}.
 
 creating({transition, NextState}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
+    change_state(State#state.uuid, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State}.
 
 loading({transition, NextState}, State) ->
@@ -153,7 +153,7 @@ loading({transition, NextState}, State) ->
     {next_state, NextState, State}.
 
 stopped({transition, NextState = booting}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
+    change_state(State#state.uuid, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State};
 
 stopped(start, State) ->
@@ -165,11 +165,11 @@ stopped(_, State) ->
 
 
 booting({transition, NextState = shutting_down}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
+    change_state(State#state.uuid, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State};
 
 booting({transition, NextState = running}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
+    change_state(State#state.uuid, atom_to_binary(NextState)),
     Info = chunter_vmadm:info(State#state.uuid),
     libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
     {next_state, binary_to_atom(NextState), State};
@@ -179,7 +179,7 @@ booting(_, State) ->
 
 
 running({transition, NextState = shutting_down}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
+    change_state(State#state.uuid, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State};
 
 running(_, State) ->
@@ -187,7 +187,7 @@ running(_, State) ->
 
 
 shutting_down({transition, NextState = stopped}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
+    change_state(State#state.uuid, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State};
 
 shutting_down(_, State) ->
@@ -234,13 +234,13 @@ handle_event({force_state, NextState}, StateName, State) ->
 	StateName ->
 	    {next_state, StateName, State};
 	Other ->
-	    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+	    change_state(State#state.uuid, NextState),
 	    {next_state, Other, State}
     end;
 
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(StateName)),
+    change_state(State#state.uuid, atom_to_binary(StateName)),
     VMData = load_vm(State#state.uuid),
     libsniffle:vm_attribute_set(State#state.uuid, <<"config">>, chunter_spec:to_sniffle(VMData)),
     {next_state, StateName, State};
@@ -346,6 +346,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+
 install_image(DatasetUUID) ->
     case filelib:is_regular(filename:join(<<"/var/db/imgadm">>, <<DatasetUUID/binary, ".json">>)) of
 	true ->
@@ -366,6 +367,10 @@ load_vm(ZUUID) ->
 		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
 	       ID =/= <<"0">>],
     VM.
+
+change_state(UUID, State) ->
+    libsniffle:vm_attribute_set(UUID, <<"state">>, State),
+    howl:send(UUID, [{<<"action">>, <<"statechange">>}, {<<"state">>, State}]).
 
 
 binary_to_atom(B) ->

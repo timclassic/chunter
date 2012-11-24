@@ -134,26 +134,26 @@ initialized(load, State) ->
 initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{uuid=UUID}) ->
     {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
-    libsniffle:vm_attribute_set(UUID, <<"state">>, installing_dataset),
+    libsniffle:vm_attribute_set(UUID, <<"state">>, <<"installing_dataset">>),
     libsniffle:vm_attribute_set(UUID, <<"config">>, chunter_spec:to_sniffle(VMData)),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
-    libsniffle:vm_attribute_set(UUID, <<"state">>, creating),
+    libsniffle:vm_attribute_set(UUID, <<"state">>, <<"creating">>),
     {next_state, creating, State};
 
 initialized(_, State) ->
     {next_state, initialized, State}.
 
 creating({transition, NextState}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State}.
 
 loading({transition, NextState}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
     {next_state, NextState, State}.
 
 stopped({transition, NextState = booting}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State};
 
 stopped(start, State) ->
@@ -165,11 +165,11 @@ stopped(_, State) ->
 
 
 booting({transition, NextState = shutting_down}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State};
 
 booting({transition, NextState = running}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
     Info = chunter_vmadm:info(State#state.uuid),
     libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
     {next_state, binary_to_atom(NextState), State};
@@ -179,7 +179,7 @@ booting(_, State) ->
 
 
 running({transition, NextState = shutting_down}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State};
 
 running(_, State) ->
@@ -187,7 +187,7 @@ running(_, State) ->
 
 
 shutting_down({transition, NextState = stopped}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
     {next_state, binary_to_atom(NextState), State};
 
 shutting_down(_, State) ->
@@ -240,7 +240,7 @@ handle_event({force_state, NextState}, StateName, State) ->
 
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, StateName),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(StateName)),
     VMData = load_vm(State#state.uuid),
     libsniffle:vm_attribute_set(State#state.uuid, <<"config">>, chunter_spec:to_sniffle(VMData)),
     {next_state, StateName, State};
@@ -370,3 +370,7 @@ load_vm(ZUUID) ->
 
 binary_to_atom(B) ->
     list_to_atom(binary_to_list(B)).
+
+atom_to_binary(A) ->
+    list_to_binary(atom_to_list(A)).
+    

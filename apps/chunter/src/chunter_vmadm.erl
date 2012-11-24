@@ -80,7 +80,7 @@ reboot(UUID) ->
 
 create(Data) ->
     {<<"uuid">>, Alias} = lists:keyfind(<<"uuid">>, 1, Data),
-    lager:info("message: ~p, ~p, ~p", [info, <<"Creation of VM '", Alias/binary, "' started.">>]),
+    lager:info("~p", [<<"Creation of VM '", Alias/binary, "' started.">>]),
 %    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
 	       "vmadm:create", []),

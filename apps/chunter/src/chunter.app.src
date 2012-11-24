@@ -12,6 +12,7 @@
                   erlsom,
                   libsniffle,
                   libsnarl,
+		  libhowl,
 		  ranch
                  ]},
   {mod, { chunter_app, []}},

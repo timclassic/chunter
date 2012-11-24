@@ -228,18 +228,21 @@ shutting_down(_, State) ->
 %%--------------------------------------------------------------------
 
 
-handle_event({force_state, StateName}, StateName, State) ->
-    {next_state, StateName, State};
 
-handle_event({force_state, NextState}, _, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
-    {next_state, binary_to_atom(NextState), State};
+handle_event({force_state, NextState}, StateName, State) ->
+    case binary_to_atom(NextState) of
+	StateName ->
+	    {next_state, StateName, State};
+	Other ->
+	    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+	    {next_state, Other, State}
+    end;
 
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
     libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, StateName),
-    _VMData = load_vm(State#state.uuid),
-% TODO send teh data
+    VMData = load_vm(State#state.uuid),
+    libsniffle:vm_attribute_set(State#state.uuid, <<"config">>, chunter_spec:to_sniffle(VMData)),
     {next_state, StateName, State};
 
 handle_event(remove, _StateName, State) ->
@@ -357,9 +360,9 @@ load_vm(ZUUID) ->
     [VM] = [chunter_zoneparser:load([{<<"name">>,Name},
 				     {<<"state">>, VMState},
 				     {<<"zonepath">>, Path},
-				     {<<"type">>, Type}]) || 
-	       [ID,Name,VMState,Path,_UUID,Type,_IP,_SomeNumber] <- 
-		   [ re:split(Line, ":") 
+				     {<<"type">>, Type}]) ||
+	       [ID,Name,VMState,Path,_UUID,Type,_IP,_SomeNumber] <-
+		   [ re:split(Line, ":")
 		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
 	       ID =/= <<"0">>],
     VM.

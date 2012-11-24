@@ -371,6 +371,8 @@ load_vm(ZUUID) ->
 binary_to_atom(B) ->
     list_to_atom(binary_to_list(B)).
 
+atom_to_binary(B) when is_binary(B) ->
+    B;
 atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
     

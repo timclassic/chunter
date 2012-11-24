@@ -370,7 +370,7 @@ load_vm(ZUUID) ->
 
 change_state(UUID, State) ->
     libsniffle:vm_attribute_set(UUID, <<"state">>, State),
-    libhowl:send(UUID, [{<<"action">>, <<"statechange">>}, {<<"state">>, State}]).
+    libhowl:send(UUID, [{<<"event">>, <<"statechange">>}, {<<"data">>, State}]).
 
 
 binary_to_atom(B) ->

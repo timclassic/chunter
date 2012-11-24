@@ -131,10 +131,15 @@ init([UUID]) ->
 initialized(load, State) ->
     {next_state, loading, State};
 
-initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{uuid=UUID}) ->
+initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
     {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
     change_state(UUID, <<"installing_dataset">>),
+    libhowl:send(UUID, [{<<"event">>, <<"update">>}, 
+			{<<"data">>, 
+			 [{<<"state">>, <<"installing_dataset">>},
+			  {<<"hypervisor">>, Hypervisor},
+			  {<<"config">>, VMData}]}]),
     libsniffle:vm_attribute_set(UUID, <<"config">>, chunter_spec:to_sniffle(VMData)),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
@@ -370,7 +375,7 @@ load_vm(ZUUID) ->
 
 change_state(UUID, State) ->
     libsniffle:vm_attribute_set(UUID, <<"state">>, State),
-    libhowl:send(UUID, [{<<"event">>, <<"statechange">>}, {<<"data">>, State}]).
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
 
 
 binary_to_atom(B) ->

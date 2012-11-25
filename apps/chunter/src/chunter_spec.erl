@@ -65,6 +65,14 @@ generate_sniffle([{<<"disks">>, Disks} | D], S, kvm = Type) ->
 generate_sniffle([{<<"nics">>, Ns} | D], S, Type) ->
     generate_sniffle(D, [{<<"networks">>, Ns} | S], Type);
 
+generate_sniffle([{<<"customer_metadata">>, V} | D], S, Type) ->
+    case lists:keyfind(<<"root_authorized_keys">>, 1, V) of
+	{<<"root_authorized_keys">>, Keys} ->
+	    generate_sniffle(D, [{<<"ssh_keys">>, Keys} | S], Type);
+	_ ->
+	    generate_sniffle(D, S , Type)
+    end;
+
 generate_sniffle([{<<"uuid">>, Ns} | D], S, Type) ->
     generate_sniffle(D, [{<<"uuid">>, Ns} | S], Type);
 
@@ -74,8 +82,10 @@ generate_sniffle([{<<"max_physical_memory">>, V} | D], S, zone = Type) ->
 generate_sniffle([{<<"ram">>, V} | D], S, kvm = Type) ->
     generate_sniffle(D, [{<<"ram">>, V} | S], Type);
 
-generate_sniffle([{<<"resolvers">>, V} | D], S, kvm = Type) ->
+generate_sniffle([{<<"resolvers">>, V} | D], S, Type) ->
     generate_sniffle(D, [{<<"resolvers">>, V} | S], Type);
+
+
 
 
 generate_sniffle([_ | D], S, Type) ->
@@ -114,12 +124,12 @@ generate_spec([{<<"quota">>, V} | P], [], O, kvm = T, DUUID, Spec) ->
 generate_spec([{<<"quota">>, V} | P], [], O, zone = T, DUUID, Spec) ->
     generate_spec(P, [], O, T, DUUID, [{<<"quota">>, V}, {<<"dataset_uuid">>, DUUID} | Spec]);
 
-generate_spec([], [], [{<<"ssh_keys">>, V} | O], kvm = T, DUUID, Spec) ->
+generate_spec([], [], [{<<"ssh_keys">>, V} | O], T, DUUID, Spec) ->
     generate_spec([], [], O, T, DUUID,
 		  [{<<"customer_metadata">>,
 		    [{<<"root_authorized_keys">>, V}]} | Spec]);
 
-generate_spec([], [], [{<<"resolvers">>, V} | O], kvm = T, DUUID, Spec) ->
+generate_spec([], [], [{<<"resolvers">>, V} | O], T, DUUID, Spec) ->
     generate_spec([], [], O, T, DUUID,
 		  [{<<"resolvers">>, V} | Spec]);
 
@@ -140,7 +150,6 @@ generate_nics([N | R], Nics) ->
 
 generate_nics([], Nics) ->
     Nics.
-
 
 -ifdef(TEST).
 
@@ -165,6 +174,23 @@ kvm_ram_test() ->
     InP = [{<<"quota">>, 10}, {<<"ram">>, 1024}],
     InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}],
     InO = [{<<"uuid">>, <<"zone uuid">>}],
+    In = ordsets:from_list(InP ++ InD ++ InO),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+
+resolver_test() ->
+    InP = [{<<"quota">>, 10}],
+    InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}, {<<"resolvers">>, [<<"8.8.8.8">>]}],
+    In = ordsets:from_list(InP ++ InD ++ InO),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+ssh_test() ->
+    InP = [{<<"quota">>, 10}],
+    InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>},
+	  {<<"ssh_keys">>,
+	   <<"ssh-rsa">>}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 

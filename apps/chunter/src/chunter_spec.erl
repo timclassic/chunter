@@ -74,6 +74,10 @@ generate_sniffle([{<<"max_physical_memory">>, V} | D], S, zone = Type) ->
 generate_sniffle([{<<"ram">>, V} | D], S, kvm = Type) ->
     generate_sniffle(D, [{<<"ram">>, V} | S], Type);
 
+generate_sniffle([{<<"resolvers">>, V} | D], S, kvm = Type) ->
+    generate_sniffle(D, [{<<"resolvers">>, V} | S], Type);
+
+
 generate_sniffle([_ | D], S, Type) ->
     generate_sniffle(D, S, Type);
 
@@ -98,6 +102,7 @@ generate_spec([{<<"ram">>, V} | P], [], O, kvm = T, DUUID, Spec) ->
 generate_spec([{<<"ram">>, V} | P], [], O, zone = T, DUUID, Spec) ->
     generate_spec(P, [], O, T, DUUID, [{<<"max_physical_memory">>, V} | Spec]);
 
+
 generate_spec([{<<"quota">>, V} | P], [], O, kvm = T, DUUID, Spec) ->
     generate_spec(P, [], O, T, DUUID,
 		  [{<<"disks">>,
@@ -113,6 +118,10 @@ generate_spec([], [], [{<<"ssh_keys">>, V} | O], kvm = T, DUUID, Spec) ->
     generate_spec([], [], O, T, DUUID,
 		  [{<<"customer_metadata">>,
 		    [{<<"root_authorized_keys">>, V}]} | Spec]);
+
+generate_spec([], [], [{<<"resolvers">>, V} | O], kvm = T, DUUID, Spec) ->
+    generate_spec([], [], O, T, DUUID,
+		  [{<<"resolvers">>, V} | Spec]);
 
 generate_spec([], [], [_ | O], Type, DUUID, Spec) ->
     generate_spec([], [], O, Type, DUUID, Spec);

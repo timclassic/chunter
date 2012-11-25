@@ -19,9 +19,9 @@
 to_vmadm(Package, Dataset, OwnerData) ->
     case lists:keyfind(<<"type">>, 1, Dataset) of
 	{<<"type">>,<<"kvm">>} ->
-	    generate_spec(Package, Dataset, OwnerData, kvm, unknown, [{<<"brand">>, <<"kvm">>}]);
+	    generate_spec(Package, Dataset, OwnerData, kvm, unknown, [], [{<<"brand">>, <<"kvm">>}]);
 	{<<"type">>,<<"zone">>} ->
-	    generate_spec(Package, Dataset, OwnerData, zone, unknown, [{<<"brand">>, <<"joyent">>}])
+	    generate_spec(Package, Dataset, OwnerData, zone, unknown, [], [{<<"brand">>, <<"joyent">>}])
     end.
 
 to_sniffle(Spec) ->
@@ -66,12 +66,7 @@ generate_sniffle([{<<"nics">>, Ns} | D], S, Type) ->
     generate_sniffle(D, [{<<"networks">>, Ns} | S], Type);
 
 generate_sniffle([{<<"customer_metadata">>, V} | D], S, Type) ->
-    case lists:keyfind(<<"root_authorized_keys">>, 1, V) of
-	{<<"root_authorized_keys">>, Keys} ->
-	    generate_sniffle(D, [{<<"ssh_keys">>, Keys} | S], Type);
-	_ ->
-	    generate_sniffle(D, S , Type)
-    end;
+    generate_sniffle(D, decode_metadata(V, S, []), Type);
 
 generate_sniffle([{<<"uuid">>, Ns} | D], S, Type) ->
     generate_sniffle(D, [{<<"uuid">>, Ns} | S], Type);
@@ -85,62 +80,84 @@ generate_sniffle([{<<"ram">>, V} | D], S, kvm = Type) ->
 generate_sniffle([{<<"resolvers">>, V} | D], S, Type) ->
     generate_sniffle(D, [{<<"resolvers">>, V} | S], Type);
 
-
-
-
 generate_sniffle([_ | D], S, Type) ->
     generate_sniffle(D, S, Type);
 
 generate_sniffle([], Sniffle, _Type) ->
     Sniffle.
 
-generate_spec([], [], [], _, _, Spec) ->
-    Spec;
+decode_metadata([], S, []) ->
+    S;
 
-generate_spec(P, D,  [{<<"uuid">>, V} | O], Type, DUUID, Spec) ->
-    generate_spec(P, D, O, Type, DUUID, [{<<"uuid">>, V} | Spec]);
+decode_metadata([], S, O) ->
+    [{<<"metadata">>, O} | S];
 
-generate_spec(P, [{<<"dataset">>, DUUID} | D], O, T, _, Spec) ->
-    generate_spec(P, D, O, T, DUUID, Spec);
+decode_metadata([{<<"root_authorized_keys">>, Keys} | M], S, O) ->
+    decode_metadata(M, [{<<"ssh_keys">>, Keys} | S], O);
 
-generate_spec(P, [{<<"networks">>, N} | D], O, T, DUUID, Spec) ->
-    generate_spec(P, D, O, T, DUUID, [{<<"nics">>, generate_nics(N, [])} | Spec]);
+decode_metadata([{<<"root_pw">>, Pass} | M], S, O) ->
+    decode_metadata(M, [{<<"root_pw">>, Pass} | S], O);
 
-generate_spec([{<<"ram">>, V} | P], [], O, kvm = T, DUUID, Spec) ->
-    generate_spec(P, [], O, T, DUUID, [{<<"ram">>, V}, {<<"max_physical_memory">>, V + 1024} | Spec]);
+decode_metadata([{<<"admin_pw">>, Pass} | M], S, O) ->
+    decode_metadata(M, [{<<"admin_pw">>, Pass} | S], O);
 
-generate_spec([{<<"ram">>, V} | P], [], O, zone = T, DUUID, Spec) ->
-    generate_spec(P, [], O, T, DUUID, [{<<"max_physical_memory">>, V} | Spec]);
+decode_metadata([E | M], S, O) ->
+    decode_metadata(M, S, [E | O]).
+
+generate_spec([], [], [], _, _, Meta, Spec) ->
+    [{<<"customer_metadata">>, Meta} | Spec];
+
+generate_spec(P, D,  [{<<"uuid">>, V} | O], Type, DUUID, Meta, Spec) ->
+    generate_spec(P, D, O, Type, DUUID, Meta, [{<<"uuid">>, V} | Spec]);
+
+generate_spec(P, [{<<"dataset">>, DUUID} | D], O, T, _, Meta, Spec) ->
+    generate_spec(P, D, O, T, DUUID, Meta, Spec);
+
+generate_spec(P, [{<<"networks">>, N} | D], O, T, DUUID, Meta, Spec) ->
+    generate_spec(P, D, O, T, DUUID, Meta, [{<<"nics">>, generate_nics(N, [])} | Spec]);
+
+generate_spec([{<<"ram">>, V} | P], [], O, kvm = T, DUUID, Meta, Spec) ->
+    generate_spec(P, [], O, T, DUUID, Meta, [{<<"ram">>, V}, {<<"max_physical_memory">>, V + 1024} | Spec]);
+
+generate_spec([{<<"ram">>, V} | P], [], O, zone = T, DUUID, Meta, Spec) ->
+    generate_spec(P, [], O, T, DUUID, Meta, [{<<"max_physical_memory">>, V} | Spec]);
 
 
-generate_spec([{<<"quota">>, V} | P], [], O, kvm = T, DUUID, Spec) ->
-    generate_spec(P, [], O, T, DUUID,
+generate_spec([{<<"quota">>, V} | P], [], O, kvm = T, DUUID, Meta, Spec) ->
+    generate_spec(P, [], O, T, DUUID, Meta,
 		  [{<<"disks">>,
 		    [[{<<"boot">>, true},
 		     {<<"size">>, V * 1024},
 		     {<<"image_uuid">>, DUUID}
 		    ]]} | Spec]);
 
-generate_spec([{<<"quota">>, V} | P], [], O, zone = T, DUUID, Spec) ->
-    generate_spec(P, [], O, T, DUUID, [{<<"quota">>, V}, {<<"dataset_uuid">>, DUUID} | Spec]);
+generate_spec([{<<"quota">>, V} | P], [], O, zone = T, DUUID, Meta, Spec) ->
+    generate_spec(P, [], O, T, DUUID, Meta, [{<<"quota">>, V}, {<<"dataset_uuid">>, DUUID} | Spec]);
 
-generate_spec([], [], [{<<"ssh_keys">>, V} | O], T, DUUID, Spec) ->
-    generate_spec([], [], O, T, DUUID,
-		  [{<<"customer_metadata">>,
-		    [{<<"root_authorized_keys">>, V}]} | Spec]);
+generate_spec([], [], [{<<"ssh_keys">>, V} | O], T, DUUID, Meta, Spec) ->
+    generate_spec([], [], O, T, DUUID, [{<<"root_authorized_keys">>, V} | Meta], Spec);
 
-generate_spec([], [], [{<<"resolvers">>, V} | O], T, DUUID, Spec) ->
-    generate_spec([], [], O, T, DUUID,
+generate_spec([], [], [{<<"root_pw">>, V} | O], T, DUUID, Meta, Spec) ->
+    generate_spec([], [], O, T, DUUID, [{<<"root_pw">>, V} | Meta], Spec);
+
+generate_spec([], [], [{<<"admin_pw">>, V} | O], T, DUUID, Meta, Spec) ->
+    generate_spec([], [], O, T, DUUID, [{<<"admin_pw">>, V} | Meta], Spec);
+
+generate_spec([], [], [{<<"metadata">>, V} | O], T, DUUID, Meta, Spec) ->
+    generate_spec([], [], O, T, DUUID,  V ++ Meta, Spec);
+
+generate_spec([], [], [{<<"resolvers">>, V} | O], T, DUUID, Meta, Spec) ->
+    generate_spec([], [], O, T, DUUID, Meta,
 		  [{<<"resolvers">>, V} | Spec]);
 
-generate_spec([], [], [_ | O], Type, DUUID, Spec) ->
-    generate_spec([], [], O, Type, DUUID, Spec);
+generate_spec([], [], [_ | O], Type, DUUID, Meta, Spec) ->
+    generate_spec([], [], O, Type, DUUID, Meta, Spec);
 
-generate_spec([_ | P], [], O, Type, DUUID, Spec) ->
-    generate_spec(P, [], O, Type, DUUID, Spec);
+generate_spec([_ | P], [], O, Type, DUUID, Meta, Spec) ->
+    generate_spec(P, [], O, Type, DUUID, Meta, Spec);
 
-generate_spec(P, [_ | D], O, Type, DUUID, Spec) ->
-    generate_spec(P, D, O, Type, DUUID, Spec).
+generate_spec(P, [_ | D], O, Type, DUUID, Meta, Spec) ->
+    generate_spec(P, D, O, Type, DUUID, Meta, Spec).
 
 generate_nics([N | R], []) ->
     generate_nics(R, [[{<<"primary">>, true}| N]]);
@@ -191,6 +208,24 @@ ssh_test() ->
     InO = [{<<"uuid">>, <<"zone uuid">>},
 	  {<<"ssh_keys">>,
 	   <<"ssh-rsa">>}],
+    In = ordsets:from_list(InP ++ InD ++ InO),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+passwd_test() ->
+    InP = [{<<"quota">>, 10}],
+    InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>},
+	  {<<"admin_pw">>, <<"admin">>},
+	  {<<"root_pw">>, <<"root">>}],
+    In = ordsets:from_list(InP ++ InD ++ InO),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+metadata_test() ->
+    InP = [{<<"quota">>, 10}],
+    InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>},
+	   {<<"admin_pw">>, <<"admin">>},
+	   {<<"metadata">>, [{<<"key">>, <<"value">>}]}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 

@@ -11,7 +11,7 @@ REBAR=$(shell pwd)/rebar
 
 all: $(DEPS) $(OBJ)
 
-rel: all remove_trash FORCE
+rel: all FORCE
 	-rm -r rel/$(APP_NAME)
 	cd rel; ../rebar generate
 
@@ -59,6 +59,3 @@ FORCE:
 manifest: rel
 	./tools/mkmanifest > manifest
 
-remove_trash:
-	-find . -name "*~" -exec rm {} \;.
-	-rm *.beam erl_crash.dump || true

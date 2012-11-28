@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
 <!DOCTYPE service_bundle SYSTEM '/usr/share/lib/xml/dtd/service_bundle.dtd.1'>
 <!--
-Copied form redis empd script and modified to fit fifo
+Copied form riak empd script and modified to fit fifo
 -->
 <service_bundle type='manifest' name='export'>
   <service name='network/epmd' type='service' version='0'>

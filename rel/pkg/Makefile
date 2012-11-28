@@ -10,4 +10,5 @@ package:
 	cp install.sh $(BASENAME)
 	cd .. && tar -cf pkg/$(BASENAME).tar $(COMPONENT)
 	uuencode $(BASENAME).tar $(BASENAME).tar >> $(BASENAME)
-	gzip $(BASENAME)
+	-rm $(BASENAME).gz $(BASENAME).tar
+	gzip -9 $(BASENAME)

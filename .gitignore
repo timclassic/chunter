@@ -1,3 +1,5 @@
+rel/pkg/*.gz
+rel/pkg/*.tar
 gproc_*
 .eunit
 ebin

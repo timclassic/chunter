@@ -19,6 +19,9 @@ mkdir -p /var/log/chunter
 sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/app.config
 sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/vm.args
 
+svccfg import /opt/chunter/etc/epmd.xml
+svccfg import /opt/chunter/etc/chunter.xml
+
 cat <<EOF
 
 EOF

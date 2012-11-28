@@ -385,4 +385,3 @@ atom_to_binary(B) when is_binary(B) ->
     B;
 atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
-    

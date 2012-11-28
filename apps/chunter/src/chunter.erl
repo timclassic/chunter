@@ -33,7 +33,6 @@ start() ->
     application:start(mdns_client_lib),
     application:start(libsniffle),
     application:start(libsnarl),
-    application:start(gproc),
     application:start(ranch),
     application:start(chunter).
 

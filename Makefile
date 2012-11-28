@@ -1,61 +1,76 @@
-APP_NAME=chunter
-APP_DIR=$(shell if [ -d apps/$(APP_NAME) ]; then echo "apps/$(APP_NAME)"; else echo; fi)
-OBJ=$(shell ls $(APP_DIR)/src/*.erl | sed -e 's/\.erl$$/.beam/' | sed -e 's;^$(APP_DIR)/src;$(APP_DIR)/ebin;g') $(shell ls $(APP_DIR)/src/*.app.src | sed -e 's/\.src$$//g' | sed -e 's;^$(APP_DIR)/src;$(APP_DIR)/ebin;g')
-DEPS=$(shell cat rebar.config  |sed -e 's/%.*//'| sed -e '/{\(\w\+\), [^,]\+, {\w\+, [^,]\+, {[^,]\+, [^}]\+}}},\?/!d' | sed -e 's;{\(\w\+\), [^,]\+, {\w\+, [^,]\+, {[^,]\+, [^}]\+}}},\?;deps/\1/rebar.config;')
-ERL=erl
-PA=$(shell pwd)/$(APP_DIR)/ebin
-ERL_LIBS=$(shell pwd)/deps/
-REBAR=$(shell pwd)/rebar
+REBAR = $(shell pwd)/rebar
 
-.PHONY: all deps
+.PHONY: deps rel stagedevrel
 
-all: $(DEPS) $(OBJ)
+all: deps compile
 
-rel: all FORCE
-	-rm -r rel/$(APP_NAME)
-	cd rel; ../rebar generate
+compile:
+	$(REBAR) compile
+
+deps:
+	$(REBAR) get-deps
+
+clean:
+	$(REBAR) clean
+	make -C rel/pkg clean
+
+distclean: clean devclean relclean
+	$(REBAR) delete-deps
+
+test: all
+	$(REBAR) skip_deps=true xref
+	$(REBAR) skip_deps=true eunit
+
+rel: all
+	$(REBAR) generate
+
+relclean:
+	rm -rf rel/chunter
 
 package: rel
 	make -C rel/pkg package
-echo:
-	echo $(DEPS)
 
-deps:
-	$(REBAR) update-deps
-	$(REBAR) get-deps
+###
+### Docs
+###
+docs:
+	$(REBAR) skip_deps=true doc
 
-tar: rel
-	cd rel; tar jcvf $(APP_NAME).tar.bz2 $(APP_NAME)
+##
+## Developer targets
+##
 
-clean: FORCE
-	$(REBAR) clean
-	-rm *.beam erl_crash.dump
-	-rm -r rel/$(APP_NAME)
-	-rm rel/$(APP_NAME).tar.bz2
+stage : rel
+	$(foreach dep,$(wildcard deps/* wildcard apps/*), rm -rf rel/chunter/lib/$(shell basename $(dep))-* && ln -sf $(abspath $(dep)) rel/chunter/lib;)
 
-$(DEPS):
-	$(REBAR) get-deps
-	$(REBAR) compile
+##
+## Dialyzer
+##
+APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
+	xmerl webtool snmp public_key mnesia eunit syntax_tools compiler
+COMBO_PLT = $(HOME)/.chunter_combo_dialyzer_plt
 
-$(APP_DIR)/ebin/%.app: $(APP_DIR)/src/%.app.src
-	$(REBAR) compile
+check_plt: deps compile
+	dialyzer --check_plt --plt $(COMBO_PLT) --apps $(APPS) \
+		deps/*/ebin apps/*/ebin
 
-$(APP_DIR)/ebin/%.beam: $(APP_DIR)/src/%.erl
-	$(REBAR) compile
+build_plt: deps compile
+	dialyzer --build_plt --output_plt $(COMBO_PLT) --apps $(APPS) \
+		deps/*/ebin apps/*/ebin
 
-shell: all
-	ERL_LIBS="$(ERL_LIBS)" $(ERL) -pa $(PA) -config standalone -sname $(APP_NAME) -s $(APP_NAME)
-	rm *.beam || true
-	[ -f erl_crash.dump ] && rm erl_crash.dump || true
+dialyzer: deps compile
+	@echo
+	@echo Use "'make check_plt'" to check PLT prior to using this target.
+	@echo Use "'make build_plt'" to build PLT prior to using this target.
+	@echo
+	@sleep 1
+	dialyzer -Wno_return --plt $(COMBO_PLT) deps/*/ebin apps/*/ebin
 
-test: all xref
-	$(REBAR) skip_deps=true eunit
 
-xref: all
-	$(REBAR) xref skip_deps=true
-
-FORCE:
-
-manifest: rel
-	./tools/mkmanifest > manifest
-
+cleanplt:
+	@echo
+	@echo "Are you sure?  It takes about 1/2 hour to re-build."
+	@echo Deleting $(COMBO_PLT) in 5 seconds.
+	@echo
+	sleep 5
+	rm $(COMBO_PLT)

@@ -12,6 +12,9 @@ all: $(DEPS) $(OBJ)
 rel: all remove_trash FORCE
 	-rm -r rel/$(APP_NAME)
 	cd rel; ../rebar generate
+
+package:
+	make -C rel/pkg package
 echo:
 	echo $(DEPS)
 

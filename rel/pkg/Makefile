@@ -1,6 +1,7 @@
 VERSION=0.3.0
 COMPONENT=chunter
-BASENAME=$(COMPONENT)-$(VERSION)$(SUFFIX)
+SUFFIX:=$(shell echo $(SUFFIX))
+BASENAME:=$(COMPONENT)-$(VERSION)$(SUFFIX)
 .PHONY: package clean
 
 clean:

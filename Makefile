@@ -7,18 +7,21 @@ PA=$(shell pwd)/$(APP_DIR)/ebin
 ERL_LIBS=$(shell pwd)/deps/
 REBAR=$(shell pwd)/rebar
 
+.PHONY: all deps
+
 all: $(DEPS) $(OBJ)
 
 rel: all remove_trash FORCE
 	-rm -r rel/$(APP_NAME)
 	cd rel; ../rebar generate
 
-package:
+package: rel
 	make -C rel/pkg package
 echo:
 	echo $(DEPS)
 
 deps:
+	$(REBAR) update-deps
 	$(REBAR) get-deps
 
 tar: rel

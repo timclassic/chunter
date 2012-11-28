@@ -2,7 +2,7 @@
 
 . /usbkey/config
 
-DST=/tmp
+DST=/opt
 
 IFACE=`dladm show-phys -m | grep $admin_nic | awk -e '{print $1}'`
 IP=`ifconfig $IFACE | grep inet | awk -e '{print $2}'`

@@ -163,19 +163,19 @@ handle_cast(connect,  #state{name = Host,
 			      {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
 			      Mem + M
 		      end, 0, VMS) / (1024*1024)),
-    
+
 %    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
 %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
-    
+
 %    statsderl:increment([Name, ".net.join"], 1, 1.0),
 %    libsniffle:join_client_channel(),
-    libsniffle:hypervisor_register(Host, Host, 4200),
+    {ok, IP} = inet:getaddr(binary_to_list(Host), inet),
+    libsniffle:hypervisor_register(Host, IP, 4200),
     libsniffle:hypervisor_resource_set(Host, [{<<"networks">>, Networks1},
 					      {<<"free-memory">>, TotalMem - ProvMem},
 					      {<<"provisioned-memory">>, ProvMem},
 					      {<<"total-memory">>, TotalMem},
 					      {<<"virtualisation">>, Caps}]),
-    
     {noreply, State#state{
 		total_memory = TotalMem,
 		provisioned_memory = ProvMem,
@@ -193,27 +193,27 @@ handle_cast({prov_mem, M}, State = #state{name = Name,
     Free = T - Provisioned,
     libsniffle:hypervisor_resource_set(Name, [{<<"free-memory">>, Free},
 					      {<<"provisioned-memory">>, Provisioned}]),
-    libhowl:send(Name, [{<<"event">>, <<"memorychange">>}, 
+    libhowl:send(Name, [{<<"event">>, <<"memorychange">>},
 			{<<"data">>, [{<<"free">>, Free},
 				      {<<"provisioned">>, Provisioned}]}]),
 %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
-	       "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: +~p.", [Provisioned, M, T, MinMB]),    
+	       "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: +~p.", [Provisioned, M, T, MinMB]),
     {noreply, State#state{provisioned_memory = Provisioned}};
 
 handle_cast({unprov_mem, M}, State = #state{name = Name,
-					    provisioned_memory = P, 
+					    provisioned_memory = P,
 					    total_memory = T}) ->
     MinMB = round(M / (1024*1024)),
     Provisioned = round(P - MinMB),
     Free = T - Provisioned,
     libsniffle:hypervisor_resource_set(Name, [{<<"free-memory">>, Free},
 					      {<<"provisioned-memory">>, Provisioned}]),
-    
-    libhowl:send(Name, [{<<"event">>, <<"memorychange">>}, 
+
+    libhowl:send(Name, [{<<"event">>, <<"memorychange">>},
 			{<<"data">>, [{<<"free">>, Free},
 				      {<<"provisioned">>, Provisioned}]}]),
-    
+
 %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
     lager:info([{fifi_component, chunter}],
 	       "memory:unprovision - Unprivisioned: ~p(~p) , Total: ~p, Change: -~p.", [Provisioned, M, T, MinMB]),

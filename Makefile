@@ -47,7 +47,8 @@ stage : rel
 ## Dialyzer
 ##
 APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
-	xmerl webtool snmp public_key mnesia eunit syntax_tools compiler
+	xmerl webtool snmp public_key mnesia eunit syntax_tools compiler \
+        erlsom jsx lager libhowl libsnarl libsniffle mdns_client mdns_client_lib ranch
 COMBO_PLT = $(HOME)/.chunter_combo_dialyzer_plt
 
 check_plt: deps compile

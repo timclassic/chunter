@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, 
+-export([start_link/0,
 	 provision_memory/1,
 	 unprovision_memory/1,
 	 connect/0,
@@ -26,14 +26,14 @@
 
 -define(CPU_CAP_MULTIPLYER, 8).
 
--define(SERVER, ?MODULE). 
+-define(SERVER, ?MODULE).
 
--record(state, {name, 
-		port, 
+-record(state, {name,
+		port,
 		connected = false,
 		datasets = [],
 		capabilities = [],
-		total_memory = 0, 
+		total_memory = 0,
 		provisioned_memory = 0}).
 
 %%%===================================================================
@@ -273,7 +273,7 @@ publish_datasets(Datasets) ->
     lists:foreach(fun({_, JSON}) ->
 			  publish_dataset(JSON)
 		  end, Datasets).
-			  
+
 publish_dataset(JSON) ->
     ID = proplists:get_value(<<"uuid">>, JSON),
     libsniffle:dataset_create(ID),
@@ -283,27 +283,32 @@ publish_dataset(JSON) ->
 	       _ ->
 		   <<"kvm">>
 	   end,
-    libsniffle:dataset_attribute_set(
-      ID, 
-      [{<<"dataset">>, ID},
-       {<<"type">>, Type},
-       {<<"name">>, proplists:get_value(<<"name">>, JSON)},
-       {<<"networks">>,
-	proplists:get_value(<<"networks">>,
-			    proplists:get_value(<<"requirements">>, JSON))}
-      ]).
+    Data0 = case proplists:lookup(<<"metadata">>, JSON) of
+		none ->
+		    [];
+		{<<"metadata">>, Meta} ->
+		    [{<<"metadata">>, Meta}]
+	    end,
+    Data = [{<<"dataset">>, ID},
+	    {<<"type">>, Type},
+	    {<<"name">>, proplists:get_value(<<"name">>, JSON)},
+	    {<<"version">>, proplists:get_value(<<"version">>, JSON)},
+	    {<<"networks">>,
+	     proplists:get_value(<<"networks">>,
+				 proplists:get_value(<<"requirements">>, JSON))} | Data0],
+    libsniffle:dataset_attribute_set(ID, Data).
 
 list_datasets(Datasets) ->
-    filelib:fold_files("/var/db/imgadm", ".*json", false, 
+    filelib:fold_files("/var/db/imgadm", ".*json", false,
 		       fun ("/var/db/imgadm/imgcache.json", R) ->
 			       R;
 			   (F, {Fs, DsA}) ->
-			       {match, [_UUID]} = re:run(F, "/var/db/imgadm/(.*)\.json", 
+			       {match, [_UUID]} = re:run(F, "/var/db/imgadm/(.*)\.json",
 							[{capture, all_but_first, binary}]),
 			       {F1, DsA1} = read_dsmanifest(F, DsA),
 			       {[F1| Fs], DsA1}
 		       end, {[], Datasets}).
-			       
+
 read_dsmanifest(F, Ds) ->
     case proplists:get_value(F, Ds) of
 	undefined ->
@@ -313,13 +318,13 @@ read_dsmanifest(F, Ds) ->
 	    JSON1 = [{<<"id">>, ID}|JSON],
 	    publish_dataset(JSON1),
 	    {JSON1, [{F, JSON1}|Ds]};
-	JSON -> 
+	JSON ->
 	    {JSON, Ds}
     end.
 
 list_vms() ->
-    [chunter_zoneparser:load([{<<"name">>, Name}, {<<"uuid">>, UUID}]) || 
-	[ID,Name,_VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
-	    [ re:split(Line, ":") 
+    [chunter_zoneparser:load([{<<"name">>, Name}, {<<"uuid">>, UUID}]) ||
+	[ID,Name,_VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
+	    [ re:split(Line, ":")
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 	ID =/= <<"0">>].

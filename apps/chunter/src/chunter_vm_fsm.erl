@@ -378,9 +378,11 @@ change_state(UUID, State) ->
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
 
 
+-spec binary_to_atom(B::binary()) -> A::atom().
 binary_to_atom(B) ->
     list_to_atom(binary_to_list(B)).
 
+-spec atom_to_binary(I::binary()|atom()) -> A::atom().
 atom_to_binary(B) when is_binary(B) ->
     B;
 atom_to_binary(A) ->

@@ -83,10 +83,11 @@ init([]) ->
 	       "chunter:init.", []),
     % We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     [Host|_] = re:split(os:cmd("uname -n"), "\n"),
+    {ok, IP} = inet:getaddr(Host, inet),
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
-    libsniffle:hypervisor_register(Host, Host, 4200),
+    libsniffle:hypervisor_register(Host, IP, 4200),
     lager:info([{fifi_component, chunter}],
-	       "chunter:init - Host: ~s", [Host]),	
+	       "chunter:init - Host: ~s", [Host]),
     {_, DS} = list_datasets([]),
     lists:foldl(
       fun (VM, _) ->

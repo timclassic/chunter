@@ -16,6 +16,9 @@
 -export([to_vmadm/3,
 	 to_sniffle/1]).
 
+
+-spec to_vmadm(Package::fifo:package(), Dataset::fifo:dataset(), OwnerData::fifo:config()) -> fifo:vm_config().
+
 to_vmadm(Package, Dataset, OwnerData) ->
     case lists:keyfind(<<"type">>, 1, Dataset) of
 	{<<"type">>,<<"kvm">>} ->
@@ -23,6 +26,8 @@ to_vmadm(Package, Dataset, OwnerData) ->
 	{<<"type">>,<<"zone">>} ->
 	    generate_spec(Package, Dataset, OwnerData, zone, unknown, [], [{<<"brand">>, <<"joyent">>}])
     end.
+
+-spec to_sniffle(Spec::fifo:vm_config()) -> fifo:config_list().
 
 to_sniffle(Spec) ->
     case lists:keyfind(<<"brand">>, 1, Spec) of
@@ -36,16 +41,20 @@ to_sniffle(Spec) ->
 %%% Internal functions
 %%%===================================================================
 
-generate_sniffle([{<<"state">>, V} | D], S, Type) ->
-    generate_sniffle(D, [{<<"state">>, V} | S], Type);
+-spec generate_sniffle(Spec::fifo:vm_config(),
+		       Acc::fifo:config_list(),
+		       Type::fifo:vm_type()) -> fifo:config_list().
 
-generate_sniffle([{<<"dataset_uuid">>, V} | D], S, Type) ->
-    generate_sniffle(D, [{<<"dataset">>, V} | S], Type);
+generate_sniffle([{<<"state">>, V} | D], Acc, Type) ->
+    generate_sniffle(D, [{<<"state">>, V} | Acc], Type);
 
-generate_sniffle([{<<"quota">>, V} | D], S, zone = Type) ->
-    generate_sniffle(D, [{<<"quota">>, V} | S], Type);
+generate_sniffle([{<<"dataset_uuid">>, V} | D], Acc, Type) ->
+    generate_sniffle(D, [{<<"dataset">>, V} | Acc], Type);
 
-generate_sniffle([{<<"disks">>, Disks} | D], S, kvm = Type) ->
+generate_sniffle([{<<"quota">>, V} | D], Acc, zone = Type) ->
+    generate_sniffle(D, [{<<"quota">>, V} | Acc], Type);
+
+generate_sniffle([{<<"disks">>, Disks} | D], Acc, kvm = Type) ->
     case lists:foldl(fun(E, {Dataset, Sum}) ->
 			     {<<"size">>, Size} = lists:keyfind(<<"size">>, 1, E),
 			     Total = Sum + round(Size / 1024),
@@ -57,62 +66,73 @@ generate_sniffle([{<<"disks">>, Disks} | D], S, kvm = Type) ->
 			     end
 		     end, {undefined, 0}, Disks) of
 	{undefined, Size} ->
-	    generate_sniffle(D, [{<<"quota">>, Size} | S], Type);
+	    generate_sniffle(D, [{<<"quota">>, Size} | Acc], Type);
 	{Dataset, Size} ->
-	    generate_sniffle(D, [{<<"quota">>, Size}, {<<"dataset">>, Dataset} | S], Type)
+	    generate_sniffle(D, [{<<"quota">>, Size}, {<<"dataset">>, Dataset} | Acc], Type)
     end;
 
-generate_sniffle([{<<"nics">>, Ns} | D], S, Type) ->
-    generate_sniffle(D, [{<<"networks">>, Ns} | S], Type);
+generate_sniffle([{<<"nics">>, Ns} | D], Acc, Type) ->
+    generate_sniffle(D, [{<<"networks">>, Ns} | Acc], Type);
 
-generate_sniffle([{<<"cpu_cap">>, V} | D], S, Type) ->
-    generate_sniffle(D, [{<<"cpu_cap">>, V} | S], Type);
+generate_sniffle([{<<"cpu_cap">>, V} | D], Acc, Type) ->
+    generate_sniffle(D, [{<<"cpu_cap">>, V} | Acc], Type);
 
-generate_sniffle([{<<"cpu_shares">>, V} | D], S, Type) ->
-    generate_sniffle(D, [{<<"cpu_shares">>, V} | S], Type);
+generate_sniffle([{<<"cpu_shares">>, V} | D], Acc, Type) ->
+    generate_sniffle(D, [{<<"cpu_shares">>, V} | Acc], Type);
 
-generate_sniffle([{<<"vcpus">>, V} | D], S, kvm = Type) ->
-    generate_sniffle(D, [{<<"vcpus">>, V} | S], Type);
+generate_sniffle([{<<"vcpus">>, V} | D], Acc, kvm = Type) ->
+    generate_sniffle(D, [{<<"vcpus">>, V} | Acc], Type);
 
-generate_sniffle([{<<"customer_metadata">>, V} | D], S, Type) ->
-    generate_sniffle(D, decode_metadata(V, S, []), Type);
+generate_sniffle([{<<"customer_metadata">>, V} | D], Acc, Type) ->
+    generate_sniffle(D, decode_metadata(V, Acc, []), Type);
 
-generate_sniffle([{<<"uuid">>, Ns} | D], S, Type) ->
-    generate_sniffle(D, [{<<"uuid">>, Ns} | S], Type);
+generate_sniffle([{<<"uuid">>, Ns} | D], Acc, Type) ->
+    generate_sniffle(D, [{<<"uuid">>, Ns} | Acc], Type);
 
-generate_sniffle([{<<"max_physical_memory">>, V} | D], S, zone = Type) ->
-    generate_sniffle(D, [{<<"ram">>, round(V/1024/1024)} | S], Type);
+generate_sniffle([{<<"max_physical_memory">>, V} | D], Acc, zone = Type) ->
+    generate_sniffle(D, [{<<"ram">>, round(V/1024/1024)} | Acc], Type);
 
-generate_sniffle([{<<"ram">>, V} | D], S, kvm = Type) ->
-    generate_sniffle(D, [{<<"ram">>, V} | S], Type);
+generate_sniffle([{<<"ram">>, V} | D], Acc, kvm = Type) ->
+    generate_sniffle(D, [{<<"ram">>, V} | Acc], Type);
 
-generate_sniffle([{<<"resolvers">>, V} | D], S, Type) ->
-    generate_sniffle(D, [{<<"resolvers">>, V} | S], Type);
+generate_sniffle([{<<"resolvers">>, V} | D], Acc, Type) ->
+    generate_sniffle(D, [{<<"resolvers">>, V} | Acc], Type);
 
-generate_sniffle([_ | D], S, Type) ->
-    generate_sniffle(D, S, Type);
+generate_sniffle([_ | D], Acc, Type) ->
+    generate_sniffle(D, Acc, Type);
 
-generate_sniffle([], Sniffle, _Type) ->
-    Sniffle.
+generate_sniffle([], Acc, _Type) ->
+    Acc.
 
-decode_metadata([], S, []) ->
-    S;
+-spec decode_metadata(Metadata::fifo:config_list(),
+		      Acc::fifo:config_list(),
+		      Other::fifo:config_list()) -> fifo:config_list().
+decode_metadata([], Acc, []) ->
+    Acc;
 
-decode_metadata([], S, O) ->
-    [{<<"metadata">>, O} | S];
+decode_metadata([], Acc, O) ->
+    [{<<"metadata">>, O} | Acc];
 
-decode_metadata([{<<"root_authorized_keys">>, Keys} | M], S, O) ->
-    decode_metadata(M, [{<<"ssh_keys">>, Keys} | S], O);
+decode_metadata([{<<"root_authorized_keys">>, Keys} | M], Acc, O) ->
+    decode_metadata(M, [{<<"ssh_keys">>, Keys} | Acc], O);
 
-decode_metadata([{<<"root_pw">>, Pass} | M], S, O) ->
-    decode_metadata(M, [{<<"root_pw">>, Pass} | S], O);
+decode_metadata([{<<"root_pw">>, Pass} | M], Acc, O) ->
+    decode_metadata(M, [{<<"root_pw">>, Pass} | Acc], O);
 
-decode_metadata([{<<"admin_pw">>, Pass} | M], S, O) ->
-    decode_metadata(M, [{<<"admin_pw">>, Pass} | S], O);
+decode_metadata([{<<"admin_pw">>, Pass} | M], Acc, O) ->
+    decode_metadata(M, [{<<"admin_pw">>, Pass} | Acc], O);
 
-decode_metadata([E | M], S, O) ->
-    decode_metadata(M, S, [E | O]).
+decode_metadata([E | M], Acc, O) ->
+    decode_metadata(M, Acc, [E | O]).
 
+
+-spec generate_spec(Package::fifo:package(),
+		    Dataset::fifo:dataset(),
+		    OwnerData::fifo:config(),
+		    Type::fifo:vm_type(),
+		    DatasetUUID::fifo:uuid() | unknown,
+		    Metadata::fifo:config_list(),
+		    Acc::fifo:vm_config()) -> fifo:vm_config().
 
 
 generate_spec([], [], [], _, _, Meta, Spec) ->
@@ -180,6 +200,10 @@ generate_spec([_ | P], [], O, Type, DUUID, Meta, Spec) ->
 generate_spec(P, [_ | D], O, Type, DUUID, Meta, Spec) ->
     generate_spec(P, D, O, Type, DUUID, Meta, Spec).
 
+
+-spec generate_nics(Nics::[fifo:config_list()],
+		    Acc::[fifo:config_list()]) -> [fifo:config_list()].
+
 generate_nics([N | R], []) ->
     generate_nics(R, [[{<<"primary">>, true}| N]]);
 
@@ -188,6 +212,16 @@ generate_nics([N | R], Nics) ->
 
 generate_nics([], Nics) ->
     Nics.
+
+-spec ceiling(X::float()) -> integer().
+
+ceiling(X) ->
+    T = erlang:trunc(X),
+    case (X - T) of
+        Neg when Neg < 0 -> T;
+        Pos when Pos > 0 -> T + 1;
+        _ -> T
+    end.
 
 -ifdef(TEST).
 
@@ -304,13 +338,3 @@ nics_test() ->
     ?assertEqual(In, ordsets:from_list(to_sniffle(VMData2))).
 
 -endif.
-
--spec ceiling(X::float()) -> integer().
-
-ceiling(X) ->
-    T = erlang:trunc(X),
-    case (X - T) of
-        Neg when Neg < 0 -> T;
-        Pos when Pos > 0 -> T + 1;
-        _ -> T
-    end.

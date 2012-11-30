@@ -19,7 +19,7 @@
 
 -ignore_xref([start_link/0]).
 
--define(SERVER, ?MODULE). 
+-define(SERVER, ?MODULE).
 
 -record(state, {name,
 		port}).
@@ -110,8 +110,8 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
     [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
-	    [ re:split(Line, ":") 
+	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
+	    [ re:split(Line, ":")
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 	ID =/= <<"0">>],
     {noreply, State};
@@ -164,6 +164,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec simplifie_state(OriginalState::binary()) -> fifo:vm_state().
+
 simplifie_state(<<"installed">>) ->
     <<"stopped">>;
 simplifie_state(<<"uninitialized">>) ->
@@ -180,12 +182,14 @@ simplifie_state(<<"shutting_down">>) ->
     <<"shutting_down">>;
 simplifie_state(<<"empty">>) ->
     <<"shutting_down">>;
-simplifie_state(<<"down">>) -> 
+simplifie_state(<<"down">>) ->
     <<"shutting_down">>;
-simplifie_state(<<"dying">>) -> 
+simplifie_state(<<"dying">>) ->
     <<"shutting_down">>;
-simplifie_state(<<"dead">>) -> 
+simplifie_state(<<"dead">>) ->
     <<"stopped">>.
+
+-spec parse_data(binary()) -> {UUID::fifo:uuid(), State::binary()} | {error, unknown}.
 
 parse_data(<<"S00: ", UUID/binary>>) ->
     {UUID, <<"uninitialized">>};

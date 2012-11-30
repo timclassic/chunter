@@ -11,6 +11,7 @@
 %% API
 -export([load/1]).
 
+-type xml_element() :: {string(), [{string(), term()}], [xml_element()]}.
 
 -define(REMOVE(Key),
 	create_zone_data([{Key, _}|R], Disks, Nics, Datasets) ->
@@ -77,7 +78,7 @@
 	create_disk([{Old, <<"false">>}|R]) ->
 	       [{New, false}
 		|create_disk(R)]).
-	       
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -92,10 +93,14 @@
 %%% Internal functions
 %%%===================================================================
 
+-spec load(VM::fifo:vm_config()) -> fifo:vm_config().
+
 load(VM) ->
     Name = proplists:get_value(<<"name">>, VM),
     convert(<<"/etc/zones/", Name/binary, ".xml">>, VM).
-    
+
+-spec convert(Name::binary(), VM::fifo:vm_config()) -> fifo:vm_config().
+
 convert(F, VM)->
     {ok, XML} = file:read_file(F),
     case erlsom:simple_form(XML) of
@@ -105,6 +110,8 @@ convert(F, VM)->
             Err
     end.
 
+-spec parse_xml([xml_element()]) -> [xml_element() | {Key::binary()|atom(), Value::term()}].
+
 parse_xml([{"zone",Attrib,Value}|T])->
     [{"zone", Attrib, lists:flatten(parse_xml(Value))}|parse_xml(T)];
 
@@ -113,7 +120,7 @@ parse_xml([{"dataset",Attrib,_Value}|T])->
      |parse_xml(T)];
 
 parse_xml([{"attr",Attrib,_Value}|T])->
-    [{list_to_binary(proplists:get_value("name", Attrib)), 
+    [{list_to_binary(proplists:get_value("name", Attrib)),
        list_to_binary(proplists:get_value("value", Attrib))}
      |parse_xml(T)];
 
@@ -126,6 +133,7 @@ parse_xml([{"rctl",Attrib,[{"rctl-value",
 
 parse_xml([{"net-attr",[{"name",Name},{"value",Value}],[]}|T])->
     [{list_to_binary(Name), list_to_binary(Value)}|parse_xml(T)];
+
 parse_xml([{"net-attr",[{"value",Value},{"name",Name}],[]}|T])->
     [{list_to_binary(Name), list_to_binary(Value)}|parse_xml(T)];
 
@@ -150,12 +158,15 @@ parse_xml([{Node,Attrib,Value}|T])->
 parse_xml(Value)->
     Value.
 
+-spec map_attrs([{string(), string()}]) ->
+    [{binary(), binary()}].
 map_attrs(Attrs) ->
-    lists:map(fun ({K,V}) -> 
-		      {list_to_binary(K), list_to_binary(V)} 
+    lists:map(fun ({K,V}) ->
+		      {list_to_binary(K), list_to_binary(V)}
 	      end, Attrs).
 
 
+-spec create_zone_data(Data::[{atom()|binary(), term()}]) -> fifo:vm_config().
 create_zone_data(Data) ->
     create_zone_data(Data, [], [],[]).
 
@@ -167,7 +178,7 @@ create_zone_data([], [], [], Datasets) ->
 
 create_zone_data([], [], Nics, Datasets) ->
     [{nics, Nics}|create_zone_data([], [], [], Datasets)];
-    
+
 create_zone_data([], Disks, Nics, Datasets) ->
     [{disks, Disks}|create_zone_data([], [], Nics, Datasets)];
 
@@ -238,8 +249,8 @@ create_nic([T|R]) ->
 create_disk([]) ->
     [];
 create_disk([T|R]) ->
-    [T|create_nic(R)].
-    
+    [T|create_disk(R)].
+
 %% todo:
     %% <<"filesystem">>, {
     %%     <<"special">>, <<"source">>,

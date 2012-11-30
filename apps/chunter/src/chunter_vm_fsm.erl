@@ -29,8 +29,12 @@
 	 force_state/2]).
 
 %% gen_fsm callbacks
--export([init/1, handle_event/3,
-	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
+-export([init/1,
+	 handle_event/3,
+	 handle_sync_event/4,
+	 handle_info/3,
+	 terminate/3,
+	 code_change/4]).
 
 
 % This functions have to be exported but are only used internally.
@@ -50,9 +54,16 @@
 %%% API
 %%%===================================================================
 
+-spec create(UUID::fifo:uuid(), PackageSpec::fifo:package(),
+	     DatasetSpec::fifo:dataset(), VMSpec::fifo:config()) ->
+		    ok.
+
 create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
     start_link(UUID),
     gen_fsm:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
+
+
+-spec load(UUID::fifo:uuid()) -> ok.
 
 load(UUID) ->
     case global:whereis_name({vm, UUID}) of
@@ -63,18 +74,30 @@ load(UUID) ->
 	    register(UUID)
     end.
 
+-spec transition(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
+
 transition(UUID, State) ->
     gen_fsm:send_event({global, {vm, UUID}}, {transition, State}).
 
+
+-spec delete(UUID::fifo:uuid()) -> ok.
+
 delete(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, delete).
+
+-spec remove(UUID::fifo:uuid()) -> ok.
 
 remove(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, remove).
 
 
+
+-spec force_state(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
+
 force_state(UUID, State) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State}).
+
+-spec register(UUID::fifo:uuid()) -> ok.
 
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
@@ -128,6 +151,12 @@ init([UUID]) ->
 %% @end
 %%--------------------------------------------------------------------
 
+-spec initialized(Action::load |
+			  {create,  PackageSpec::fifo:package(),
+			   DatasetSpec::fifo:dataset(), VMSpec::fifo:config()}, State::term()) ->
+			 {next_state, loading, State::term()} |
+			 {next_state, creating, State::term()} |
+			 {next_state, initialized, State::term()}.
 initialized(load, State) ->
     {next_state, loading, State};
 
@@ -135,8 +164,8 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
     {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
     change_state(UUID, <<"installing_dataset">>),
-    libhowl:send(UUID, [{<<"event">>, <<"update">>}, 
-			{<<"data">>, 
+    libhowl:send(UUID, [{<<"event">>, <<"update">>},
+			{<<"data">>,
 			 [{<<"state">>, <<"installing_dataset">>},
 			  {<<"hypervisor">>, Hypervisor},
 			  {<<"config">>, VMData}]}]),
@@ -149,16 +178,26 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
 initialized(_, State) ->
     {next_state, initialized, State}.
 
+
+-spec creating({transition, NextState::fifo:vm_state()}, State::term()) ->
+		      {next_state, atom(), State::term()}.
+
 creating({transition, NextState}, State) ->
-    change_state(State#state.uuid, atom_to_binary(NextState)),
+    change_state(State#state.uuid, NextState),
     {next_state, binary_to_atom(NextState), State}.
 
-loading({transition, NextState}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, atom_to_binary(NextState)),
-    {next_state, NextState, State}.
+-spec loading({transition, NextState::fifo:vm_state()}, State::term()) ->
+		     {next_state, atom(), State::term()}.
 
-stopped({transition, NextState = booting}, State) ->
-    change_state(State#state.uuid, atom_to_binary(NextState)),
+loading({transition, NextState}, State) ->
+    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    {next_state, binary_to_atom(NextState), State}.
+
+-spec stopped({transition, NextState::fifo:vm_state()}, State::term()) ->
+		      {next_state, atom(), State::term()}.
+
+stopped({transition, NextState = <<"booting">>}, State) ->
+    change_state(State#state.uuid, NextState),
     {next_state, binary_to_atom(NextState), State};
 
 stopped(start, State) ->
@@ -168,13 +207,15 @@ stopped(start, State) ->
 stopped(_, State) ->
     {next_state, stopped, State}.
 
+-spec booting({transition, NextState::fifo:vm_state()}, State::term()) ->
+		     {next_state, atom(), State::term()}.
 
-booting({transition, NextState = shutting_down}, State) ->
-    change_state(State#state.uuid, atom_to_binary(NextState)),
+booting({transition, NextState = <<"shutting_down">>}, State) ->
+    change_state(State#state.uuid, NextState),
     {next_state, binary_to_atom(NextState), State};
 
-booting({transition, NextState = running}, State) ->
-    change_state(State#state.uuid, atom_to_binary(NextState)),
+booting({transition, NextState = <<"running">>}, State) ->
+    change_state(State#state.uuid, NextState),
     Info = chunter_vmadm:info(State#state.uuid),
     libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
     {next_state, binary_to_atom(NextState), State};
@@ -182,17 +223,21 @@ booting({transition, NextState = running}, State) ->
 booting(_, State) ->
     {next_state, booting, State}.
 
+-spec running({transition, NextState::fifo:vm_state()}, State::term()) ->
+		      {next_state, atom(), State::term()}.
 
-running({transition, NextState = shutting_down}, State) ->
-    change_state(State#state.uuid, atom_to_binary(NextState)),
+running({transition, NextState = <<"shutting_down">>}, State) ->
+    change_state(State#state.uuid, NextState),
     {next_state, binary_to_atom(NextState), State};
 
 running(_, State) ->
     {next_state, running, State}.
 
+-spec shutting_down({transition, NextState::fifo:vm_state()}, State::term()) ->
+			   {next_state, atom(), State::term()}.
 
-shutting_down({transition, NextState = stopped}, State) ->
-    change_state(State#state.uuid, atom_to_binary(NextState)),
+shutting_down({transition, NextState = <<"stopped">>}, State) ->
+    change_state(State#state.uuid, NextState),
     {next_state, binary_to_atom(NextState), State};
 
 shutting_down(_, State) ->
@@ -232,10 +277,14 @@ shutting_down(_, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-
+-spec handle_event({force_state, NextState::fifo:vm_state()},
+		   StateName::atom(),
+		   State::term()) ->
+			  {next_state, NextStateName::fifo:vm_state_atom(), NextState::term()} |
+			  {stop, Reason::term(), NewState::term()}.
 
 handle_event({force_state, NextState}, StateName, State) ->
-    case binary_to_atom(NextState) of
+    case atom_to_binary(NextState) of
 	StateName ->
 	    {next_state, StateName, State};
 	Other ->
@@ -246,40 +295,48 @@ handle_event({force_state, NextState}, StateName, State) ->
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
     change_state(State#state.uuid, atom_to_binary(StateName)),
-    VMData = load_vm(State#state.uuid),
-    libsniffle:vm_attribute_set(State#state.uuid, <<"config">>, chunter_spec:to_sniffle(VMData)),
-    {next_state, StateName, State};
+    case load_vm(State#state.uuid) of
+	{error, not_found} ->
+	    {stop, not_found, State};
+	VMData ->
+	    libsniffle:vm_attribute_set(State#state.uuid, <<"config">>, chunter_spec:to_sniffle(VMData)),
+	    {next_state, StateName, State}
+    end;
 
 handle_event(remove, _StateName, State) ->
     libsniffle:vm_unregister(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, StateName, State) ->
-    VM = load_vm(State#state.uuid),
-    case proplists:get_value(nics, VM) of
-	undefined ->
-	    [];
-	Nics ->
-	    [try
-		 Net = proplists:get_value(<<"nic_tag">>, Nic),
-		 IP = proplists:get_value(<<"ip">>, Nic),
-		 libsniffle:iprange_release(Net, IP),
-		 ok
-	     catch 
-		 _:_ ->
-		     ok
-	     end
-	     || Nic <- Nics]
-    end,
+    case load_vm(State#state.uuid) of
+	{error, not_found} ->
+	    {stop, not_found, State};
+	VM ->
+	    case proplists:get_value(<<"nics">>, VM) of
+		undefined ->
+		    [];
+		Nics ->
+		    [try
+			 Net = proplists:get_value(<<"nic_tag">>, Nic),
+			 IP = proplists:get_value(<<"ip">>, Nic),
+			 libsniffle:iprange_release(Net, IP),
+			 ok
+		     catch
+			 _:_ ->
+			     ok
+		     end
+		     || Nic <- Nics]
+	    end,
 %    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
 %	{ok, GUUID} ->
 %	    libsnarl:group_delete(system, GUUID);
-%	_ -> 
+%	_ ->
 %	    ok
 %   end,
-    {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
-    spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
-    {next_state, StateName, State};
+	    {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+	    spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
+	    {next_state, StateName, State}
+    end;
 
 
 handle_event(_Event, StateName, State) ->
@@ -351,6 +408,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 
 install_image(DatasetUUID) ->
     case filelib:is_regular(filename:join(<<"/var/db/imgadm">>, <<DatasetUUID/binary, ".json">>)) of
@@ -361,17 +419,36 @@ install_image(DatasetUUID) ->
     end.
 
 
+-spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
+				       Name::binary(),
+				       VMState::binary(),
+				       Path::binary(),
+				       UUID::binary(),
+				       Type::binary()}].
+
+zoneadm(ZUUID) ->
+    Zones = [ re:split(Line, ":")
+	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
+    [{ID, Name, VMState, Path, UUID, Type} ||
+	[ID, Name, VMState, Path, UUID, Type, _IP, _SomeNumber] <- Zones].
+
+-spec load_vm(ZUUID::fifo:uuid()) -> fifo:vm_config() | {error, not_found}.
+
 load_vm(ZUUID) ->
-    %[Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
-    [VM] = [chunter_zoneparser:load([{<<"name">>,Name},
-				     {<<"state">>, VMState},
-				     {<<"zonepath">>, Path},
-				     {<<"type">>, Type}]) ||
-	       [ID,Name,VMState,Path,_UUID,Type,_IP,_SomeNumber] <-
-		   [ re:split(Line, ":")
-		     || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
-	       ID =/= <<"0">>],
-    VM.
+    case [chunter_zoneparser:load([{<<"name">>,Name},
+				   {<<"state">>, VMState},
+				   {<<"zonepath">>, Path},
+				   {<<"type">>, Type}]) ||
+	     {_ID, Name, VMState, Path, _UUID, Type} <- zoneadm(ZUUID)] of
+	[VM | _] ->
+	    VM;
+	[] ->
+	    {error, not_found}
+    end.
+
+
+
+-spec change_state(UUID::binary(), State::fifo:vm_state()) -> ok.
 
 change_state(UUID, State) ->
     libsniffle:vm_attribute_set(UUID, <<"state">>, State),
@@ -382,7 +459,7 @@ change_state(UUID, State) ->
 binary_to_atom(B) ->
     list_to_atom(binary_to_list(B)).
 
--spec atom_to_binary(I::binary()|atom()) -> A::atom().
+-spec atom_to_binary(I::binary()|atom()) -> A::binary().
 atom_to_binary(B) when is_binary(B) ->
     B;
 atom_to_binary(A) ->

@@ -65,6 +65,12 @@ generate_sniffle([{<<"disks">>, Disks} | D], S, kvm = Type) ->
 generate_sniffle([{<<"nics">>, Ns} | D], S, Type) ->
     generate_sniffle(D, [{<<"networks">>, Ns} | S], Type);
 
+generate_sniffle([{<<"cpu_cap">>, V} | D], S, Type) ->
+    generate_sniffle(D, [{<<"cpu_cap">>, V} | S], Type);
+
+generate_sniffle([{<<"vcpus">>, V} | D], S, kvm = Type) ->
+    generate_sniffle(D, [{<<"vcpus">>, V} | S], Type);
+
 generate_sniffle([{<<"customer_metadata">>, V} | D], S, Type) ->
     generate_sniffle(D, decode_metadata(V, S, []), Type);
 
@@ -104,6 +110,8 @@ decode_metadata([{<<"admin_pw">>, Pass} | M], S, O) ->
 decode_metadata([E | M], S, O) ->
     decode_metadata(M, S, [E | O]).
 
+
+
 generate_spec([], [], [], _, _, Meta, Spec) ->
     [{<<"customer_metadata">>, Meta} | Spec];
 
@@ -121,6 +129,13 @@ generate_spec([{<<"ram">>, V} | P], [], O, kvm = T, DUUID, Meta, Spec) ->
 
 generate_spec([{<<"ram">>, V} | P], [], O, zone = T, DUUID, Meta, Spec) ->
     generate_spec(P, [], O, T, DUUID, Meta, [{<<"max_physical_memory">>, V} | Spec]);
+
+
+generate_spec([{<<"cpu_cap">>, V} | P], [], O, kvm = T, DUUID, Meta, Spec) ->
+    generate_spec(P, [], O, T, DUUID, Meta, [{<<"vcpus">>, ceiling(V/100.0)}, {<<"cpu_cap">>, V} | Spec]);
+
+generate_spec([{<<"cpu_cap">>, V} | P], [], O, zone = T, DUUID, Meta, Spec) ->
+    generate_spec(P, [], O, T, DUUID, Meta, [{<<"cpu_cap">>, V} | Spec]);
 
 
 generate_spec([{<<"quota">>, V} | P], [], O, kvm = T, DUUID, Meta, Spec) ->
@@ -194,6 +209,41 @@ kvm_ram_test() ->
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
+kvm_cpu_cap1_test() ->
+    InP = [{<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 100}],
+    InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}],
+    In = ordsets:from_list([{<<"vcpus">>, 1} | InP ++ InD ++ InO]),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+kvm_cpu_cap14_test() ->
+    InP = [{<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 140}],
+    InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}],
+    In = ordsets:from_list([{<<"vcpus">>, 2} | InP ++ InD ++ InO]),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+kvm_cpu_cap15_test() ->
+    InP = [{<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 150}],
+    InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}],
+    In = ordsets:from_list([{<<"vcpus">>, 2} | InP ++ InD ++ InO]),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+kvm_cpu_cap2_test() ->
+    InP = [{<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 200}],
+    InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}],
+    In = ordsets:from_list([{<<"vcpus">>, 2} | InP ++ InD ++ InO]),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+kvm_cpu_cap21_test() ->
+    InP = [{<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 210}],
+    InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}],
+    In = ordsets:from_list([{<<"vcpus">>, 3} | InP ++ InD ++ InO]),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
 
 resolver_test() ->
     InP = [{<<"quota">>, 10}],
@@ -247,3 +297,13 @@ nics_test() ->
     ?assertEqual(In, ordsets:from_list(to_sniffle(VMData2))).
 
 -endif.
+
+-spec ceiling(X::float()) -> integer().
+
+ceiling(X) ->
+    T = erlang:trunc(X),
+    case (X - T) of
+        Neg when Neg < 0 -> T;
+        Pos when Pos > 0 -> T + 1;
+        _ -> T
+    end.

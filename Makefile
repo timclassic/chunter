@@ -1,6 +1,6 @@
 REBAR = $(shell pwd)/rebar
 
-.PHONY: deps rel stagedevrel
+.PHONY: deps rel
 
 all: deps compile
 
@@ -14,7 +14,7 @@ clean:
 	$(REBAR) clean
 	make -C rel/pkg clean
 
-distclean: clean devclean relclean
+distclean: clean
 	$(REBAR) delete-deps
 
 test: all
@@ -23,12 +23,6 @@ test: all
 
 rel: all
 	$(REBAR) generate
-
-relclean:
-	rm -rf rel/chunter
-
-package: rel
-	make -C rel/pkg package
 
 ###
 ### Docs
@@ -64,7 +58,7 @@ dialyzer: deps compile
 	@echo Use "'make build_plt'" to build PLT prior to using this target.
 	@echo
 	@sleep 1
-	dialyzer -Wno_return --plt $(COMBO_PLT) deps/*/ebin apps/*/ebin
+	dialyzer -Wno_return --plt $(COMBO_PLT) deps/*/ebin apps/*/ebin | grep -v -f dialyzer.mittigate
 
 
 cleanplt:

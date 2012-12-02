@@ -277,25 +277,26 @@ publish_datasets(Datasets) ->
 publish_dataset(JSON) ->
     ID = proplists:get_value(<<"uuid">>, JSON),
     libsniffle:dataset_create(ID),
-    Type = case proplists:get_value(<<"os">>, JSON) of
+    Data0 = case proplists:get_value(<<"os">>, JSON) of
 	       <<"smartos">> ->
-		   <<"zone">>;
+		    [{<<"type">>, <<"zone">>}];
 	       _ ->
-		   <<"kvm">>
-	   end,
-    Data0 = case proplists:lookup(<<"metadata">>, JSON) of
+		    [{<<"type">>, <<"kvm">>},
+		     {<<"disk_driver">>,  proplists:get_value(<<"disk_driver">>, JSON)},
+		     {<<"nic_driver">>,  proplists:get_value(<<"nic_driver">>, JSON)}]
+	    end,
+    Data1 = case proplists:lookup(<<"metadata">>, JSON) of
 		none ->
-		    [];
+		    Data0;
 		{<<"metadata">>, Meta} ->
-		    [{<<"metadata">>, Meta}]
+		    [{<<"metadata">>, Meta} | Data0]
 	    end,
     Data = [{<<"dataset">>, ID},
-	    {<<"type">>, Type},
 	    {<<"name">>, proplists:get_value(<<"name">>, JSON)},
 	    {<<"version">>, proplists:get_value(<<"version">>, JSON)},
 	    {<<"networks">>,
 	     proplists:get_value(<<"networks">>,
-				 proplists:get_value(<<"requirements">>, JSON))} | Data0],
+				 proplists:get_value(<<"requirements">>, JSON))} | Data1],
     libsniffle:dataset_attribute_set(ID, Data).
 
 list_datasets(Datasets) ->

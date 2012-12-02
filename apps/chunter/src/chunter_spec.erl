@@ -83,6 +83,12 @@ generate_sniffle([{<<"cpu_shares">>, V} | D], Acc, Type) ->
 generate_sniffle([{<<"vcpus">>, V} | D], Acc, kvm = Type) ->
     generate_sniffle(D, [{<<"vcpus">>, V} | Acc], Type);
 
+generate_sniffle([{<<"disk_driver">>, V} | D], Acc, kvm = Type) ->
+    generate_sniffle(D, [{<<"disk_driver">>, V} | Acc], Type);
+
+generate_sniffle([{<<"nic_driver">>, V} | D], Acc, kvm = Type) ->
+    generate_sniffle(D, [{<<"nic_driver">>, V} | Acc], Type);
+
 generate_sniffle([{<<"customer_metadata">>, V} | D], Acc, Type) ->
     generate_sniffle(D, decode_metadata(V, Acc, []), Type);
 
@@ -143,6 +149,12 @@ generate_spec(P, D,  [{<<"uuid">>, V} | O], Type, DUUID, Meta, Spec) ->
 
 generate_spec(P, [{<<"dataset">>, DUUID} | D], O, T, _, Meta, Spec) ->
     generate_spec(P, D, O, T, DUUID, Meta, Spec);
+
+generate_spec(P, [{<<"nic_driver">>, V} | D], O, T, DUUID, Meta, Spec) ->
+    generate_spec(P, D, O, T, DUUID, Meta, [{<<"nic_driver">>, V} | Spec]);
+
+generate_spec(P, [{<<"disk_driver">>, V} | D], O, T, DUUID, Meta, Spec) ->
+    generate_spec(P, D, O, T, DUUID, Meta, [{<<"disk_driver">>, V} | Spec]);
 
 generate_spec(P, [{<<"networks">>, N} | D], O, T, DUUID, Meta, Spec) ->
     generate_spec(P, D, O, T, DUUID, Meta, [{<<"nics">>, generate_nics(N, [])} | Spec]);
@@ -228,6 +240,22 @@ ceiling(X) ->
 type_test() ->
     InP = [{<<"quota">>, 10}],
     InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}],
+    In = ordsets:from_list(InP ++ InD ++ InO),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+disk_driver_test() ->
+    InP = [{<<"quota">>, 10}],
+    InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>},
+	   {<<"disk_driver">>, <<"virtio">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}],
+    In = ordsets:from_list(InP ++ InD ++ InO),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+
+nic_driver_test() ->
+    InP = [{<<"quota">>, 10}],
+    InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>},
+	   {<<"nic_driver">>, <<"virtio">>}],
     InO = [{<<"uuid">>, <<"zone uuid">>}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).

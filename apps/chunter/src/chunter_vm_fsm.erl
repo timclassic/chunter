@@ -284,7 +284,7 @@ shutting_down(_, State) ->
 			  {stop, Reason::term(), NewState::term()}.
 
 handle_event({force_state, NextState}, StateName, State) ->
-    case atom_to_binary(NextState) of
+    case binary_to_atom(NextState) of
 	StateName ->
 	    {next_state, StateName, State};
 	Other ->

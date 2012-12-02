@@ -68,7 +68,6 @@ handle_message({machines, create, UUID, PSpec, DSpec, Config}, State) when is_bi
     {stop, State};
 
 handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
-    io:format("delete~n"),
     chunter_vm_fsm:delete(UUID),
 
     {stop, State};

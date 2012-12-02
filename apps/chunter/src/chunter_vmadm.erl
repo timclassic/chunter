@@ -67,7 +67,12 @@ info(UUID) ->
     Cmd = <<"/usr/sbin/vmadm info ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
 		"vmadm:cmd - ~s.", [Cmd]),
-    jsx:to_term(list_to_binary(os:cmd(binary_to_list(Cmd)))).
+    case os:cmd(binary_to_list(Cmd)) of
+	"Unable" ++ _ ->
+	    [];
+	JSON ->
+	    jsx:to_term(list_to_binary(JSON))
+    end.
 
 -spec stop(UUID::fifo:uuid()) -> list().
 

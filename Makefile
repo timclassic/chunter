@@ -11,6 +11,7 @@ compile:
 	$(REBAR) compile
 
 deps:
+	$(REBAR) update-deps
 	$(REBAR) get-deps
 
 clean:

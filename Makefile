@@ -1,8 +1,8 @@
 REBAR = $(shell pwd)/rebar
 
-.PHONY: deps rel
+.PHONY: deps rel package
 
-all: deps compile package
+all: deps compile
 
 package: rel
 	make -C rel/pkg package

@@ -29,7 +29,7 @@ handle_info(_, State) ->
     {ok, State}.
 
 handle_call(_, State) ->
-    {reply, ok, State}.
+    {ok, ok, State}.
 
 terminate(_, _) ->
     ok.

@@ -13,6 +13,7 @@
                   libsniffle,
                   libsnarl,
 		  libhowl,
+		  fifo_spec,
 		  ranch
                  ]},
   {mod, { chunter_app, []}},

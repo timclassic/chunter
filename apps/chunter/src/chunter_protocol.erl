@@ -19,19 +19,19 @@ loop(Socket, Transport, HandlerState) ->
 	{ok, BinData} ->
 	    case binary_to_term(BinData) of
 		ping ->
-		    Transport:send(Socket, <<"pong">>),
+		    Transport:send(Socket, term_to_binary(pong)),
 		    ok = Transport:close(Socket);
 		Data ->
 		    case handle_message(Data, HandlerState) of
-			{reply, Reply, HandlerState1} ->
-			    Transport:send(Socket, term_to_binary({reply, Reply})),
-			    loop(Socket, Transport, HandlerState1);
-			{noreply, HandlerState1} ->
-			    Transport:send(Socket, term_to_binary(noreply)),
-			    loop(Socket, Transport, HandlerState1);
-			{stop, Reply, _} ->
-			    Transport:send(Socket, term_to_binary({reply, Reply})),
-			    ok = Transport:close(Socket);
+%			{reply, Reply, HandlerState1} ->
+%			    Transport:send(Socket, term_to_binary({reply, Reply})),
+%			    loop(Socket, Transport, HandlerState1);
+%			{noreply, HandlerState1} ->
+%			    Transport:send(Socket, term_to_binary(noreply))
+%			    loop(Socket, Transport, HandlerState1);
+%			{stop, Reply, _} ->
+%			    Transport:send(Socket, term_to_binary({reply, Reply})),
+%			    ok = Transport:close(Socket);
 			{stop, _} ->
 			    ok = Transport:close(Socket)
 		    end
@@ -40,27 +40,34 @@ loop(Socket, Transport, HandlerState) ->
 	    ok = Transport:close(Socket)
     end.
 
-handle_message({machines, start, UUID}, State) ->
+
+-spec handle_message(Message::fifo:chunter_message(), State::term()) -> {stop, term()}.
+
+handle_message({machines, start, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:start(UUID),
     {stop, State};
 
-handle_message({machines, start, UUID, Image}, State) ->
+handle_message({machines, start, UUID, Image}, State) when is_binary(UUID),
+							   is_binary(Image) ->
     chunter_vmadm:start(UUID, Image),
     {stop, State};
 
-handle_message({machines, stop, UUID}, State) ->
+handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),
     {stop, State};
 
-handle_message({machines, reboot, UUID}, State) ->
+handle_message({machines, reboot, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:reboot(UUID),
     {stop, State};
 
-handle_message({machines, create, UUID, PSpec, DSpec, OSpec}, State) ->
-    chunter_vm_fsm:create(UUID, PSpec, DSpec, OSpec),
+handle_message({machines, create, UUID, PSpec, DSpec, Config}, State) when is_binary(UUID),
+									   is_list(PSpec),
+									   is_list(DSpec),
+									   is_list(Config) ->
+    chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
     {stop, State};
 
-handle_message( {machines, delete, UUID}, State) ->
+handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
     io:format("delete~n"),
     chunter_vm_fsm:delete(UUID),
 

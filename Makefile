@@ -4,7 +4,7 @@ REBAR = $(shell pwd)/rebar
 
 all: deps compile package
 
-pachage: rel
+package: rel
 	make -C rel/pkg package
 
 compile:

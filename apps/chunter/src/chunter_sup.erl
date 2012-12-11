@@ -32,6 +32,7 @@ init([]) ->
 %				 ?CHILD(chunter_zfs_reporter, worker),
 				 ?CHILD(chunter_server, worker),
 				 ?CHILD(chunter_kstat_arc, worker),
+				 ?CHILD(chunter_zpool_monitor, worker),
 %				 ?CHILD(chunter_sysstat, worker),
 				 ?CHILD(chunter_zonemon, worker)%,
 %				 ?CHILD(chunter_vfsstat, worker)

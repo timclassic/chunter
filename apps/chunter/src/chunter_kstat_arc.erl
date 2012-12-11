@@ -112,10 +112,10 @@ handle_info(tick, State) ->
     libsniffle:hypervisor_resource_set(State#state.host,
 				       [{<<"l2hits">>, L2Hit},
 					{<<"l2miss">>, L2Miss},
-					{<<"l2size">>, L2Size/(1024*1024)},
+					{<<"l2size">>, round(L2Size/(1024*1024))},
 					{<<"l1hits">>, L1Hit},
 					{<<"l1miss">>, L1Miss},
-					{<<"l1size">>, L1Size/(1024*1024)}
+					{<<"l1size">>, round(L1Size/(1024*1024))}
 				       ]),
 
     {noreply, State};

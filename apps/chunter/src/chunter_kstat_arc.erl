@@ -101,13 +101,13 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(tick, State) ->
     Values = get_stats("/usr/bin/kstat -p zfs:0:arcstats"),
-    L1Hit = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"hits">>}, 1, Values),
-    L1Miss = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"misses">>}, 1, Values),
-    L1Size = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"size">>}, 1, Values),
+    {_, L1Hit} = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"hits">>}, 1, Values),
+    {_, L1Miss} = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"misses">>}, 1, Values),
+    {_, L1Size} = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"size">>}, 1, Values),
 
-    L2Hit = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_hits">>}, 1, Values),
-    L2Miss = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_misses">>}, 1, Values),
-    L2Size = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_size">>}, 1, Values),
+    {_, L2Hit} = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_hits">>}, 1, Values),
+    {_, L2Miss} = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_misses">>}, 1, Values),
+    {_, L2Size} = lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_size">>}, 1, Values),
 
     libsniffle:hypervisor_resource_set(State#state.host,
 				       [{<<"l2hits">>, L2Hit},

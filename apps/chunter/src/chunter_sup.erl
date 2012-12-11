@@ -26,7 +26,7 @@ start_link() ->
 init([]) ->
     [_Name|_] = re:split(os:cmd("uname -n"), "\n"),
     {ok, {{one_for_one, 5, 10}, [
-%				 {vmstats_sup, 
+%				 {vmstats_sup,
 %				  {vmstats_sup, start_link, [<<Name/binary, ".vmstats">>]}, permanent, 5000, supervisor, [vmstats_sup]},
 				 ?CHILD(chunter_vm_sup, supervisor),
 %				 ?CHILD(chunter_zfs_reporter, worker),

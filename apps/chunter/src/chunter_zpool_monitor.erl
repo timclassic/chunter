@@ -22,7 +22,8 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {host, last}).
+-record(state, {host, last,
+		skipped = 0}).
 
 %%%===================================================================
 %%% API
@@ -99,13 +100,14 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(tick, State = #state{last = Last}) ->
+handle_info(tick, State = #state{last = Last,
+				 skipped = Skipped}) ->
     case get_stats("/usr/sbin/zpool list -pH") of
-	Last ->
+	Last when Skipped < 120 ->
 	    {noreply, State};
 	Pools ->
 	    libsniffle:hypervisor_resource_set(State#state.host, <<"pools">>, Pools),
-	    {noreply, State#state{last = Pools}}
+	    {noreply, State#state{skipped = 0, last = Pools}}
     end;
 
 

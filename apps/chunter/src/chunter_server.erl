@@ -145,9 +145,9 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast(connect,  #state{name = Host,
-			     datasets = Datasets,
-			     capabilities = Caps} = State) ->
+handle_cast(connect, #state{name = Host,
+			    datasets = Datasets,
+			    capabilities = Caps} = State) ->
 %    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
 %    application:set_env(statsderl, hostname, Host),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),

@@ -48,6 +48,9 @@ to_sniffle(Spec) ->
 generate_sniffle([{<<"state">>, V} | D], Acc, Type) ->
     generate_sniffle(D, [{<<"state">>, V} | Acc], Type);
 
+generate_sniffle([{<<"alias">>, V} | D], Acc, Type) ->
+    generate_sniffle(D, [{<<"alias">>, V} | Acc], Type);
+
 generate_sniffle([{<<"dataset_uuid">>, V} | D], Acc, Type) ->
     generate_sniffle(D, [{<<"dataset">>, V} | Acc], Type);
 
@@ -147,6 +150,9 @@ generate_spec([], [], [], _, _, Meta, Spec) ->
 generate_spec(P, D,  [{<<"uuid">>, V} | O], Type, DUUID, Meta, Spec) ->
     generate_spec(P, D, O, Type, DUUID, Meta, [{<<"uuid">>, V} | Spec]);
 
+generate_spec(P, D,  [{<<"alias">>, V} | O], Type, DUUID, Meta, Spec) ->
+    generate_spec(P, D, O, Type, DUUID, Meta, [{<<"alias">>, V} | Spec]);
+
 generate_spec(P, [{<<"dataset">>, DUUID} | D], O, T, _, Meta, Spec) ->
     generate_spec(P, D, O, T, DUUID, Meta, Spec);
 
@@ -240,7 +246,7 @@ ceiling(X) ->
 type_test() ->
     InP = [{<<"quota">>, 10}],
     InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
-    InO = [{<<"uuid">>, <<"zone uuid">>}],
+    InO = [{<<"uuid">>, <<"zone uuid">>}, {<<"alias">>, <<"vm">>}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 

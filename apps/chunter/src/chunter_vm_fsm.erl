@@ -415,7 +415,9 @@ install_image(DatasetUUID) ->
 	true ->
 	    ok;
 	false ->
+	    os:cmd("/usr/sbin/imgadm update"),
 	    os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
+
     end.
 
 

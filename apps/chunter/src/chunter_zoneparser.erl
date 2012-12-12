@@ -116,7 +116,7 @@ parse_xml([{"zone",Attrib,Value}|T])->
     [{"zone", Attrib, lists:flatten(parse_xml(Value))}|parse_xml(T)];
 
 parse_xml([{"dataset",Attrib,_Value}|T])->
-    [{dataset, list_to_binary(proplists:get_value("name", Attrib))}
+    [{<<"dataset">>, list_to_binary(proplists:get_value("name", Attrib))}
      |parse_xml(T)];
 
 parse_xml([{"attr",Attrib,_Value}|T])->
@@ -141,14 +141,14 @@ parse_xml([{"device",
 	    [{"match",
 	      Path}],
 	    Content }|T]) ->
-	  [{disk,
+	  [{<<"disk">>,
 	     [{path, Path}|parse_xml(Content)]}
 	   |parse_xml(T)];
 
 parse_xml([{"network",
 	    Attrs,
 	    Content}|T]) ->
-	  [{nic,
+	  [{<<"nic">>,
 	    map_attrs(Attrs) ++ parse_xml(Content)}
 	   |parse_xml(T)];
 
@@ -174,21 +174,21 @@ create_zone_data([], [], [],[]) ->
     [];
 
 create_zone_data([], [], [], Datasets) ->
-    [{datasets, Datasets}];
+    [{<<"datasets">>, Datasets}];
 
 create_zone_data([], [], Nics, Datasets) ->
-    [{nics, Nics}|create_zone_data([], [], [], Datasets)];
+    [{<<"nics">>, Nics}|create_zone_data([], [], [], Datasets)];
 
 create_zone_data([], Disks, Nics, Datasets) ->
-    [{disks, Disks}|create_zone_data([], [], Nics, Datasets)];
+    [{<<"disks">>, Disks}|create_zone_data([], [], Nics, Datasets)];
 
-create_zone_data([{disk, Disk}|R], Disks, Nics, Datasets) ->
+create_zone_data([{<<"disk">>, Disk}|R], Disks, Nics, Datasets) ->
    create_zone_data(R, [create_disk(Disk)|Disks], Nics, Datasets);
 
-create_zone_data([{nic, Nic}|R], Disks, Nics, Datasets) ->
+create_zone_data([{<<"nic">>, Nic}|R], Disks, Nics, Datasets) ->
    create_zone_data(R, Disks, [create_nic(Nic)|Nics], Datasets);
 
-create_zone_data([{dataset, Dataset}|R], Disks, Nics, Datasets) ->
+create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
    create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
 
 ?REMOVE(<<"ip-type">>);

@@ -20,7 +20,7 @@ if uname -a | grep $TESTED_VERSIONS
 then
     echo "This SnartOS release is tested!"
 else
-    echo "This SnartOS release WAS NOT tested! Are you sure you want to go on? [yes|NO] "
+    echo "This SmartOS release WAS NOT tested! Are you sure you want to go on? [yes|NO] "
     read SKIP
     if [[ "$SKIP" = "yes" ]]
     then

@@ -319,7 +319,7 @@ handle_event(delete, StateName, State) ->
 		    [try
 			 Net = proplists:get_value(<<"nic_tag">>, Nic),
 			 IP = proplists:get_value(<<"ip">>, Nic),
-			 libsniffle:iprange_release(Net, IP),
+			 libsniffle:iprange_release(Net, libsniffle:ip_to_int(IP)),
 			 ok
 		     catch
 			 _:_ ->

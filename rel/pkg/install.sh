@@ -36,8 +36,11 @@ mkdir -p /var/log/chunter
 sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/app.config
 sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/vm.args
 
-svccfg import /opt/chunter/etc/epmd.xml
-svccfg import /opt/chunter/etc/chunter.xml
+mkdir -p /opt/custom/smf
+cp /opt/chunter/etc/epmd.xml /opt/chunter/etc/chunter.xml /opt/custom/smf
+
+svccfg import /opt/custom/smf/epmd.xml
+svccfg import /opt/custom/smf/chunter.xml
 
 cat <<EOF
 

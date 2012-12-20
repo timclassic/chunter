@@ -457,6 +457,7 @@ load_vm(ZUUID) ->
 -spec change_state(UUID::binary(), State::fifo:vm_state()) -> ok.
 
 change_state(UUID, State) ->
+    libsniffle:vm_log(UUID, <<"Transitioning ", State/binary>>),
     libsniffle:vm_attribute_set(UUID, <<"state">>, State),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
 

@@ -123,15 +123,15 @@ handle_info(tick, State = #state{
 
     {State3, V3} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_hits">>}, 1, Values) of
 		       {_, L2HitOld} when Skipped < 120 -> {State2#state{skipped = Skipped+1}, V2};
-		       {_, L2Hit} -> {State2#state{l2hit = L2Hit}, [{<<"l2_hits">>, L2Hit} | V2]}
+		       {_, L2Hit} -> {State2#state{l2hit = L2Hit}, [{<<"l2hits">>, L2Hit} | V2]}
 		   end,
     {State4, V4} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_misses">>}, 1, Values) of
 		       {_, L2MissOld} when Skipped < 120 -> {State3#state{skipped = Skipped+1}, V3};
-		       {_, L2Miss} -> {State3#state{l2miss = L2Miss}, [{<<"l2_misses">>, L2Miss} | V3]}
+		       {_, L2Miss} -> {State3#state{l2miss = L2Miss}, [{<<"l2miss">>, L2Miss} | V3]}
 		   end,
     {State5, V5} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_size">>}, 1, Values) of
 		       {_, L2SizeOld} when Skipped < 120-> {State4#state{skipped = Skipped+1}, V4};
-		       {_, L2Size} -> {State4#state{l2size = L2Size}, [{<<"l2_size">>, round(L2Size/(1024*1024))} | V4]}
+		       {_, L2Size} -> {State4#state{l2size = L2Size}, [{<<"l2size">>, round(L2Size/(1024*1024))} | V4]}
 		   end,
 
 

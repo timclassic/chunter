@@ -164,7 +164,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
     {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
     SniffleData  = chunter_spec:to_sniffle(VMData),
-    {<<"ram">>, Ram} = lists:keyfind(<<"ram">>, 1, VMData),
+    {<<"ram">>, Ram} = lists:keyfind(<<"ram">>, 1, PackageSpec),
     SniffleData1 = lists:keydelete(<<"ram">>, 1, SniffleData),
     SniffleData2 = [{<<"ram">>, Ram} | SniffleData1],
     change_state(UUID, <<"installing_dataset">>),

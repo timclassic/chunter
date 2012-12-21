@@ -14,70 +14,70 @@
 -type xml_element() :: {string(), [{string(), term()}], [xml_element()]}.
 
 -define(REMOVE(Key),
-	create_zone_data([{Key, _}|R], Disks, Nics, Datasets) ->
-	       create_zone_data(R, Disks, Nics, Datasets)).
+        create_zone_data([{Key, _}|R], Disks, Nics, Datasets) ->
+               create_zone_data(R, Disks, Nics, Datasets)).
 
 -define(RENAME_INT(Old,New),
-	create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
-	       {Num, []} = string:to_integer(binary_to_list(Value)),
-	       [{New, Num}
-		|create_zone_data(R, Disks, Nics, Datasets)]).
+        create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
+               {Num, []} = string:to_integer(binary_to_list(Value)),
+               [{New, Num}
+                |create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(RENAME_B64(Old,New),
-	create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
-	       [{New, base64:decode(Value)}
-		|create_zone_data(R, Disks, Nics, Datasets)]).
+        create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
+               [{New, base64:decode(Value)}
+                |create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(RENAME_BOOL(Old,New),
-	create_zone_data([{Old, <<"true">>}|R], Disks, Nics, Datasets) ->
-	       [{New, true}|create_zone_data(R, Disks, Nics, Datasets)];
-	create_zone_data([{Old, <<"false">>}|R], Disks, Nics, Datasets) ->
-	       [{New, false}|create_zone_data(R, Disks, Nics, Datasets)]).
+        create_zone_data([{Old, <<"true">>}|R], Disks, Nics, Datasets) ->
+               [{New, true}|create_zone_data(R, Disks, Nics, Datasets)];
+            create_zone_data([{Old, <<"false">>}|R], Disks, Nics, Datasets) ->
+               [{New, false}|create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(RENAME_SPLIT(Old,New),
-	create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
-	       [{New, re:split(Value,",")}
-		|create_zone_data(R, Disks, Nics, Datasets)]).
+        create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
+               [{New, re:split(Value,",")}
+                |create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(RENAME(Old,New),
-	create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
-	       [{New, Value}
-		|create_zone_data(R, Disks, Nics, Datasets)]).
+        create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
+               [{New, Value}
+                |create_zone_data(R, Disks, Nics, Datasets)]).
 
 -define(NIC_RENAME(Old,New),
-	create_nic([{Old, Value}|R]) ->
-	       [{New, Value}
-		|create_nic(R)]).
+        create_nic([{Old, Value}|R]) ->
+               [{New, Value}
+                |create_nic(R)]).
 -define(NIC_RENAME_INT(Old,New),
-	create_nic([{Old, Value}|R]) ->
-	       {Num, []} = string:to_integer(binary_to_list(Value)),
-	       [{New, Num}
-		|create_nic(R)]).
+        create_nic([{Old, Value}|R]) ->
+               {Num, []} = string:to_integer(binary_to_list(Value)),
+               [{New, Num}
+                |create_nic(R)]).
 -define(NIC_RENAME_BOOL(Old,New),
-	create_nic([{Old, <<"true">>}|R]) ->
-	       [{New, true}
-		|create_nic(R)];
-	create_nic([{Old, <<"false">>}|R]) ->
-	       [{New, false}
-		|create_nic(R)]).
+        create_nic([{Old, <<"true">>}|R]) ->
+               [{New, true}
+                |create_nic(R)];
+            create_nic([{Old, <<"false">>}|R]) ->
+               [{New, false}
+                |create_nic(R)]).
 
 -define(DISK_RENAME(Old,New),
-	create_disk([{Old, Value}|R]) ->
-	       [{New, Value}
-		|create_disk(R)]).
+        create_disk([{Old, Value}|R]) ->
+               [{New, Value}
+                |create_disk(R)]).
 
 -define(DISK_RENAME_INT(Old,New),
-	create_disk([{Old, Value}|R]) ->
-	       {Num, []} = string:to_integer(binary_to_list(Value)),
-	       [{New, Num}
-		|create_disk(R)]).
+        create_disk([{Old, Value}|R]) ->
+               {Num, []} = string:to_integer(binary_to_list(Value)),
+               [{New, Num}
+                |create_disk(R)]).
 -define(DISK_RENAME_BOOL(Old,New),
-	create_disk([{Old, <<"true">>}|R]) ->
-	       [{New, true}
-		|create_disk(R)];
-	create_disk([{Old, <<"false">>}|R]) ->
-	       [{New, false}
-		|create_disk(R)]).
+        create_disk([{Old, <<"true">>}|R]) ->
+               [{New, true}
+                |create_disk(R)];
+            create_disk([{Old, <<"false">>}|R]) ->
+               [{New, false}
+                |create_disk(R)]).
 
 %%%===================================================================
 %%% API
@@ -121,14 +121,14 @@ parse_xml([{"dataset",Attrib,_Value}|T])->
 
 parse_xml([{"attr",Attrib,_Value}|T])->
     [{list_to_binary(proplists:get_value("name", Attrib)),
-       list_to_binary(proplists:get_value("value", Attrib))}
+      list_to_binary(proplists:get_value("value", Attrib))}
      |parse_xml(T)];
 
 parse_xml([{"rctl",Attrib,[{"rctl-value",
-			   Values,
-			   _}]}|T])->
+                            Values,
+                            _}]}|T])->
     [{list_to_binary(proplists:get_value("name", Attrib)),
-       list_to_binary(proplists:get_value("limit", Values))}
+      list_to_binary(proplists:get_value("limit", Values))}
      |parse_xml(T)];
 
 parse_xml([{"net-attr",[{"name",Name},{"value",Value}],[]}|T])->
@@ -138,19 +138,19 @@ parse_xml([{"net-attr",[{"value",Value},{"name",Name}],[]}|T])->
     [{list_to_binary(Name), list_to_binary(Value)}|parse_xml(T)];
 
 parse_xml([{"device",
-	    [{"match",
-	      Path}],
-	    Content }|T]) ->
-	  [{<<"disk">>,
-	     [{path, Path}|parse_xml(Content)]}
-	   |parse_xml(T)];
+            [{"match",
+              Path}],
+            Content }|T]) ->
+    [{<<"disk">>,
+      [{path, Path}|parse_xml(Content)]}
+     |parse_xml(T)];
 
 parse_xml([{"network",
-	    Attrs,
-	    Content}|T]) ->
-	  [{<<"nic">>,
-	    map_attrs(Attrs) ++ parse_xml(Content)}
-	   |parse_xml(T)];
+            Attrs,
+            Content}|T]) ->
+    [{<<"nic">>,
+      map_attrs(Attrs) ++ parse_xml(Content)}
+     |parse_xml(T)];
 
 parse_xml([{Node,Attrib,Value}|T])->
     [{Node,Attrib, lists:flatten(parse_xml(Value))}|parse_xml(T)];
@@ -159,11 +159,11 @@ parse_xml(Value)->
     Value.
 
 -spec map_attrs([{string(), string()}]) ->
-    [{binary(), binary()}].
+                       [{binary(), binary()}].
 map_attrs(Attrs) ->
     lists:map(fun ({K,V}) ->
-		      {list_to_binary(K), list_to_binary(V)}
-	      end, Attrs).
+                      {list_to_binary(K), list_to_binary(V)}
+              end, Attrs).
 
 
 -spec create_zone_data(Data::[{atom()|binary(), term()}]) -> fifo:vm_config().
@@ -183,13 +183,13 @@ create_zone_data([], Disks, Nics, Datasets) ->
     [{<<"disks">>, Disks}|create_zone_data([], [], Nics, Datasets)];
 
 create_zone_data([{<<"disk">>, Disk}|R], Disks, Nics, Datasets) ->
-   create_zone_data(R, [create_disk(Disk)|Disks], Nics, Datasets);
+    create_zone_data(R, [create_disk(Disk)|Disks], Nics, Datasets);
 
 create_zone_data([{<<"nic">>, Nic}|R], Disks, Nics, Datasets) ->
-   create_zone_data(R, Disks, [create_nic(Nic)|Nics], Datasets);
+    create_zone_data(R, Disks, [create_nic(Nic)|Nics], Datasets);
 
 create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
-   create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
+    create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
 
 ?REMOVE(<<"ip-type">>);
 ?REMOVE(<<"debugid">>);
@@ -252,9 +252,9 @@ create_disk([T|R]) ->
     [T|create_disk(R)].
 
 %% todo:
-    %% <<"filesystem">>, {
-    %%     <<"special">>, <<"source">>,
-    %%     <<"directory">>, <<"target">>,
-    %%     <<"type">>, <<"type">>,
-    %%     <<"raw">>, <<"raw">>
-    %% },
+%% <<"filesystem">>, {
+%%     <<"special">>, <<"source">>,
+%%     <<"directory">>, <<"target">>,
+%%     <<"type">>, <<"type">>,
+%%     <<"raw">>, <<"raw">>
+%% },

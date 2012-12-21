@@ -14,27 +14,27 @@
 -endif.
 
 -export([to_vmadm/3,
-	 to_sniffle/1]).
+         to_sniffle/1]).
 
 
 -spec to_vmadm(Package::fifo:package(), Dataset::fifo:dataset(), OwnerData::fifo:config()) -> fifo:vm_config().
 
 to_vmadm(Package, Dataset, OwnerData) ->
     case lists:keyfind(<<"type">>, 1, Dataset) of
-	{<<"type">>,<<"kvm">>} ->
-	    generate_spec(Package, Dataset, OwnerData, kvm, unknown, [], [{<<"brand">>, <<"kvm">>}]);
-	{<<"type">>,<<"zone">>} ->
-	    generate_spec(Package, Dataset, OwnerData, zone, unknown, [], [{<<"brand">>, <<"joyent">>}])
+        {<<"type">>,<<"kvm">>} ->
+            generate_spec(Package, Dataset, OwnerData, kvm, unknown, [], [{<<"brand">>, <<"kvm">>}]);
+        {<<"type">>,<<"zone">>} ->
+            generate_spec(Package, Dataset, OwnerData, zone, unknown, [], [{<<"brand">>, <<"joyent">>}])
     end.
 
 -spec to_sniffle(Spec::fifo:vm_config()) -> fifo:config_list().
 
 to_sniffle(Spec) ->
     case lists:keyfind(<<"brand">>, 1, Spec) of
-	{<<"brand">>,<<"kvm">>} ->
-	    generate_sniffle(Spec, [{<<"type">>, <<"kvm">>}], kvm);
-	{<<"brand">>,<<"joyent">>} ->
-	    generate_sniffle(Spec, [{<<"type">>, <<"zone">>}], zone)
+        {<<"brand">>,<<"kvm">>} ->
+            generate_sniffle(Spec, [{<<"type">>, <<"kvm">>}], kvm);
+        {<<"brand">>,<<"joyent">>} ->
+            generate_sniffle(Spec, [{<<"type">>, <<"zone">>}], zone)
     end.
 
 %%%===================================================================
@@ -42,8 +42,8 @@ to_sniffle(Spec) ->
 %%%===================================================================
 
 -spec generate_sniffle(Spec::fifo:vm_config(),
-		       Acc::fifo:config_list(),
-		       Type::fifo:vm_type()) -> fifo:config_list().
+                       Acc::fifo:config_list(),
+                       Type::fifo:vm_type()) -> fifo:config_list().
 
 generate_sniffle([{<<"state">>, V} | D], Acc, Type) ->
     generate_sniffle(D, [{<<"state">>, V} | Acc], Type);
@@ -54,24 +54,30 @@ generate_sniffle([{<<"alias">>, V} | D], Acc, Type) ->
 generate_sniffle([{<<"dataset_uuid">>, V} | D], Acc, Type) ->
     generate_sniffle(D, [{<<"dataset">>, V} | Acc], Type);
 
-generate_sniffle([{<<"quota">>, V} | D], Acc, zone = Type) ->
+generate_sniffle([{<<"quota">>, V} | D], Acc, Type = zone) ->
     generate_sniffle(D, [{<<"quota">>, V} | Acc], Type);
+
+generate_sniffle([{<<"zonepath">>, V} | D], Acc, Type = zone) ->
+    [_, Used, Avail, _, _] = re:split(os:cmd(binary_to_list(<<"/usr/sbin/zfs list -pH ", V/binary>>)), "\t"),
+    {UsedI, _} = string:to_integer(binary_to_list(Used)),
+    {AvailI, _} = string:to_integer(binary_to_list(Avail)),
+    generate_sniffle(D, [{<<"quota">>, round((UsedI + AvailI) / (1024*1024*1024))} | Acc], Type);
 
 generate_sniffle([{<<"disks">>, Disks} | D], Acc, kvm = Type) ->
     case lists:foldl(fun(E, {Dataset, Sum}) ->
-			     {<<"size">>, Size} = lists:keyfind(<<"size">>, 1, E),
-			     Total = Sum + round(Size / 1024),
-			     case lists:keyfind(<<"image_uuid">>, 1, E) of
-				 {<<"image_uuid">>, NewDataset} ->
-				     {NewDataset, Total};
-				 _ ->
-				     {Dataset, Total}
-			     end
-		     end, {undefined, 0}, Disks) of
-	{undefined, Size} ->
-	    generate_sniffle(D, [{<<"quota">>, Size} | Acc], Type);
-	{Dataset, Size} ->
-	    generate_sniffle(D, [{<<"quota">>, Size}, {<<"dataset">>, Dataset} | Acc], Type)
+                             {<<"size">>, Size} = lists:keyfind(<<"size">>, 1, E),
+                             Total = Sum + round(Size / 1024),
+                             case lists:keyfind(<<"image_uuid">>, 1, E) of
+                                 {<<"image_uuid">>, NewDataset} ->
+                                     {NewDataset, Total};
+                                 _ ->
+                                     {Dataset, Total}
+                             end
+                     end, {undefined, 0}, Disks) of
+        {undefined, Size} ->
+            generate_sniffle(D, [{<<"quota">>, Size} | Acc], Type);
+        {Dataset, Size} ->
+            generate_sniffle(D, [{<<"quota">>, Size}, {<<"dataset">>, Dataset} | Acc], Type)
     end;
 
 generate_sniffle([{<<"nics">>, Ns} | D], Acc, Type) ->
@@ -114,8 +120,8 @@ generate_sniffle([], Acc, _Type) ->
     Acc.
 
 -spec decode_metadata(Metadata::fifo:config_list(),
-		      Acc::fifo:config_list(),
-		      Other::fifo:config_list()) -> fifo:config_list().
+                      Acc::fifo:config_list(),
+                      Other::fifo:config_list()) -> fifo:config_list().
 decode_metadata([], Acc, []) ->
     Acc;
 
@@ -136,12 +142,12 @@ decode_metadata([E | M], Acc, O) ->
 
 
 -spec generate_spec(Package::fifo:package(),
-		    Dataset::fifo:dataset(),
-		    OwnerData::fifo:config(),
-		    Type::fifo:vm_type(),
-		    DatasetUUID::fifo:uuid() | unknown,
-		    Metadata::fifo:config_list(),
-		    Acc::fifo:vm_config()) -> fifo:vm_config().
+                    Dataset::fifo:dataset(),
+                    OwnerData::fifo:config(),
+                    Type::fifo:vm_type(),
+                    DatasetUUID::fifo:uuid() | unknown,
+                    Metadata::fifo:config_list(),
+                    Acc::fifo:vm_config()) -> fifo:vm_config().
 
 
 generate_spec([], [], [], _, _, Meta, Spec) ->
@@ -167,16 +173,16 @@ generate_spec(P, [{<<"networks">>, N} | D], O, T, DUUID, Meta, Spec) ->
 
 generate_spec([{<<"ram">>, V} | P], [], O, kvm = T, DUUID, Meta, Spec) ->
     generate_spec(P, [], O, T, DUUID, Meta, [{<<"cpu_shares">>, V},
-					     {<<"ram">>, V},
-					     {<<"max_physical_memory">>, V + 1024} | Spec]);
+                                             {<<"ram">>, V},
+                                             {<<"max_physical_memory">>, V + 1024} | Spec]);
 
 generate_spec([{<<"ram">>, V} | P], [], O, zone = T, DUUID, Meta, Spec) ->
     generate_spec(P, [], O, T, DUUID, Meta, [{<<"cpu_shares">>, V},
-					     {<<"max_physical_memory">>, V} | Spec]);
+                                             {<<"max_physical_memory">>, V} | Spec]);
 
 generate_spec([{<<"cpu_cap">>, V} | P], [], O, kvm = T, DUUID, Meta, Spec) ->
     generate_spec(P, [], O, T, DUUID, Meta, [{<<"vcpus">>, ceiling(V/100.0)},
-					     {<<"cpu_cap">>, V} | Spec]);
+                                             {<<"cpu_cap">>, V} | Spec]);
 
 generate_spec([{<<"cpu_cap">>, V} | P], [], O, zone = T, DUUID, Meta, Spec) ->
     generate_spec(P, [], O, T, DUUID, Meta, [{<<"cpu_cap">>, V} | Spec]);
@@ -184,11 +190,11 @@ generate_spec([{<<"cpu_cap">>, V} | P], [], O, zone = T, DUUID, Meta, Spec) ->
 
 generate_spec([{<<"quota">>, V} | P], [], O, kvm = T, DUUID, Meta, Spec) ->
     generate_spec(P, [], O, T, DUUID, Meta,
-		  [{<<"disks">>,
-		    [[{<<"boot">>, true},
-		     {<<"size">>, V * 1024},
-		     {<<"image_uuid">>, DUUID}
-		    ]]} | Spec]);
+                  [{<<"disks">>,
+                    [[{<<"boot">>, true},
+                      {<<"size">>, V * 1024},
+                      {<<"image_uuid">>, DUUID}
+                     ]]} | Spec]);
 
 generate_spec([{<<"quota">>, V} | P], [], O, zone = T, DUUID, Meta, Spec) ->
     generate_spec(P, [], O, T, DUUID, Meta, [{<<"quota">>, V}, {<<"dataset_uuid">>, DUUID} | Spec]);
@@ -207,7 +213,7 @@ generate_spec([], [], [{<<"metadata">>, V} | O], T, DUUID, Meta, Spec) ->
 
 generate_spec([], [], [{<<"resolvers">>, V} | O], T, DUUID, Meta, Spec) ->
     generate_spec([], [], O, T, DUUID, Meta,
-		  [{<<"resolvers">>, V} | Spec]);
+                  [{<<"resolvers">>, V} | Spec]);
 
 generate_spec([], [], [_ | O], Type, DUUID, Meta, Spec) ->
     generate_spec([], [], O, Type, DUUID, Meta, Spec);
@@ -220,7 +226,7 @@ generate_spec(P, [_ | D], O, Type, DUUID, Meta, Spec) ->
 
 
 -spec generate_nics(Nics::[fifo:config_list()],
-		    Acc::[fifo:config_list()]) -> [fifo:config_list()].
+                    Acc::[fifo:config_list()]) -> [fifo:config_list()].
 
 generate_nics([N | R], []) ->
     generate_nics(R, [[{<<"primary">>, true}| N]]);
@@ -253,7 +259,7 @@ type_test() ->
 disk_driver_test() ->
     InP = [{<<"quota">>, 10}],
     InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>},
-	   {<<"disk_driver">>, <<"virtio">>}],
+           {<<"disk_driver">>, <<"virtio">>}],
     InO = [{<<"uuid">>, <<"zone uuid">>}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
@@ -261,7 +267,7 @@ disk_driver_test() ->
 nic_driver_test() ->
     InP = [{<<"quota">>, 10}],
     InD = [{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>},
-	   {<<"nic_driver">>, <<"virtio">>}],
+           {<<"nic_driver">>, <<"virtio">>}],
     InO = [{<<"uuid">>, <<"zone uuid">>}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
@@ -330,8 +336,8 @@ ssh_test() ->
     InP = [{<<"quota">>, 10}],
     InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
     InO = [{<<"uuid">>, <<"zone uuid">>},
-	  {<<"ssh_keys">>,
-	   <<"ssh-rsa">>}],
+           {<<"ssh_keys">>,
+            <<"ssh-rsa">>}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
@@ -339,8 +345,8 @@ passwd_test() ->
     InP = [{<<"quota">>, 10}],
     InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
     InO = [{<<"uuid">>, <<"zone uuid">>},
-	  {<<"admin_pw">>, <<"admin">>},
-	  {<<"root_pw">>, <<"root">>}],
+           {<<"admin_pw">>, <<"admin">>},
+           {<<"root_pw">>, <<"root">>}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
@@ -348,24 +354,24 @@ metadata_test() ->
     InP = [{<<"quota">>, 10}],
     InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}],
     InO = [{<<"uuid">>, <<"zone uuid">>},
-	   {<<"admin_pw">>, <<"admin">>},
-	   {<<"metadata">>, [{<<"key">>, <<"value">>}]}],
+           {<<"admin_pw">>, <<"admin">>},
+           {<<"metadata">>, [{<<"key">>, <<"value">>}]}],
     In = ordsets:from_list(InP ++ InD ++ InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 nics_test() ->
     InP = [{<<"quota">>, 10},{<<"ram">>, 1024}],
     InD = [{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>},
-	   {<<"networks">>, [[{<<"nic_tag">>, <<"admin">>},
-			      {<<"ip">>, <<"127.0.0.1">>}]]}],
+           {<<"networks">>, [[{<<"nic_tag">>, <<"admin">>},
+                              {<<"ip">>, <<"127.0.0.1">>}]]}],
     InO = [{<<"uuid">>, <<"zone uuid">>}],
     In = ordsets:from_list(InP ++
-			       [{<<"cpu_shares">>, 1024},
-				{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>},
-				{<<"networks">>, [[{<<"primary">>, true},
-						   {<<"nic_tag">>, <<"admin">>},
-						   {<<"ip">>, <<"127.0.0.1">>}]]}]
-			   ++ InO),
+                               [{<<"cpu_shares">>, 1024},
+                                {<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>},
+                                {<<"networks">>, [[{<<"primary">>, true},
+                                                   {<<"nic_tag">>, <<"admin">>},
+                                                   {<<"ip">>, <<"127.0.0.1">>}]]}]
+                           ++ InO),
     VMData = to_vmadm(InP, InD, InO),
     VMData1 = lists:keydelete(<<"max_physical_memory">>, 1, VMData),
     VMData2 = [{<<"max_physical_memory">>, 1024*1024*1024} | VMData1],

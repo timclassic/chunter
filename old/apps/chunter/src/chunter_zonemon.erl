@@ -11,17 +11,16 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, connect/0, disconnect/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--ignore_xref([start_link/0]).
-
--define(SERVER, ?MODULE).
+-define(SERVER, ?MODULE). 
 
 -record(state, {name,
+		connected = false,
 		port}).
 
 %%%===================================================================
@@ -37,6 +36,12 @@
 %%--------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+connect() ->
+    gen_server:cast(?SERVER, connect).
+
+disconnect() ->
+    gen_server:cast(?SERVER, disconnect).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -94,6 +99,11 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast(connect,  State) ->
+    {noreply, State#state{connected = true}};
+
+handle_cast(disconnect,  State) ->
+    {noreply, State#state{connected = false}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -109,9 +119,9 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
-    [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
-	    [ re:split(Line, ":")
+    [chunter_vm:force_state(chunter_server:get_vm_pid(UUID),simplifie_state(list_to_atom(binary_to_list(VMState)))) ||
+	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <- 
+	    [ re:split(Line, ":") 
 	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
 	ID =/= <<"0">>],
     {noreply, State};
@@ -122,12 +132,13 @@ handle_info({_Port, {data, {eol, Data}}}, #state{name=_Name, port=_Port} = State
 	{error, unknown} ->
 %	    statsderl:increment([Name, ".vm.zonewatchdog_error"], 1, 1),
 	    lager:error("watchdog:zone - unknwon message: ~p", [Data]);
-	{UUID, <<"crate">>} ->
+	{UUID, crate} ->
 %	    statsderl:increment([Name, ".vm.create"], 1, 1),
 	    chunter_vm_sup:start_child(UUID);
 	{UUID, Action} ->
 %	    statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
-	    chunter_vm_fsm:transition(UUID, simplifie_state(Action))
+	    Pid = chunter_server:get_vm_pid(UUID),
+	    chunter_vm:set_state(Pid, simplifie_state(Action))
     end,
     {noreply, State};
 
@@ -164,58 +175,54 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec simplifie_state(OriginalState::binary()) -> fifo:vm_state().
-
-simplifie_state(<<"installed">>) ->
-    <<"stopped">>;
-simplifie_state(<<"uninitialized">>) ->
-    <<"stopped">>;
-simplifie_state(<<"initialized">>) ->
-    <<"booting">>;
-simplifie_state(<<"ready">>) ->
-    <<"booting">>;
-simplifie_state(<<"booting">>) ->
-    <<"booting">>;
-simplifie_state(<<"running">>) ->
-    <<"running">>;
-simplifie_state(<<"shutting_down">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"empty">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"down">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"dying">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"dead">>) ->
-    <<"stopped">>.
-
--spec parse_data(binary()) -> {UUID::fifo:uuid(), State::binary()} | {error, unknown}.
+simplifie_state(installed) ->
+    stopped;
+simplifie_state(uninitialized) ->
+    stopped;
+simplifie_state(initialized) ->
+    booting;
+simplifie_state(ready) ->
+    booting;
+simplifie_state(booting) ->
+    booting;
+simplifie_state(running) ->
+    running;
+simplifie_state(shutting_down) ->
+    shutting_down;
+simplifie_state(empty) ->
+    shutting_down;
+simplifie_state(down) -> 
+    shutting_down;
+simplifie_state(dying) -> 
+    shutting_down;
+simplifie_state(dead) -> 
+    stopped.
 
 parse_data(<<"S00: ", UUID/binary>>) ->
-    {UUID, <<"uninitialized">>};
+    {UUID, uninitialized};
 parse_data(<<"S01: ", UUID/binary>>) ->
-    {UUID, <<"initialized">>};
+    {UUID, initialized};
 parse_data(<<"S02: ", UUID/binary>>) ->
-    {UUID, <<"ready">>};
+    {UUID, ready};
 parse_data(<<"S03: ", UUID/binary>>) ->
-    {UUID, <<"booting">>};
+    {UUID, booting};
 parse_data(<<"S04: ", UUID/binary>>) ->
-    {UUID, <<"running">>};
+    {UUID, running};
 parse_data(<<"S05: ", UUID/binary>>) ->
-    {UUID, <<"shutting_down">>};
+    {UUID, shutting_down};
 parse_data(<<"S06: ", UUID/binary>>) ->
-    {UUID, <<"empty">>};
+    {UUID, empty};
 parse_data(<<"S07: ", UUID/binary>>) ->
-    {UUID, <<"down">>};
+    {UUID, down};
 parse_data(<<"S08: ", UUID/binary>>) ->
-    {UUID, <<"dying">>};
+    {UUID, dying};
 parse_data(<<"S09: ", UUID/binary>>) ->
-    {UUID, <<"dead">>};
+    {UUID, dead};
 parse_data(<<"S10: ", UUID/binary>>) ->
-    {UUID, <<"uninitialized">>};
+    {UUID, uninitialized};
 parse_data(<<"S11: ", UUID/binary>>) ->
-    {UUID, <<"creating">>};
+    {UUID, creating};
 parse_data(<<"S12: ", UUID/binary>>) ->
-    {UUID, <<"destroying">>};
+    {UUID, destroying};
 parse_data(_) ->
     {error, unknown}.

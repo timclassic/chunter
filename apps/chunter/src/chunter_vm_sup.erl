@@ -13,6 +13,8 @@
 %% API
 -export([start_link/0, start_child/1]).
 
+-ignore_xref([start_link/0]).
+
 %% Supervisor callbacks
 -export([init/1]).
 
@@ -21,7 +23,6 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
 
 start_child(UUID) -> 
     supervisor:start_child(?SERVER, [UUID]).
@@ -55,8 +56,8 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    Element = {chunter_vm, {chunter_vm, start_link, []}, 
-	       permanent, brutal_kill, worker, [chunter_vm]}, 
+    Element = {chunter_vm_fsm, {chunter_vm_fms, start_link, []}, 
+	       transient, brutal_kill, worker, [chunter_vm_fsm]}, 
     Children = [Element],
     RestartStrategy = {simple_one_for_one, 5, 10},
     {ok, {RestartStrategy, Children}}.

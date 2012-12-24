@@ -9,7 +9,9 @@
 -module(chunter).
 
 %% API
--export([]).
+-export([start/0]).
+
+-ignore_xref([start/0]).
 
 %%%===================================================================
 %%% API
@@ -20,6 +22,19 @@
 %% @spec
 %% @end
 %%--------------------------------------------------------------------
+
+start() ->
+    application:start(sasl),
+    application:start(lager),
+    application:start(jsx),
+    application:start(crypto),
+    application:start(inets),
+    application:start(erlsom),
+    application:start(mdns_client_lib),
+    application:start(libsniffle),
+    application:start(libsnarl),
+    application:start(ranch),
+    application:start(chunter).
 
 %%%===================================================================
 %%% Internal functions

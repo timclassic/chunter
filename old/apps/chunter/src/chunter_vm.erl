@@ -4,29 +4,84 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 11 May 2012 by Heinz N. Gies <heinz@licenser.net>
+%%% Created : 19 May 2012 by Heinz N. Gies <heinz@licenser.net>
 %%%-------------------------------------------------------------------
--module(chunter_zonemon).
+-module(chunter_vm).
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/1, 
+	 refresh/1, 
+	 get/1,
+	 info/1,
+	 set_state/2,
+	 connect/1,
+	 disconnect/1,
+	 force_state/2]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3]).
+-export([init/1,
+	 handle_call/3, 
+	 handle_cast/2, 
+	 handle_info/2,
+	 terminate/2, 
+	 code_change/3]).
 
--ignore_xref([start_link/0]).
+-define(SERVER, ?MODULE). 
 
--define(SERVER, ?MODULE).
-
--record(state, {name,
-		port}).
+-record(state, {uuid, 
+		connected = false,
+		state = unknown, 
+		data, 
+		host}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+set_state(Pid, State) when is_pid(Pid) ->
+    gen_server:cast(Pid, {state, State});
+
+set_state(UUID, State) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    set_state(Pid, State).
+
+force_state(Pid, State) when is_pid(Pid) ->
+    gen_server:cast(Pid, {force_state, State});
+
+force_state(UUID, State) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    force_state(Pid, State).
+
+refresh(Pid) when is_pid(Pid) ->
+    gen_server:cast(Pid, refresh);
+
+refresh(UUID) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    refresh(Pid).
+
+get(Pid) when is_pid(Pid) ->
+    gen_server:call(Pid, get);
+
+get(UUID) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    chunter_vm:get(Pid).
+
+info(Pid) when is_pid(Pid) ->
+    gen_server:call(Pid, info);
+
+info(UUID) ->
+    Pid = chunter_server:get_vm_pid(UUID),
+    info(Pid).
+
+connect(Pid) ->
+    gen_server:cast(Pid, connect).
+
+disconnect(Pid) ->
+    gen_server:cast(Pid, disconnect).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -35,8 +90,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(UUID) ->
+    gen_server:start_link(?MODULE, [UUID], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -53,18 +108,13 @@ start_link() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
-    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
-    lager:info("chunter:zonemon - initializing: ~s", [Name]),
-    Zonemon = code:priv_dir(chunter) ++ "/zonemon.sh",
-    timer:send_interval(1000, zonecheck),
-    PortOpts = [exit_status, use_stdio, binary, {line, 1000}],
-    ZonePort = erlang:open_port({spawn, Zonemon}, PortOpts),
-    lager:info("chunter:zonemon - stats watchdog started.", []),
-    {ok, #state{
-       name=Name,
-       port=ZonePort
-      }}.
+init([UUID]) ->
+    gproc:reg({p, l, {chunter, vm}}, UUID),
+    gproc:reg({n, l, {vm, UUID}}, self()),
+    [Host|_] = re:split(os:cmd("uname -n"), "\n"),
+    refresh(self()),
+    libsniffle:vm_register(UUID, Host),
+    {ok, #state{uuid=UUID, host=Host}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -80,6 +130,18 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(info, _From, #state{uuid = UUID, data = Data} = State) ->
+    case proplists:get_value(brand, Data) of
+	<<"kvm">> ->
+	    Info = chunter_vmadm:info(UUID),
+	    {reply, {ok, Info}, State};
+	_ ->
+	    {reply, {error, not_supported}, State}
+    end;
+
+handle_call(get, _From, #state{data = Data, host = Host} = State) ->
+    {reply, {ok, [{hypervisor, Host}|Data]}, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -94,6 +156,43 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast(connect,  #state{
+	      uuid = UUID,
+	      host = Host,
+	      data = Data
+	     } = State) ->
+    libsniffle:vm_register(UUID, Host),
+    libsniffle:vm_attribute_set(UUID, <<"config">>, Data),
+    {noreply, State#state{connected = true}};
+
+handle_cast(disconnect,  State) ->
+    {noreply, State#state{connected = false}};
+
+handle_cast(refresh, #state{uuid=UUID} = State) ->
+    Data = chunter_server:get_vm(UUID),
+    libsniffle:vm_attribute_set(UUID, <<"config">>, Data),
+    {noreply, State#state{data = Data}};
+
+handle_cast({force_state, MachineState}, #state{state = MachineState} = State) ->
+    {noreply, State};
+
+handle_cast({force_state, NewMachineState}, 
+	    #state{uuid=UUID,
+		   data=Data}=State) ->
+    lager:info([{fifi_component, chunter},
+		{vm, UUID}],
+	       "[VM: ~s] State changed to ~s.~n", [UUID, NewMachineState]),
+    libsniffle:vm_attribute_set(UUID, <<"state">>, NewMachineState),
+    {noreply, State#state{state=NewMachineState}};
+
+handle_cast({state, NewMachineState}, #state{state=OldMachineState}=State) ->
+    case allowed_transitions(OldMachineState, NewMachineState) of
+	true ->
+	    force_state(self(), NewMachineState);
+	false ->
+	    ok
+    end,
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -108,29 +207,6 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(zonecheck, State) ->
-    [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
-	    [ re:split(Line, ":")
-	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-	ID =/= <<"0">>],
-    {noreply, State};
-
-
-handle_info({_Port, {data, {eol, Data}}}, #state{name=_Name, port=_Port} = State) ->
-    case parse_data(Data) of
-	{error, unknown} ->
-%	    statsderl:increment([Name, ".vm.zonewatchdog_error"], 1, 1),
-	    lager:error("watchdog:zone - unknwon message: ~p", [Data]);
-	{UUID, <<"crate">>} ->
-%	    statsderl:increment([Name, ".vm.create"], 1, 1),
-	    chunter_vm_sup:start_child(UUID);
-	{UUID, Action} ->
-%	    statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
-	    chunter_vm_fsm:transition(UUID, simplifie_state(Action))
-    end,
-    {noreply, State};
-
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -145,8 +221,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{port=Zport}) ->
-    erlang:port_close(Zport),
+terminate(_Reason, _State) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -164,58 +239,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec simplifie_state(OriginalState::binary()) -> fifo:vm_state().
 
-simplifie_state(<<"installed">>) ->
-    <<"stopped">>;
-simplifie_state(<<"uninitialized">>) ->
-    <<"stopped">>;
-simplifie_state(<<"initialized">>) ->
-    <<"booting">>;
-simplifie_state(<<"ready">>) ->
-    <<"booting">>;
-simplifie_state(<<"booting">>) ->
-    <<"booting">>;
-simplifie_state(<<"running">>) ->
-    <<"running">>;
-simplifie_state(<<"shutting_down">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"empty">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"down">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"dying">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"dead">>) ->
-    <<"stopped">>.
+%if we don't know yet everything is OK
+allowed_transitions(unknown, _) ->
+    true;
+%default transitions
+allowed_transitions(stopped, booting) ->
+    true;
+allowed_transitions(booting, running) ->
+    true;
+allowed_transitions(running, shutting_down) ->
+    true;
+allowed_transitions(shutting_down, stopped) ->
+    true;
+%escape if something runs off during powerup
+allowed_transitions(booting, shutting_down) ->
+    true;
+allowed_transitions(_From, _To) ->
+    false.
 
--spec parse_data(binary()) -> {UUID::fifo:uuid(), State::binary()} | {error, unknown}.
 
-parse_data(<<"S00: ", UUID/binary>>) ->
-    {UUID, <<"uninitialized">>};
-parse_data(<<"S01: ", UUID/binary>>) ->
-    {UUID, <<"initialized">>};
-parse_data(<<"S02: ", UUID/binary>>) ->
-    {UUID, <<"ready">>};
-parse_data(<<"S03: ", UUID/binary>>) ->
-    {UUID, <<"booting">>};
-parse_data(<<"S04: ", UUID/binary>>) ->
-    {UUID, <<"running">>};
-parse_data(<<"S05: ", UUID/binary>>) ->
-    {UUID, <<"shutting_down">>};
-parse_data(<<"S06: ", UUID/binary>>) ->
-    {UUID, <<"empty">>};
-parse_data(<<"S07: ", UUID/binary>>) ->
-    {UUID, <<"down">>};
-parse_data(<<"S08: ", UUID/binary>>) ->
-    {UUID, <<"dying">>};
-parse_data(<<"S09: ", UUID/binary>>) ->
-    {UUID, <<"dead">>};
-parse_data(<<"S10: ", UUID/binary>>) ->
-    {UUID, <<"uninitialized">>};
-parse_data(<<"S11: ", UUID/binary>>) ->
-    {UUID, <<"creating">>};
-parse_data(<<"S12: ", UUID/binary>>) ->
-    {UUID, <<"destroying">>};
-parse_data(_) ->
-    {error, unknown}.

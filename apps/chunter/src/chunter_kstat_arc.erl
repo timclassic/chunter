@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
-%%% @author Heinz N. Gies <heinz@licenser.net>
-%%% @copyright (C) 2012, Heinz N. Gies
+%%% @author Heinz Nikolaus Gies <heinz@licenser.net>
+%%% @copyright (C) 2012, Heinz Nikolaus Gies
 %%% @doc
 %%%
 %%% @end
-%%% Created : 11 May 2012 by Heinz N. Gies <heinz@licenser.net>
+%%% Created : 11 Dec 2012 by Heinz Nikolaus Gies <heinz@licenser.net>
 %%%-------------------------------------------------------------------
--module(chunter_zonemon).
+-module(chunter_kstat_arc).
 
 -behaviour(gen_server).
 
@@ -19,10 +19,13 @@
 
 -ignore_xref([start_link/0]).
 
+
 -define(SERVER, ?MODULE).
 
--record(state, {name,
-		port}).
+-record(state, {host,
+		l1hit, l1miss, l1size,
+		l2hit, l2miss, l2size,
+		skipped = 0}).
 
 %%%===================================================================
 %%% API
@@ -54,17 +57,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
-    lager:info("chunter:zonemon - initializing: ~s", [Name]),
-    Zonemon = code:priv_dir(chunter) ++ "/zonemon.sh",
-    timer:send_interval(1000, zonecheck),
-    PortOpts = [exit_status, use_stdio, binary, {line, 1000}],
-    ZonePort = erlang:open_port({spawn, Zonemon}, PortOpts),
-    lager:info("chunter:zonemon - stats watchdog started.", []),
-    {ok, #state{
-       name=Name,
-       port=ZonePort
-      }}.
+    timer:send_interval(1000, tick),
+    [Host|_] = re:split(os:cmd("uname -n"), "\n"),
+    {ok, #state{host = Host}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -94,7 +89,6 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -108,28 +102,46 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(zonecheck, State) ->
-    [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
-	    [ re:split(Line, ":")
-	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-	ID =/= <<"0">>],
-    {noreply, State};
+handle_info(tick, State = #state{
+		    l1hit = L1HitOld, l1miss = L1MissOld, l1size = L1SizeOld,
+		    l2hit = L2HitOld, l2miss = L2MissOld, l2size = L2SizeOld,
+		    skipped = Skipped
+		   }) ->
+    Values = get_stats("/usr/bin/kstat -p zfs:0:arcstats"),
+    {State0, V0} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"hits">>}, 1, Values) of
+		       {_, L1HitOld} when Skipped < 120 -> {State#state{skipped = Skipped+1}, []};
+		       {_, L1Hit} -> {State#state{l1hit = L1Hit}, [{<<"l1hits">>, L1Hit}]}
+		   end,
+    {State1, V1} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"misses">>}, 1, Values) of
+		       {_, L1MissOld} when Skipped < 120 -> {State0#state{skipped = Skipped+1}, V0};
+		       {_, L1Miss} -> {State0#state{l1miss = L1Miss}, [{<<"l1miss">>, L1Miss} | V0]}
+		   end,
+    {State2, V2} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"size">>}, 1, Values) of
+		       {_, L1SizeOld} when Skipped < 120 -> {State1#state{skipped = Skipped+1}, V1};
+		       {_, L1Size} -> {State1#state{l1size = L1Size}, [{<<"l1size">>, round(L1Size/(1024*1024))} | V1]}
+		   end,
+
+    {State3, V3} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_hits">>}, 1, Values) of
+		       {_, L2HitOld} when Skipped < 120 -> {State2#state{skipped = Skipped+1}, V2};
+		       {_, L2Hit} -> {State2#state{l2hit = L2Hit}, [{<<"l2hits">>, L2Hit} | V2]}
+		   end,
+    {State4, V4} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_misses">>}, 1, Values) of
+		       {_, L2MissOld} when Skipped < 120 -> {State3#state{skipped = Skipped+1}, V3};
+		       {_, L2Miss} -> {State3#state{l2miss = L2Miss}, [{<<"l2miss">>, L2Miss} | V3]}
+		   end,
+    {State5, V5} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"l2_size">>}, 1, Values) of
+		       {_, L2SizeOld} when Skipped < 120-> {State4#state{skipped = Skipped+1}, V4};
+		       {_, L2Size} -> {State4#state{l2size = L2Size}, [{<<"l2size">>, round(L2Size/(1024*1024))} | V4]}
+		   end,
 
 
-handle_info({_Port, {data, {eol, Data}}}, #state{name=_Name, port=_Port} = State) ->
-    case parse_data(Data) of
-	{error, unknown} ->
-%	    statsderl:increment([Name, ".vm.zonewatchdog_error"], 1, 1),
-	    lager:error("watchdog:zone - unknwon message: ~p", [Data]);
-	{UUID, <<"crate">>} ->
-%	    statsderl:increment([Name, ".vm.create"], 1, 1),
-	    chunter_vm_sup:start_child(UUID);
-	{UUID, Action} ->
-%	    statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
-	    chunter_vm_fsm:transition(UUID, simplifie_state(Action))
-    end,
-    {noreply, State};
+    case V5 of
+	[] ->
+    	    {noreply, State5};
+	_ ->
+	    libsniffle:hypervisor_resource_set(State5#state.host, V5),
+	    {noreply, State5#state{skipped = 0}}
+    end;
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -145,8 +157,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{port=Zport}) ->
-    erlang:port_close(Zport),
+terminate(_Reason, _State) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -164,58 +175,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec simplifie_state(OriginalState::binary()) -> fifo:vm_state().
 
-simplifie_state(<<"installed">>) ->
-    <<"stopped">>;
-simplifie_state(<<"uninitialized">>) ->
-    <<"stopped">>;
-simplifie_state(<<"initialized">>) ->
-    <<"booting">>;
-simplifie_state(<<"ready">>) ->
-    <<"booting">>;
-simplifie_state(<<"booting">>) ->
-    <<"booting">>;
-simplifie_state(<<"running">>) ->
-    <<"running">>;
-simplifie_state(<<"shutting_down">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"empty">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"down">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"dying">>) ->
-    <<"shutting_down">>;
-simplifie_state(<<"dead">>) ->
-    <<"stopped">>.
-
--spec parse_data(binary()) -> {UUID::fifo:uuid(), State::binary()} | {error, unknown}.
-
-parse_data(<<"S00: ", UUID/binary>>) ->
-    {UUID, <<"uninitialized">>};
-parse_data(<<"S01: ", UUID/binary>>) ->
-    {UUID, <<"initialized">>};
-parse_data(<<"S02: ", UUID/binary>>) ->
-    {UUID, <<"ready">>};
-parse_data(<<"S03: ", UUID/binary>>) ->
-    {UUID, <<"booting">>};
-parse_data(<<"S04: ", UUID/binary>>) ->
-    {UUID, <<"running">>};
-parse_data(<<"S05: ", UUID/binary>>) ->
-    {UUID, <<"shutting_down">>};
-parse_data(<<"S06: ", UUID/binary>>) ->
-    {UUID, <<"empty">>};
-parse_data(<<"S07: ", UUID/binary>>) ->
-    {UUID, <<"down">>};
-parse_data(<<"S08: ", UUID/binary>>) ->
-    {UUID, <<"dying">>};
-parse_data(<<"S09: ", UUID/binary>>) ->
-    {UUID, <<"dead">>};
-parse_data(<<"S10: ", UUID/binary>>) ->
-    {UUID, <<"uninitialized">>};
-parse_data(<<"S11: ", UUID/binary>>) ->
-    {UUID, <<"creating">>};
-parse_data(<<"S12: ", UUID/binary>>) ->
-    {UUID, <<"destroying">>};
-parse_data(_) ->
-    {error, unknown}.
+get_stats(Cmd) ->
+    lists:map(fun (Line) ->
+		      [Ks, Vs] = re:split(Line, "\t"),
+		      [A,B,C,D] = re:split(Ks, ":"),
+		      case re:run(Vs, "^\\d+$") of
+			  nomatch ->
+			      {{A,B,C,D}, Vs};
+			  _ ->
+			      {{A,B,C,D}, list_to_integer(binary_to_list(Vs))}
+		      end
+	      end, re:split(os:cmd(Cmd), "\n", [trim])).

@@ -90,8 +90,6 @@ delete(UUID) ->
 remove(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, remove).
 
-
-
 -spec force_state(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
 
 force_state(UUID, State) ->
@@ -168,12 +166,14 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
     SniffleData1 = lists:keydelete(<<"ram">>, 1, SniffleData),
     SniffleData2 = [{<<"ram">>, Ram} | SniffleData1],
     change_state(UUID, <<"installing_dataset">>),
+    Info = chunter_vmadm:info(State#state.uuid),
     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                         {<<"data">>,
                          [{<<"state">>, <<"installing_dataset">>},
                           {<<"hypervisor">>, Hypervisor},
                           {<<"config">>, SniffleData2}]}]),
-    libsniffle:vm_attribute_set(UUID, <<"config">>, SniffleData2),
+    libsniffle:vm_attribute_set(UUID, [{<<"config">>, SniffleData2},
+                                       {<<"info">>, Info}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
     change_state(UUID, <<"creating">>),
@@ -291,6 +291,11 @@ handle_event({force_state, NextState}, StateName, State) ->
     case binary_to_atom(NextState) of
         StateName ->
             {next_state, StateName, State};
+        running ->
+            Info = chunter_vmadm:info(State#state.uuid),
+            libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
+            change_state(State#state.uuid, NextState),
+            {next_state, running, State};
         Other ->
             change_state(State#state.uuid, NextState),
             {next_state, Other, State}
@@ -303,7 +308,9 @@ handle_event(register, StateName, State) ->
         {error, not_found} ->
             {stop, not_found, State};
         VMData ->
-            libsniffle:vm_attribute_set(State#state.uuid, <<"config">>, chunter_spec:to_sniffle(VMData)),
+            Info = chunter_vmadm:info(State#state.uuid),
+            libsniffle:vm_attribute_set(State#state.uuid, [{<<"config">>, chunter_spec:to_sniffle(VMData)},
+                                                           {<<"info">>, Info}]),
             {next_state, StateName, State}
     end;
 

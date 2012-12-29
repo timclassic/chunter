@@ -248,7 +248,7 @@ create_nic([T|R]) ->
 create_disk([]) ->
     [];
 
-create_disk([{<<"image_size">>, Value}|R]) ->
+create_disk([{<<"image-size">>, Value}|R]) ->
     case lists:keyfind(<<"size">>, 1, R) of
         false ->
             {Num, []} = string:to_integer(binary_to_list(Value)),

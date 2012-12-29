@@ -252,7 +252,7 @@ create_disk([{<<"image_size">>, Value}|R]) ->
     case lists:keyfind(<<"size">>, 1, R) of
         false ->
             {Num, []} = string:to_integer(binary_to_list(Value)),
-            [{<<"image_size">>, Num}
+            [{<<"image">>, Num}
              |create_disk(R)];
         _ ->
             create_disk(R)
@@ -260,7 +260,7 @@ create_disk([{<<"image_size">>, Value}|R]) ->
 
 create_disk([{<<"size">>, Value}|R]) ->
     {Num, []} = string:to_integer(binary_to_list(Value)),
-    [{<<"image_size">>, Num}
+    [{<<"image">>, Num}
      |lists:keydelete(<<"size">>, 1, create_disk(R))];
 
 create_disk([T|R]) ->

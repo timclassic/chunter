@@ -242,12 +242,27 @@ create_nic([T|R]) ->
 
 ?DISK_RENAME(<<"match">>, <<"path">>);
 ?DISK_RENAME_BOOL(<<"boot">>, <<"bool">>);
-?DISK_RENAME_INT(<<"image_size">>, <<"image_size">>);
-?DISK_RENAME_INT(<<"size">>, <<"size">>);
 ?DISK_RENAME(<<"image-uuid">>, <<"image_uuid">>);
 ?DISK_RENAME(<<"image-name">>, <<"image_name">>);
+
 create_disk([]) ->
     [];
+
+create_disk([{<<"image-size">>, Value}|R]) ->
+    case lists:keyfind(<<"size">>, 1, R) of
+        false ->
+            {Num, []} = string:to_integer(binary_to_list(Value)),
+            [{<<"size">>, Num}
+             |create_disk(R)];
+        _ ->
+            create_disk(R)
+    end;
+
+create_disk([{<<"size">>, Value}|R]) ->
+    {Num, []} = string:to_integer(binary_to_list(Value)),
+    [{<<"size">>, Num}
+     |lists:keydelete(<<"size">>, 1, create_disk(R))];
+
 create_disk([T|R]) ->
     [T|create_disk(R)].
 

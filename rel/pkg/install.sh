@@ -2,7 +2,7 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=joyent_20120906T221231Z
+TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z
 
 DST=/opt
 
@@ -16,7 +16,7 @@ then
 fi
 BASE=`basename $0`;
 
-if uname -a | grep $TESTED_VERSIONS
+if uname -a | egrep $TESTED_VERSIONS
 then
     echo "This SnartOS release is tested!"
 else

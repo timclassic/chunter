@@ -174,8 +174,11 @@ handle_cast(connect, #state{name = Host,
 
                                                 %    statsderl:increment([Name, ".net.join"], 1, 1.0),
                                                 %    libsniffle:join_client_channel(),
-    {ok, IP} = inet:getaddr(binary_to_list(Host), inet),
-    libsniffle:hypervisor_register(Host, IP, 4200),
+
+    {ok, {A,B,C,D}} = inet:getaddr(binary_to_list(Host), inet),
+    IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
+
+    libsniffle:hypervisor_register(Host, IPStr, 4200),
     libsniffle:hypervisor_resource_set(Host, [{<<"networks">>, Networks1},
                                               {<<"resources.free-memory">>, TotalMem - ProvMem},
                                               {<<"etherstubs">>, Etherstub1},

@@ -105,7 +105,7 @@ convert(F, VM)->
     {ok, XML} = file:read_file(F),
     case erlsom:simple_form(XML) of
         {ok,{"zone",Attrs,Value},_}->
-            create_zone_data(VM ++ map_attrs(Attrs)  ++ parse_xml(Value));
+            jsxd:from_list(create_zone_data(VM ++ map_attrs(Attrs)  ++ parse_xml(Value)));
         Err->
             Err
     end.

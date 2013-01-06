@@ -191,6 +191,9 @@ create_zone_data([{<<"nic">>, Nic}|R], Disks, Nics, Datasets) ->
 create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
     create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
 
+?RENAME(<<"create-timestamp">>, <<"create_timestamp">>);
+?RENAME(<<"owner-id">>, <<"owner">>);
+?RENAME(<<"dns-domain">>, <<"dns_domain">>);
 ?REMOVE(<<"ip-type">>);
 ?REMOVE(<<"debugid">>);
 ?RENAME_B64(<<"alias">>, <<"alias">>);
@@ -199,6 +202,7 @@ create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
 ?RENAME_INT(<<"cpu-cap">>, <<"cpu_cap">>);
 ?RENAME_BOOL(<<"do-not-inventory">>, <<"do_not_inventory">>);
 ?RENAME(<<"name">>, <<"zonename">>);
+?RENAME(<<"dataset-uuid">>, <<"dataset_uuid">>);
 ?RENAME_BOOL(<<"never-booted">>, <<"never_booted">>);
 ?RENAME_B64(<<"qemu-extra_opts">>, <<"qemu_extra_opts">>);
 ?RENAME_B64(<<"qemu-opts">>, <<"qemu_opts">>);

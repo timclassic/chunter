@@ -15,7 +15,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3]).
+         terminate/2, code_change/3]).
 
 -ignore_xref([start_link/0]).
 
@@ -23,7 +23,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {host, last,
-		skipped = 0}).
+                skipped = 0}).
 
 %%%===================================================================
 %%% API
@@ -101,13 +101,13 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(tick, State = #state{last = Last,
-				 skipped = Skipped}) ->
+                                 skipped = Skipped}) ->
     case get_stats("/usr/sbin/zpool list -pH") of
-	Last when Skipped < 120 ->
-	    {noreply, State};
-	Pools ->
-	    libsniffle:hypervisor_resource_set(State#state.host, <<"pools">>, Pools),
-	    {noreply, State#state{skipped = 0, last = Pools}}
+        Last when Skipped < 120 ->
+            {noreply, State};
+        Pools ->
+            libsniffle:hypervisor_resource_set(State#state.host, Pools),
+            {noreply, State#state{skipped = 0, last = Pools}}
     end;
 
 
@@ -146,13 +146,18 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 get_stats(Cmd) ->
-    lists:map(fun (Line) ->
-		      [Name, Size, Alloc, Free, _Expand, _Cap, Dedup, Health, _Altroot] =
-			  re:split(Line, "\t"),
-		      [{<<"name">>, Name},
-		       {<<"size">>, round(list_to_integer(binary_to_list(Size))/(1024*1024))},
-		       {<<"used">>, round(list_to_integer(binary_to_list(Alloc))/(1024*1024))},
-		       {<<"free">>, round(list_to_integer(binary_to_list(Free))/(1024*1024))},
-		       {<<"dedup">>, round(list_to_integer(binary_to_list(Dedup)))},
-		       {<<"health">>, Health}]
-	      end, re:split(os:cmd(Cmd), "\n", [trim])).
+    lists:foldl(
+      fun (Line, Acc) ->
+              [Name, Size, Alloc, Free, _Expand, _Cap, Dedup, Health, _Altroot] = re:split(Line, "\t"),
+              [{<<"pools.", Name/binary, ".size">>, bin_to_gb(Size)},
+               {<<"pools.", Name/binary, ".used">>, bin_to_gb(Alloc)},
+               {<<"pools.", Name/binary, ".free">>, bin_to_gb(Free)},
+               {<<"pools.", Name/binary, ".dedup">>, bin_to_int(Dedup)},
+               {<<"pools.", Name/binary, ".health">>, Health} | Acc]
+      end, [], re:split(os:cmd(Cmd), "\n", [trim])).
+
+bin_to_int(B) ->
+        list_to_integer(binary_to_list(B)).
+
+bin_to_gb(B) ->
+    round(bin_to_int(B)/(1024*1024)).

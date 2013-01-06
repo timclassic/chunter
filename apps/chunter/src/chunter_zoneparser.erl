@@ -229,7 +229,6 @@ create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
 create_zone_data([Pair|R], Disks, Nics, Datasets) ->
     [Pair|create_zone_data(R, Disks, Nics, Datasets)].
 
-
 ?NIC_RENAME(<<"ip">>, <<"ip">>);
 ?NIC_RENAME(<<"mac-addr">>, <<"mac">>);
 ?NIC_RENAME(<<"physical">>, <<"interface">>);
@@ -242,7 +241,6 @@ create_nic([]) ->
     [];
 create_nic([T|R]) ->
     [T|create_nic(R)].
-
 
 ?DISK_RENAME(<<"match">>, <<"path">>);
 ?DISK_RENAME_BOOL(<<"boot">>, <<"bool">>);

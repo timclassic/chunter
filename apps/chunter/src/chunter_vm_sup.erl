@@ -24,7 +24,7 @@
 %%% API functions
 %%%===================================================================
 
-start_child(UUID) -> 
+start_child(UUID) ->
     supervisor:start_child(?SERVER, [UUID]).
 
 %%--------------------------------------------------------------------
@@ -56,8 +56,8 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    Element = {chunter_vm_fsm, {chunter_vm_fms, start_link, []}, 
-	       transient, brutal_kill, worker, [chunter_vm_fsm]}, 
+    Element = {chunter_vm_fsm, {chunter_vm_fms, start_link, []},
+               transient, brutal_kill, worker, [chunter_vm_fsm]},
     Children = [Element],
     RestartStrategy = {simple_one_for_one, 5, 10},
     {ok, {RestartStrategy, Children}}.

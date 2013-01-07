@@ -52,6 +52,8 @@ generate_sniffle(In, _Type) ->
                 <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>],
     jsxd:fold(fun (<<"dataset_uuid">>, V, Obj) ->
                       jsxd:set(<<"dataset">>, V, Obj);
+                  (<<"image_uuid">>, V, Obj) ->
+                      jsxd:set(<<"dataset">>, V, Obj);
                   (<<"brand">>, <<"kvm">>, Obj) ->
                       jsxd:set(<<"type">>, <<"kvm">>, Obj);
                   (<<"brand">>, <<"joyent">>, Obj) ->
@@ -126,7 +128,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                                  {set, <<"brand">>, <<"joyent">>},
                                  {set, <<"quota">>,
                                   jsxd:get(<<"quota">>, 0, Package)},
-                                 {set, <<"dataset_uuid">>,
+                                 {set, <<"image_uuid">>,
                                   jsxd:get(<<"dataset">>, <<"">>, Dataset)}],
                                 Base0)
             end,

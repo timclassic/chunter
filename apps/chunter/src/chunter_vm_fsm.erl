@@ -159,20 +159,19 @@ initialized(load, State) ->
     {next_state, loading, State};
 
 initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
-    {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
-    VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
+    {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
+    VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
     SniffleData  = chunter_spec:to_sniffle(VMData),
-    {<<"ram">>, Ram} = lists:keyfind(<<"ram">>, 1, PackageSpec),
-    SniffleData1 = lists:keydelete(<<"ram">>, 1, SniffleData),
-    SniffleData2 = [{<<"ram">>, Ram} | SniffleData1],
+    {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
+    SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
     change_state(UUID, <<"installing_dataset">>),
     Info = chunter_vmadm:info(State#state.uuid),
     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                         {<<"data">>,
                          [{<<"state">>, <<"installing_dataset">>},
                           {<<"hypervisor">>, Hypervisor},
-                          {<<"config">>, SniffleData2}]}]),
-    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData2},
+                          {<<"config">>, SniffleData1}]}]),
+    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1},
                              {<<"info">>, Info}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
@@ -310,7 +309,7 @@ handle_event(register, StateName, State) ->
         VMData ->
             Info = chunter_vmadm:info(State#state.uuid),
             libsniffle:vm_set(State#state.uuid, [{<<"config">>, chunter_spec:to_sniffle(VMData)},
-                                                           {<<"info">>, Info}]),
+                                                 {<<"info">>, Info}]),
             {next_state, StateName, State}
     end;
 
@@ -344,7 +343,7 @@ handle_event(delete, StateName, State) ->
                                                 %   _ ->
                                                 %       ok
                                                 %   end,
-            {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+            {ok, Mem} = jsxd:get(<<"max_physical_memory">>, VM),
             spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
             {next_state, StateName, State}
     end;

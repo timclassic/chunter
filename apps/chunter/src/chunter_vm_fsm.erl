@@ -345,6 +345,7 @@ handle_event(delete, StateName, State) ->
                                                 %   end,
             {ok, Mem} = jsxd:get(<<"max_physical_memory">>, VM),
             spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
+            libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),
             {next_state, StateName, State}
     end;
 

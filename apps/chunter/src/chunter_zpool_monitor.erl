@@ -106,7 +106,7 @@ handle_info(tick, State = #state{last = Last,
         Last when Skipped < 120 ->
             {noreply, State};
         Pools ->
-            libsniffle:hypervisor_resource_set(State#state.host, Pools),
+            libsniffle:hypervisor_set(State#state.host, Pools),
             {noreply, State#state{skipped = 0, last = Pools}}
     end;
 

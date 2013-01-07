@@ -159,21 +159,20 @@ initialized(load, State) ->
     {next_state, loading, State};
 
 initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
-    {<<"dataset">>, DatasetUUID} = lists:keyfind(<<"dataset">>, 1, DatasetSpec),
-    VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, [{<<"uuid">>, UUID} | VMSpec]),
+    {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
+    VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
     SniffleData  = chunter_spec:to_sniffle(VMData),
-    {<<"ram">>, Ram} = lists:keyfind(<<"ram">>, 1, PackageSpec),
-    SniffleData1 = lists:keydelete(<<"ram">>, 1, SniffleData),
-    SniffleData2 = [{<<"ram">>, Ram} | SniffleData1],
+    {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
+    SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
     change_state(UUID, <<"installing_dataset">>),
     Info = chunter_vmadm:info(State#state.uuid),
     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                         {<<"data">>,
                          [{<<"state">>, <<"installing_dataset">>},
                           {<<"hypervisor">>, Hypervisor},
-                          {<<"config">>, SniffleData2}]}]),
-    libsniffle:vm_attribute_set(UUID, [{<<"config">>, SniffleData2},
-                                       {<<"info">>, Info}]),
+                          {<<"config">>, SniffleData1}]}]),
+    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1},
+                             {<<"info">>, Info}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
     change_state(UUID, <<"creating">>),
@@ -194,7 +193,7 @@ creating({transition, NextState}, State) ->
                      {next_state, atom(), State::term()}.
 
 loading({transition, NextState}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_set(State#state.uuid, <<"state">>, NextState),
     {next_state, binary_to_atom(NextState), State}.
 
 -spec stopped({transition, NextState::fifo:vm_state()}, State::term()) ->
@@ -221,7 +220,7 @@ booting({transition, NextState = <<"shutting_down">>}, State) ->
 booting({transition, NextState = <<"running">>}, State) ->
     change_state(State#state.uuid, NextState),
     Info = chunter_vmadm:info(State#state.uuid),
-    libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
+    libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
     {next_state, binary_to_atom(NextState), State};
 
 booting(_, State) ->
@@ -293,7 +292,7 @@ handle_event({force_state, NextState}, StateName, State) ->
             {next_state, StateName, State};
         running ->
             Info = chunter_vmadm:info(State#state.uuid),
-            libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
+            libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
             change_state(State#state.uuid, NextState),
             {next_state, running, State};
         Other ->
@@ -309,8 +308,8 @@ handle_event(register, StateName, State) ->
             {stop, not_found, State};
         VMData ->
             Info = chunter_vmadm:info(State#state.uuid),
-            libsniffle:vm_attribute_set(State#state.uuid, [{<<"config">>, chunter_spec:to_sniffle(VMData)},
-                                                           {<<"info">>, Info}]),
+            libsniffle:vm_set(State#state.uuid, [{<<"config">>, chunter_spec:to_sniffle(VMData)},
+                                                 {<<"info">>, Info}]),
             {next_state, StateName, State}
     end;
 
@@ -344,8 +343,9 @@ handle_event(delete, StateName, State) ->
                                                 %   _ ->
                                                 %       ok
                                                 %   end,
-            {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+            {ok, Mem} = jsxd:get(<<"max_physical_memory">>, VM),
             spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
+            libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),
             {next_state, StateName, State}
     end;
 
@@ -465,7 +465,7 @@ load_vm(ZUUID) ->
 
 change_state(UUID, State) ->
     libsniffle:vm_log(UUID, <<"Transitioning ", State/binary>>),
-    libsniffle:vm_attribute_set(UUID, <<"state">>, State),
+    libsniffle:vm_set(UUID, <<"state">>, State),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
 
 

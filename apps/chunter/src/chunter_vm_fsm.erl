@@ -172,8 +172,8 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
                          [{<<"state">>, <<"installing_dataset">>},
                           {<<"hypervisor">>, Hypervisor},
                           {<<"config">>, SniffleData2}]}]),
-    libsniffle:vm_attribute_set(UUID, [{<<"config">>, SniffleData2},
-                                       {<<"info">>, Info}]),
+    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData2},
+                             {<<"info">>, Info}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
     change_state(UUID, <<"creating">>),
@@ -194,7 +194,7 @@ creating({transition, NextState}, State) ->
                      {next_state, atom(), State::term()}.
 
 loading({transition, NextState}, State) ->
-    libsniffle:vm_attribute_set(State#state.uuid, <<"state">>, NextState),
+    libsniffle:vm_set(State#state.uuid, <<"state">>, NextState),
     {next_state, binary_to_atom(NextState), State}.
 
 -spec stopped({transition, NextState::fifo:vm_state()}, State::term()) ->
@@ -221,7 +221,7 @@ booting({transition, NextState = <<"shutting_down">>}, State) ->
 booting({transition, NextState = <<"running">>}, State) ->
     change_state(State#state.uuid, NextState),
     Info = chunter_vmadm:info(State#state.uuid),
-    libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
+    libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
     {next_state, binary_to_atom(NextState), State};
 
 booting(_, State) ->
@@ -293,7 +293,7 @@ handle_event({force_state, NextState}, StateName, State) ->
             {next_state, StateName, State};
         running ->
             Info = chunter_vmadm:info(State#state.uuid),
-            libsniffle:vm_attribute_set(State#state.uuid, <<"info">>, Info),
+            libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
             change_state(State#state.uuid, NextState),
             {next_state, running, State};
         Other ->
@@ -309,7 +309,7 @@ handle_event(register, StateName, State) ->
             {stop, not_found, State};
         VMData ->
             Info = chunter_vmadm:info(State#state.uuid),
-            libsniffle:vm_attribute_set(State#state.uuid, [{<<"config">>, chunter_spec:to_sniffle(VMData)},
+            libsniffle:vm_set(State#state.uuid, [{<<"config">>, chunter_spec:to_sniffle(VMData)},
                                                            {<<"info">>, Info}]),
             {next_state, StateName, State}
     end;
@@ -465,7 +465,7 @@ load_vm(ZUUID) ->
 
 change_state(UUID, State) ->
     libsniffle:vm_log(UUID, <<"Transitioning ", State/binary>>),
-    libsniffle:vm_attribute_set(UUID, <<"state">>, State),
+    libsniffle:vm_set(UUID, <<"state">>, State),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
 
 

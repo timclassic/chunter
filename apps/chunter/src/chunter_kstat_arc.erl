@@ -138,7 +138,7 @@ handle_info(tick, State = #state{
         [] ->
             {noreply, State5};
         _ ->
-            libsniffle:hypervisor_resource_set(State5#state.host, V5),
+            libsniffle:hypervisor_set(State5#state.host, V5),
             {noreply, State5#state{skipped = 0}}
     end;
 

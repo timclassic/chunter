@@ -105,7 +105,7 @@ convert(F, VM)->
     {ok, XML} = file:read_file(F),
     case erlsom:simple_form(XML) of
         {ok,{"zone",Attrs,Value},_}->
-            create_zone_data(VM ++ map_attrs(Attrs)  ++ parse_xml(Value));
+            jsxd:from_list(create_zone_data(VM ++ map_attrs(Attrs)  ++ parse_xml(Value)));
         Err->
             Err
     end.
@@ -191,6 +191,9 @@ create_zone_data([{<<"nic">>, Nic}|R], Disks, Nics, Datasets) ->
 create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
     create_zone_data(R, Disks, Nics, [Dataset|Datasets]);
 
+?RENAME(<<"create-timestamp">>, <<"create_timestamp">>);
+?RENAME(<<"owner-id">>, <<"owner">>);
+?RENAME(<<"dns-domain">>, <<"dns_domain">>);
 ?REMOVE(<<"ip-type">>);
 ?REMOVE(<<"debugid">>);
 ?RENAME_B64(<<"alias">>, <<"alias">>);
@@ -199,6 +202,7 @@ create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
 ?RENAME_INT(<<"cpu-cap">>, <<"cpu_cap">>);
 ?RENAME_BOOL(<<"do-not-inventory">>, <<"do_not_inventory">>);
 ?RENAME(<<"name">>, <<"zonename">>);
+?RENAME(<<"dataset-uuid">>, <<"dataset_uuid">>);
 ?RENAME_BOOL(<<"never-booted">>, <<"never_booted">>);
 ?RENAME_B64(<<"qemu-extra_opts">>, <<"qemu_extra_opts">>);
 ?RENAME_B64(<<"qemu-opts">>, <<"qemu_opts">>);
@@ -225,7 +229,6 @@ create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
 create_zone_data([Pair|R], Disks, Nics, Datasets) ->
     [Pair|create_zone_data(R, Disks, Nics, Datasets)].
 
-
 ?NIC_RENAME(<<"ip">>, <<"ip">>);
 ?NIC_RENAME(<<"mac-addr">>, <<"mac">>);
 ?NIC_RENAME(<<"physical">>, <<"interface">>);
@@ -238,7 +241,6 @@ create_nic([]) ->
     [];
 create_nic([T|R]) ->
     [T|create_nic(R)].
-
 
 ?DISK_RENAME(<<"match">>, <<"path">>);
 ?DISK_RENAME_BOOL(<<"boot">>, <<"bool">>);

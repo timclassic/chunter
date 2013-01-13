@@ -15,7 +15,8 @@
          info/1,
          reboot/1,
          delete/2,
-         create/1
+         create/1,
+         update/2
         ]).
 
 %%%===================================================================
@@ -102,7 +103,7 @@ reboot(UUID) ->
 create(Data) ->
     {<<"uuid">>, Alias} = lists:keyfind(<<"uuid">>, 1, Data),
     lager:info("~p", [<<"Creation of VM '", Alias/binary, "' started.">>]),
-                                                %    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
+    %%    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
                "vmadm:create", []),
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
@@ -112,9 +113,10 @@ create(Data) ->
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     Res = case wait_for_tex(Port) of
-              {ok, _UUID} ->
+              {ok, UUID} ->
                   {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, Data),
-                  chunter_server:provision_memory(Mem*1024*1024); % provision memory does not take MB!
+                  chunter_server:provision_memory(Mem*1024*1024),
+                  chunter_vm_fsm:load(UUID);
               E ->
                   lager:error([{fifi_component, chunter}],
                               "vmad:create - Failed: ~p.", [E]),
@@ -122,7 +124,29 @@ create(Data) ->
           end,
     Res.
 
-                                                % This function reads the process's input untill it knows that the vm was created or failed.
+update(UUID, Data) ->
+    lager:info("~p", [<<"Updaring of VM '", UUID/binary, "' started.">>]),
+    %%    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
+    lager:info([{fifi_component, chunter}],
+               "vmadm:create", []),
+    Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh update " ++ binary_to_list(UUID),
+    lager:debug([{fifi_component, chunter}],
+                "vmadm:cmd - ~s.", [Cmd]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
+    port_command(Port, jsx:to_json(Data)),
+    port_command(Port, "\nEOF\n"),
+    receive
+        {_Port, {data, _}} ->
+            ok;
+        {Port, {exit_status, _}} ->
+            chunter_vm_fsm:load(UUID)
+    after
+        60000 ->
+            chunter_vm_fsm:load(UUID)
+    end.
+
+
+%% This function reads the process's input untill it knows that the vm was created or failed.
 -spec wait_for_tex(Port::any()) ->
                           {ok, UUID::fifo:uuid()} |
                           {error, Text::binary() |

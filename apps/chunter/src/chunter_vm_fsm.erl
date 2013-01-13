@@ -26,6 +26,7 @@
          delete/1,
          remove/1,
          transition/2,
+         update/2,
          force_state/2]).
 
 %% gen_fsm callbacks
@@ -37,7 +38,7 @@
          code_change/4]).
 
 
-                                                % This functions have to be exported but are only used internally.
+%% This functions have to be exported but are only used internally.
 -export([initialized/2,
          creating/2,
          loading/2,
@@ -62,6 +63,8 @@ create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
     start_link(UUID),
     gen_fsm:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
 
+update(UUID, Data) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, {update, Data}).
 
 -spec load(UUID::fifo:uuid()) -> ok.
 
@@ -313,6 +316,10 @@ handle_event(register, StateName, State) ->
             {next_state, StateName, State}
     end;
 
+handle_event({update, Data}, _StateName, State) ->
+    spawn(chunter_vmadm, update, [Data, State#state.uuid]),
+    {stop, normal, State};
+
 handle_event(remove, _StateName, State) ->
     libsniffle:vm_unregister(State#state.uuid),
     {stop, normal, State};
@@ -337,12 +344,12 @@ handle_event(delete, StateName, State) ->
                      end
                      || Nic <- Nics]
             end,
-                                                %    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
-                                                %   {ok, GUUID} ->
-                                                %       libsnarl:group_delete(system, GUUID);
-                                                %   _ ->
-                                                %       ok
-                                                %   end,
+            %%   case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
+            %%       {ok, GUUID} ->
+            %%           libsnarl:group_delete(system, GUUID);
+            %%       _ ->
+            %%           ok
+            %%   end,
             {ok, Mem} = jsxd:get(<<"max_physical_memory">>, VM),
             spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
             libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),

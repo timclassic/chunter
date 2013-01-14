@@ -290,7 +290,7 @@ publish_dataset(JSON) ->
     Obj1 = jsxd:thread(
              [{select,[<<"os">>, <<"metadata">>, <<"name">>, <<"version">>,
                        <<"description">>, <<"disk_driver">>, <<"nic_driver">>,
-                       <<"requirements">>, <<"image_size">>]},
+                       <<"image_size">>]},
               {set, <<"dataset">>, ID},
               {set, <<"networks">>, jsxd:get(<<"requirements.networks">>, [], Obj)}],
              Obj),

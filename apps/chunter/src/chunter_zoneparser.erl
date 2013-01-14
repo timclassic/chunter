@@ -152,8 +152,8 @@ parse_xml([{"network",
       map_attrs(Attrs) ++ parse_xml(Content)}
      |parse_xml(T)];
 
-parse_xml([{Node,Attrib,Value}|T])->
-    [{list_to_binary(Node),list_to_binary(Attrib), lists:flatten(parse_xml(Value))}|parse_xml(T)];
+parse_xml([{Node,Attribs,Value}|T])->
+    [{list_to_binary(Node),map_attrs(Attribs), lists:flatten(parse_xml(Value))}|parse_xml(T)];
 
 parse_xml(Value)->
     Value.
@@ -227,8 +227,7 @@ create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
 ?RENAME_INT(<<"zone.max-swap">>, <<"max_swap">>);
 ?RENAME_INT(<<"zone.zfs-io-priority">>, <<"zfs_io_priority">>);
 create_zone_data([P|R], Disks, Nics, Datasets) ->
-    [P
-|create_zone_data(R, Disks, Nics, Datasets)].
+    [P|create_zone_data(R, Disks, Nics, Datasets)].
 
 ?NIC_RENAME(<<"ip">>, <<"ip">>);
 ?NIC_RENAME(<<"mac-addr">>, <<"mac">>);

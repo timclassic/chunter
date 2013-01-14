@@ -48,7 +48,7 @@ to_sniffle(Spec) ->
 generate_sniffle(In, _Type) ->
     KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>,
                 <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
-                <<"created_at">>, <<"dns_domain">>,
+                <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
                 <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>],
     jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
                       jsxd:merge(Int, Obj);

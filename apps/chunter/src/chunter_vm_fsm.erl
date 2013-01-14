@@ -329,21 +329,6 @@ handle_event(delete, StateName, State) ->
         {error, not_found} ->
             {stop, not_found, State};
         VM ->
-            case proplists:get_value(<<"nics">>, VM) of
-                undefined ->
-                    [];
-                Nics ->
-                    [try
-                         Net = proplists:get_value(<<"nic_tag">>, Nic),
-                         IP = proplists:get_value(<<"ip">>, Nic),
-                         libsniffle:iprange_release(Net, libsniffle:ip_to_int(IP)),
-                         ok
-                     catch
-                         _:_ ->
-                             ok
-                     end
-                     || Nic <- Nics]
-            end,
             %%   case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
             %%       {ok, GUUID} ->
             %%           libsnarl:group_delete(system, GUUID);

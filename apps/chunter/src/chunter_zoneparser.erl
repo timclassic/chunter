@@ -153,7 +153,7 @@ parse_xml([{"network",
      |parse_xml(T)];
 
 parse_xml([{Node,Attribs,Value}|T])->
-    [{list_to_binary(Node),map_attrs(Attribs), lists:flatten(parse_xml(Value))}|parse_xml(T)];
+    [{list_to_binary(Node), map_attrs(Attribs) ++ lists:flatten(parse_xml(Value))}|parse_xml(T)];
 
 parse_xml(Value)->
     Value.

@@ -239,6 +239,7 @@ create_zone_data([P|R], Disks, Nics, Datasets) ->
 ?NIC_RENAME(<<"blocked_outgoing_ports">>, <<"blocked_outgoing_ports">>);
 create_nic([]) ->
     [];
+
 create_nic([T|R]) ->
     [T|create_nic(R)].
 

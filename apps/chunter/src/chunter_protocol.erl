@@ -56,6 +56,11 @@ handle_message({machines, start, UUID, Image}, State) when is_binary(UUID),
     chunter_vmadm:start(UUID, Image),
     {stop, State};
 
+handle_message({machines, snapshot, UUID, SnapId}, State) when is_binary(UUID),
+                                                               is_binary(SnapId) ->
+    chunter_vm_fsm:snapshot(UUID, SnapId),
+    {stop, State};
+
 handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),
     {stop, State};

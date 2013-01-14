@@ -537,7 +537,7 @@ do_snapshot(Path, SnapID) ->
 
 do_delete_snapshot(Path, SnapID) ->
     <<_:1/binary, P/binary>> = Path,
-    CmdB = <<"/usr/sbin/zfs snapshot ",
+    CmdB = <<"/usr/sbin/zfs destroy ",
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Deleting snapshot: ~s", [Cmd]),

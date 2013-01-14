@@ -201,6 +201,22 @@ disk_driver_test() ->
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
+created_at_test() ->
+    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    In = jsxd:thread([{merge, InP}, {merge, InD},
+                      {delete, <<"name">>},
+                      {set, <<"package">>, <<"p">>},
+                      {set, <<"created_at">>, 123},
+                      {set, <<"cpu_shares">>, 0}],
+                     InO),
+    VMData = jsxd:set(<<"created_at">>,
+                      123,
+                      to_vmadm(InP, InD, InO)),
+    ?assertEqual(In, ordsets:from_list(to_sniffle(VMData))).
+
+
 nic_driver_test() ->
     InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>},

@@ -101,8 +101,8 @@ reboot(UUID) ->
                                          unknown}.
 
 create(Data) ->
-    {<<"uuid">>, Alias} = lists:keyfind(<<"uuid">>, 1, Data),
-    lager:info("~p", [<<"Creation of VM '", Alias/binary, "' started.">>]),
+    {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, Data),
+    lager:info("~p", [<<"Creation of VM '", UUID/binary, "' started.">>]),
     %%    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
                "vmadm:create", []),
@@ -112,12 +112,17 @@ create(Data) ->
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
+    {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, Data),
     Res = case wait_for_tex(Port) of
-              {ok, UUID} ->
-                  {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, Data),
+              ok ->
                   chunter_server:provision_memory(Mem*1024*1024),
                   chunter_vm_fsm:load(UUID);
-              E ->
+              {error, 1 = E} ->
+                  lager:error([{fifi_component, chunter}],
+                              "vmad:create - Failed: ~p.", [E]),
+                  chunter_server:provision_memory(Mem*1024*1024),
+                  chunter_vm_fsm:load(UUID);
+              {error, E} ->
                   lager:error([{fifi_component, chunter}],
                               "vmad:create - Failed: ~p.", [E]),
                   E
@@ -136,8 +141,6 @@ update(UUID, Data) ->
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     receive
-        {_Port, {data, _}} ->
-            ok;
         {Port, {exit_status, _}} ->
             chunter_vm_fsm:load(UUID)
     after
@@ -154,23 +157,10 @@ update(UUID, Data) ->
                                         unknown}.
 wait_for_tex(Port) ->
     receive
-        {Port, {data,{eol,<<"Successfully created ", UUID/binary>>}}} ->
-            lager:info([{fifi_component, chunter}],
-                       "vmadm:create - success: ~s.", [UUID]),
-            {ok, UUID};
-        {Port, {data, {eol, Text}}} ->
-            lager:warning([{fifi_component, chunter}],
-                          "vmadm:create - unknown text: ~s.", [Text]),
-            {error, Text};
-        {Port, E} ->
-            lager:error([{fifi_component, chunter}],
-                        "vmadm:create - Error: ~p.", [E]),
-            {error, unknown}
-    after
-        60000 ->
-            lager:error([{fifi_component, chunter}],
-                        "vmadm:create - Timeout.", []),
-            {error, timeout}
+        {Port,{exit_status, 0}} ->
+            ok;
+        {Port,{exit_status, S}} ->
+            {error, S}
     end.
 
 %%%===================================================================

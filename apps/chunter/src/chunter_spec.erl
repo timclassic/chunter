@@ -66,7 +66,8 @@ generate_sniffle(In, _Type) ->
                       [_, Used, Avail | _] = re:split(os:cmd(binary_to_list(<<"/usr/sbin/zfs list -pH ", V/binary>>)), "\t", [{return, list}]),
                       {UsedI, _} = string:to_integer(Used),
                       {AvailI, _} = string:to_integer(Avail),
-                      jsxd:set(<<"quota">>, round((UsedI + AvailI) / (1024*1024*1024)), Obj);
+                      jsxd:thread([{set, <<"zonepath">>, V},
+                                   {set, <<"quota">>, round((UsedI + AvailI) / (1024*1024*1024))}], Obj);
                   (<<"customer_metadata">>, V, Obj) ->
                       jsxd:fold(fun (<<"root_authorized_keys">>, V1, Obj1) ->
                                         jsxd:set(<<"ssh_keys">>, V1, Obj1);
@@ -89,7 +90,8 @@ generate_sniffle(In, _Type) ->
                                                          {jsxd:set(<<"dataset">>, Dataset, Obj1), Total}
                                                  end
                                          end, {Obj, 0}, Disks),
-                      jsxd:set(<<"quota">>, Size, ObjOut);
+                      jsxd:thread([{set, <<"quota">>, Size},
+                                   {set, <<"disks">>, Disks}], ObjOut);
                   (<<"nics">>, V, Obj) ->
                       jsxd:set(<<"networks">>, V, Obj);
                   (_,_,Obj) ->
@@ -196,6 +198,10 @@ disk_driver_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,0}],
                      InO),
@@ -207,6 +213,10 @@ created_at_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"created_at">>, 123},
                       {set, <<"cpu_shares">>, 0}],
@@ -224,6 +234,10 @@ nic_driver_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,0}],
                      InO),
@@ -248,6 +262,10 @@ kvm_ram_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024}],
                      InO),
@@ -259,6 +277,10 @@ kvm_cpu_cap1_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024},
                       {set, <<"vcpus">>, 1}],
@@ -271,6 +293,10 @@ kvm_cpu_cap14_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024},
                       {set, <<"vcpus">>, 2}],
@@ -283,6 +309,10 @@ kvm_cpu_cap15_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024},
                       {set, <<"vcpus">>, 2}],
@@ -295,6 +325,10 @@ kvm_cpu_cap2_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024},
                       {set, <<"vcpus">>, 2}],
@@ -308,6 +342,10 @@ kvm_cpu_cap21_test() ->
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
                       {set, <<"package">>, <<"p">>},
+                      {set, <<"disks">>,
+                       [[{<<"boot">>, true},
+                         {<<"image_uuid">>, <<"datasetuuid">>},
+                         {<<"size">>, 10240}]]},
                       {set, <<"cpu_shares">>,1024},
                       {set, <<"vcpus">>, 3}],
                      InO),

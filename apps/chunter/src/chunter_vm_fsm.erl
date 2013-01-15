@@ -27,6 +27,9 @@
          remove/1,
          transition/2,
          update/2,
+         snapshot/2,
+         delete_snapshot/2,
+         rollback_snapshot/2,
          force_state/2]).
 
 %% gen_fsm callbacks
@@ -102,6 +105,16 @@ force_state(UUID, State) ->
 
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
+
+
+snapshot(UUID, SnapID) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
+
+delete_snapshot(UUID, SnapID) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, {snapshot, delete, SnapID}).
+
+rollback_snapshot(UUID, SnapID) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, {snapshot, rollback, SnapID}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -316,6 +329,76 @@ handle_event(register, StateName, State) ->
             {next_state, StateName, State}
     end;
 
+handle_event({snapshot, UUID}, StateName, State) ->
+    case load_vm(State#state.uuid) of
+        {error, not_found} ->
+            ok;
+        VMData ->
+            Spec = chunter_spec:to_sniffle(VMData),
+            case jsxd:get(<<"zonepath">>, Spec) of
+                {ok, P} ->
+                    do_snapshot(P, UUID);
+                _ ->
+                    ok
+            end,
+            lists:map(fun (Disk) ->
+                              case jsxd:get(<<"path">>, Disk) of
+                                  {ok, P1} ->
+                                      do_snapshot(P1, UUID);
+                                  _ ->
+                                      ok
+                              end
+                      end, jsxd:get(<<"disks">>, [], Spec))
+    end,
+    {next_state, StateName, State};
+
+
+handle_event({snapshot, delete, UUID}, StateName, State) ->
+    case load_vm(State#state.uuid) of
+        {error, not_found} ->
+            ok;
+        VMData ->
+            Spec = chunter_spec:to_sniffle(VMData),
+            case jsxd:get(<<"zonepath">>, Spec) of
+                {ok, P} ->
+                    do_delete_snapshot(P, UUID);
+                _ ->
+                    ok
+            end,
+            lists:map(fun (Disk) ->
+                              case jsxd:get(<<"path">>, Disk) of
+                                  {ok, P1} ->
+                                      do_delete_snapshot(P1, UUID);
+                                  _ ->
+                                      ok
+                              end
+                      end, jsxd:get(<<"disks">>, [], Spec))
+    end,
+    {next_state, StateName, State};
+
+handle_event({snapshot, rollback, UUID}, StateName, State) ->
+    case load_vm(State#state.uuid) of
+        {error, not_found} ->
+            ok;
+        VMData ->
+            Spec = chunter_spec:to_sniffle(VMData),
+            case jsxd:get(<<"zonepath">>, Spec) of
+                {ok, P} ->
+                    do_rollback_snapshot(P, UUID);
+                _ ->
+                    ok
+            end,
+            lists:map(fun (Disk) ->
+                              case jsxd:get(<<"path">>, Disk) of
+                                  {ok, P1} ->
+                                      do_rollback_snapshot(P1, UUID);
+                                  _ ->
+                                      ok
+                              end
+                      end, jsxd:get(<<"disks">>, [], Spec))
+    end,
+    {next_state, StateName, State};
+
 handle_event({update, Data}, _StateName, State) ->
     spawn(chunter_vmadm, update, [Data, State#state.uuid]),
     {stop, normal, State};
@@ -470,3 +553,27 @@ atom_to_binary(B) when is_binary(B) ->
     B;
 atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
+
+do_snapshot(Path, SnapID) ->
+    <<_:1/binary, P/binary>> = Path,
+    CmdB = <<"/usr/sbin/zfs snapshot ",
+             P/binary, "@", SnapID/binary>>,
+    Cmd = binary_to_list(CmdB),
+    lager:info("Creating snapshot: ~s", [Cmd]),
+    os:cmd(Cmd).
+
+do_delete_snapshot(Path, SnapID) ->
+    <<_:1/binary, P/binary>> = Path,
+    CmdB = <<"/usr/sbin/zfs destroy ",
+             P/binary, "@", SnapID/binary>>,
+    Cmd = binary_to_list(CmdB),
+    lager:info("Deleting snapshot: ~s", [Cmd]),
+    os:cmd(Cmd).
+
+do_rollback_snapshot(Path, SnapID) ->
+    <<_:1/binary, P/binary>> = Path,
+    CmdB = <<"/usr/sbin/zfs rollback ",
+             P/binary, "@", SnapID/binary>>,
+    Cmd = binary_to_list(CmdB),
+    lager:info("Deleting snapshot: ~s", [Cmd]),
+    os:cmd(Cmd).

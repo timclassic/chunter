@@ -16,28 +16,28 @@ init(ListenerPid, Socket, Transport, _Opts = []) ->
 
 loop(Socket, Transport, HandlerState) ->
     case Transport:recv(Socket, 0, 5000) of
-	{ok, BinData} ->
-	    case binary_to_term(BinData) of
-		ping ->
-		    Transport:send(Socket, term_to_binary(pong)),
-		    ok = Transport:close(Socket);
-		Data ->
-		    case handle_message(Data, HandlerState) of
-%			{reply, Reply, HandlerState1} ->
-%			    Transport:send(Socket, term_to_binary({reply, Reply})),
-%			    loop(Socket, Transport, HandlerState1);
-%			{noreply, HandlerState1} ->
-%			    Transport:send(Socket, term_to_binary(noreply))
-%			    loop(Socket, Transport, HandlerState1);
-%			{stop, Reply, _} ->
-%			    Transport:send(Socket, term_to_binary({reply, Reply})),
-%			    ok = Transport:close(Socket);
-			{stop, _} ->
-			    ok = Transport:close(Socket)
-		    end
-	    end;
-	_ ->
-	    ok = Transport:close(Socket)
+        {ok, BinData} ->
+            case binary_to_term(BinData) of
+                ping ->
+                    Transport:send(Socket, term_to_binary(pong)),
+                    ok = Transport:close(Socket);
+                Data ->
+                    case handle_message(Data, HandlerState) of
+                        %% {reply, Reply, HandlerState1} ->
+                        %%     Transport:send(Socket, term_to_binary({reply, Reply})),
+                        %%     loop(Socket, Transport, HandlerState1);
+                        %% {noreply, HandlerState1} ->
+                        %%     Transport:send(Socket, term_to_binary(noreply))
+                        %%         loop(Socket, Transport, HandlerState1);
+                        {stop, Reply, _} ->
+                            Transport:send(Socket, term_to_binary({reply, Reply})),
+                            ok = Transport:close(Socket);
+                        {stop, _} ->
+                            ok = Transport:close(Socket)
+                    end
+            end;
+        _ ->
+            ok = Transport:close(Socket)
     end.
 
 
@@ -52,9 +52,24 @@ handle_message({machines, update, UUID, Spec}, State) when is_binary(UUID) ->
     {stop, State};
 
 handle_message({machines, start, UUID, Image}, State) when is_binary(UUID),
-							   is_binary(Image) ->
+                                                           is_binary(Image) ->
     chunter_vmadm:start(UUID, Image),
     {stop, State};
+
+handle_message({machines, snapshot, UUID, SnapId}, State) when is_binary(UUID),
+                                                               is_binary(SnapId) ->
+    chunter_vm_fsm:snapshot(UUID, SnapId),
+    {stop, ok, State};
+
+handle_message({machines, snapshot, delete, UUID, SnapId}, State) when is_binary(UUID),
+                                                                       is_binary(SnapId) ->
+    chunter_vm_fsm:delete_snapshot(UUID, SnapId),
+    {stop, ok, State};
+
+handle_message({machines, snapshot, rollback, UUID, SnapId}, State) when is_binary(UUID),
+                                                                         is_binary(SnapId) ->
+    chunter_vm_fsm:rollback_snapshot(UUID, SnapId),
+    {stop, ok, State};
 
 handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),
@@ -65,9 +80,9 @@ handle_message({machines, reboot, UUID}, State) when is_binary(UUID) ->
     {stop, State};
 
 handle_message({machines, create, UUID, PSpec, DSpec, Config}, State) when is_binary(UUID),
-									   is_list(PSpec),
-									   is_list(DSpec),
-									   is_list(Config) ->
+                                                                           is_list(PSpec),
+                                                                           is_list(DSpec),
+                                                                           is_list(Config) ->
     chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
     {stop, State};
 
@@ -79,4 +94,3 @@ handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
 handle_message(Oops, State) ->
     io:format("oops: ~p~n", [Oops]),
     {stop, State}.
-

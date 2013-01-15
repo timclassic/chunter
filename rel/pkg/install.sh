@@ -18,7 +18,7 @@ BASE=`basename $0`;
 
 if uname -a | egrep $TESTED_VERSIONS
 then
-    echo "This SnartOS release is tested!"
+    echo "This SmartOS release is tested!"
 else
     echo "This SmartOS release WAS NOT tested! Are you sure you want to go on? [yes|NO] "
     read SKIP

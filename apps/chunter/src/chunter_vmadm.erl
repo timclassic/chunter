@@ -109,7 +109,7 @@ create(Data) ->
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     {<<"max_physical_memory">>, Mem} = lists:keyfind(<<"max_physical_memory">>, 1, Data),
@@ -137,7 +137,7 @@ update(UUID, Data) ->
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh update " ++ binary_to_list(UUID),
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     receive

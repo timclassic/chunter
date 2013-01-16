@@ -108,13 +108,13 @@ register(UUID) ->
 
 
 snapshot(UUID, SnapID) ->
-    gen_fsm:send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
 
 delete_snapshot(UUID, SnapID) ->
-    gen_fsm:send_all_state_event({global, {vm, UUID}}, {snapshot, delete, SnapID}).
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, delete, SnapID}).
 
 rollback_snapshot(UUID, SnapID) ->
-    gen_fsm:send_all_state_event({global, {vm, UUID}}, {snapshot, rollback, SnapID}).
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, rollback, SnapID}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -329,76 +329,6 @@ handle_event(register, StateName, State) ->
             {next_state, StateName, State}
     end;
 
-handle_event({snapshot, UUID}, StateName, State) ->
-    case load_vm(State#state.uuid) of
-        {error, not_found} ->
-            ok;
-        VMData ->
-            Spec = chunter_spec:to_sniffle(VMData),
-            case jsxd:get(<<"zonepath">>, Spec) of
-                {ok, P} ->
-                    do_snapshot(P, UUID);
-                _ ->
-                    ok
-            end,
-            lists:map(fun (Disk) ->
-                              case jsxd:get(<<"path">>, Disk) of
-                                  {ok, P1} ->
-                                      do_snapshot(P1, UUID);
-                                  _ ->
-                                      ok
-                              end
-                      end, jsxd:get(<<"disks">>, [], Spec))
-    end,
-    {next_state, StateName, State};
-
-
-handle_event({snapshot, delete, UUID}, StateName, State) ->
-    case load_vm(State#state.uuid) of
-        {error, not_found} ->
-            ok;
-        VMData ->
-            Spec = chunter_spec:to_sniffle(VMData),
-            case jsxd:get(<<"zonepath">>, Spec) of
-                {ok, P} ->
-                    do_delete_snapshot(P, UUID);
-                _ ->
-                    ok
-            end,
-            lists:map(fun (Disk) ->
-                              case jsxd:get(<<"path">>, Disk) of
-                                  {ok, P1} ->
-                                      do_delete_snapshot(P1, UUID);
-                                  _ ->
-                                      ok
-                              end
-                      end, jsxd:get(<<"disks">>, [], Spec))
-    end,
-    {next_state, StateName, State};
-
-handle_event({snapshot, rollback, UUID}, StateName, State) ->
-    case load_vm(State#state.uuid) of
-        {error, not_found} ->
-            ok;
-        VMData ->
-            Spec = chunter_spec:to_sniffle(VMData),
-            case jsxd:get(<<"zonepath">>, Spec) of
-                {ok, P} ->
-                    do_rollback_snapshot(P, UUID);
-                _ ->
-                    ok
-            end,
-            lists:map(fun (Disk) ->
-                              case jsxd:get(<<"path">>, Disk) of
-                                  {ok, P1} ->
-                                      do_rollback_snapshot(P1, UUID);
-                                  _ ->
-                                      ok
-                              end
-                      end, jsxd:get(<<"disks">>, [], Spec))
-    end,
-    {next_state, StateName, State};
-
 handle_event({update, Data}, _StateName, State) ->
     spawn(chunter_vmadm, update, [Data, State#state.uuid]),
     {stop, normal, State};
@@ -444,6 +374,140 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
+handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
+    case load_vm(State#state.uuid) of
+        {error, not_found} ->
+            ok;
+        VMData ->
+            Spec = chunter_spec:to_sniffle(VMData),
+            case jsxd:get(<<"zonepath">>, Spec) of
+                {ok, P} ->
+                    case do_snapshot(P, UUID) of
+                        {ok, Reply} ->
+                            R = lists:foldl(
+                                  fun (Disk, {S, Reply0}) ->
+                                          case jsxd:get(<<"path">>, Disk) of
+                                              {ok, P1} ->
+                                                  case do_snapshot(P1, UUID) of
+                                                      {ok, Res} ->
+                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
+                                                      {error, _Code, Res} ->
+                                                          libsniffle:vm_log(
+                                                            State#state.uuid,
+                                                            <<"Failed to snapshot disk ", P1/binary, ": ", Reply/binary>>),
+                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
+                                                  end;
+                                              _ ->
+                                                  {error, missing}
+                                          end
+                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
+                            case R of
+                                {ok, Res} ->
+                                    libsniffle:vm_log(State#state.uuid, <<"Snapshot done ", Res/binary>>),
+                                    {reply, ok, StateName, State};
+                                {error, _} ->
+                                    {reply, error, StateName, State}
+                            end;
+                        {error, _Code, Reply} ->
+                            libsniffle:vm_log(State#state.uuid, <<"Failed to snapshot: ", Reply/binary>>),
+                            {reply, error, StateName, State}
+                    end;
+                _ ->
+                    libsniffle:vm_log(State#state.uuid, <<"Failed to snapshot: can't find zonepath.">>),
+                    {reply, error, StateName, State}
+            end
+    end;
+
+
+handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
+    case load_vm(State#state.uuid) of
+        {error, not_found} ->
+            ok;
+        VMData ->
+            Spec = chunter_spec:to_sniffle(VMData),
+            case jsxd:get(<<"zonepath">>, Spec) of
+                {ok, P} ->
+                    case do_delete_snapshot(P, UUID) of
+                        {ok, Reply} ->
+                            R = lists:foldl(
+                                  fun (Disk, {S, Reply0}) ->
+                                          case jsxd:get(<<"path">>, Disk) of
+                                              {ok, P1} ->
+                                                  case do_delete_snapshot(P1, UUID) of
+                                                      {ok, Res} ->
+                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
+                                                      {error, _Code, Res} ->
+                                                          libsniffle:vm_log(
+                                                            State#state.uuid,
+                                                            <<"Failed to delete snapshot disk ", P1/binary, ": ", Reply/binary>>),
+                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
+                                                  end;
+                                              _ ->
+                                                  {error, missing}
+                                          end
+                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
+                            case R of
+                                {ok, Res} ->
+                                    libsniffle:vm_log(State#state.uuid, <<"Snapshot delete done ", Res/binary>>),
+                                    {reply, ok, StateName, State};
+                                {error, _} ->
+                                    {reply, error, StateName, State}
+                            end;
+                        {error, _Code, Reply} ->
+                            libsniffle:vm_log(State#state.uuid, <<"Failed to delete snapshot: ", Reply/binary>>),
+                            {reply, error, StateName, State}
+                    end;
+                _ ->
+                    libsniffle:vm_log(State#state.uuid, <<"Failed to delete snapshot: can't find zonepath.">>),
+                    {reply, error, StateName, State}
+            end
+    end;
+
+handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
+    case load_vm(State#state.uuid) of
+        {error, not_found} ->
+            ok;
+        VMData ->
+            Spec = chunter_spec:to_sniffle(VMData),
+            case jsxd:get(<<"zonepath">>, Spec) of
+                {ok, P} ->
+                    case do_rollback_snapshot(P, UUID) of
+                        {ok, Reply} ->
+                            R = lists:foldl(
+                                  fun (Disk, {S, Reply0}) ->
+                                          case jsxd:get(<<"path">>, Disk) of
+                                              {ok, P1} ->
+                                                  case do_rollback_snapshot(P1, UUID) of
+                                                      {ok, Res} ->
+                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
+                                                      {error, _Code, Res} ->
+                                                          libsniffle:vm_log(
+                                                            State#state.uuid,
+                                                            <<"Failed to rollback snapshot disk ", P1/binary, ": ", Reply/binary>>),
+                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
+                                                  end;
+                                              _ ->
+                                                  {error, missing}
+                                          end
+                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
+                            case R of
+                                {ok, Res} ->
+                                    libsniffle:vm_log(State#state.uuid, <<"Snapshot rollback done ", Res/binary>>),
+                                    {reply, ok, StateName, State};
+                                {error, _} ->
+                                    {reply, error, StateName, State}
+                            end;
+                        {error, _Code, Reply} ->
+                            libsniffle:vm_log(State#state.uuid, <<"Failed to rollback snapshot: ", Reply/binary>>),
+                            {reply, error, StateName, State}
+                    end;
+                _ ->
+                    libsniffle:vm_log(State#state.uuid, <<"Failed to rollback snapshot: can't find zonepath.">>),
+                    {reply, error, StateName, State}
+            end
+    end;
+
+
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.
@@ -560,7 +624,8 @@ do_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Creating snapshot: ~s", [Cmd]),
-    os:cmd(Cmd).
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    wait_for_port(Port, <<>>).
 
 do_delete_snapshot(Path, SnapID) ->
     <<_:1/binary, P/binary>> = Path,
@@ -568,7 +633,8 @@ do_delete_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Deleting snapshot: ~s", [Cmd]),
-    os:cmd(Cmd).
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    wait_for_port(Port, <<>>).
 
 do_rollback_snapshot(Path, SnapID) ->
     <<_:1/binary, P/binary>> = Path,
@@ -576,4 +642,15 @@ do_rollback_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Deleting snapshot: ~s", [Cmd]),
-    os:cmd(Cmd).
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    wait_for_port(Port, <<>>).
+
+wait_for_port(Port, Reply) ->
+    receive
+        {Port, {data, Data}} ->
+            wait_for_port(Port, <<Reply/binary, Data/binary>>);
+        {Port,{exit_status, 0}} ->
+            {ok, Reply};
+        {Port,{exit_status, S}} ->
+            {error, S, Reply}
+    end.

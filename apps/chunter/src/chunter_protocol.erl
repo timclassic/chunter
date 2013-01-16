@@ -58,18 +58,15 @@ handle_message({machines, start, UUID, Image}, State) when is_binary(UUID),
 
 handle_message({machines, snapshot, UUID, SnapId}, State) when is_binary(UUID),
                                                                is_binary(SnapId) ->
-    chunter_vm_fsm:snapshot(UUID, SnapId),
-    {stop, ok, State};
+    {stop, chunter_vm_fsm:snapshot(UUID, SnapId), State};
 
 handle_message({machines, snapshot, delete, UUID, SnapId}, State) when is_binary(UUID),
                                                                        is_binary(SnapId) ->
-    chunter_vm_fsm:delete_snapshot(UUID, SnapId),
-    {stop, ok, State};
+    {stop, chunter_vm_fsm:delete_snapshot(UUID, SnapId), State};
 
 handle_message({machines, snapshot, rollback, UUID, SnapId}, State) when is_binary(UUID),
                                                                          is_binary(SnapId) ->
-    chunter_vm_fsm:rollback_snapshot(UUID, SnapId),
-    {stop, ok, State};
+    {stop, chunter_vm_fsm:rollback_snapshot(UUID, SnapId), State};
 
 handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),

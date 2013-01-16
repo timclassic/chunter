@@ -598,8 +598,6 @@ load_vm(ZUUID) ->
             {error, not_found}
     end.
 
-
-
 -spec change_state(UUID::binary(), State::fifo:vm_state()) -> ok.
 
 change_state(UUID, State) ->
@@ -654,3 +652,4 @@ wait_for_port(Port, Reply) ->
         {Port,{exit_status, S}} ->
             {error, S, Reply}
     end.
+

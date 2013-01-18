@@ -492,7 +492,7 @@ handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
                                   end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
                             case R of
                                 {ok, Res} ->
-                                    libsniffle:vm_log(State#state.uuid, <<"Snapshot rollback done ", Res/binary>>),
+                                    libsniffle:vm_log(State#state.uuid, <<"Snapshot ", UUID/binary, " rollback done ", Res/binary>>),
                                     {reply, ok, StateName, State};
                                 {error, _} ->
                                     {reply, error, StateName, State}

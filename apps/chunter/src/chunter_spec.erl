@@ -48,6 +48,7 @@ to_sniffle(Spec) ->
 generate_sniffle(In, _Type) ->
     KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>,
                 <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
+                <<"hostname">>,
                 <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
                 <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>],
     jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
@@ -144,6 +145,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                               jsxd:set([<<"customer_metadata">>, <<"root_pw">>], V, Obj);
                           (<<"resolvers">>, V, Obj) ->
                               jsxd:set(<<"resolvers">>, V, Obj);
+                          (<<"hostname">>, V, Obj) ->
+                              jsxd:set(<<"hostname">>, V, Obj);
                           (<<"admin_pw">>, V, Obj) ->
                               jsxd:set([<<"customer_metadata">>, <<"admin_pw">>], V, Obj);
                           (<<"metadata">>, V, Obj) ->
@@ -182,7 +185,7 @@ ceiling(X) ->
 type_test() ->
     InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"alias">>, <<"vm">>}, {<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"alias">>, <<"vm">>}, {<<"hostname">>, <<"host">>}, {<<"uuid">>, <<"zone uuid">>}]),
     In = jsxd:thread([{merge, InP},
                       {merge, InD},
                       {delete, <<"name">>},

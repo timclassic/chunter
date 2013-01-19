@@ -306,25 +306,26 @@ handle_event({force_state, NextState}, StateName, State) ->
     case binary_to_atom(NextState) of
         StateName ->
             {next_state, StateName, State};
-        running ->
+        running = N ->
             Info = chunter_vmadm:info(State#state.uuid),
             libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
-            change_state(State#state.uuid, NextState),
+            change_state(State#state.uuid, NextState, StateName =:= N),
             {next_state, running, State};
         Other ->
-            change_state(State#state.uuid, NextState),
+            change_state(State#state.uuid, NextState, StateName =:= Other),
             {next_state, Other, State}
     end;
 
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
-    change_state(State#state.uuid, atom_to_binary(StateName)),
+%%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(State#state.uuid) of
         {error, not_found} ->
             {stop, not_found, State};
         VMData ->
             Info = chunter_vmadm:info(State#state.uuid),
-            libsniffle:vm_set(State#state.uuid, [{<<"config">>, chunter_spec:to_sniffle(VMData)},
+            libsniffle:vm_set(State#state.uuid, [{<<"state">>, atom_to_binary(StateName)},
+                                                 {<<"config">>, chunter_spec:to_sniffle(VMData)},
                                                  {<<"info">>, Info}]),
             {next_state, StateName, State}
     end;
@@ -601,7 +602,16 @@ load_vm(ZUUID) ->
 -spec change_state(UUID::binary(), State::fifo:vm_state()) -> ok.
 
 change_state(UUID, State) ->
+    change_state(UUID, State, true).
+
+-spec change_state(UUID::binary(), State::fifo:vm_state(), true | false) -> ok.
+
+change_state(UUID, State, true) ->
     libsniffle:vm_log(UUID, <<"Transitioning ", State/binary>>),
+    libsniffle:vm_set(UUID, <<"state">>, State),
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]);
+
+change_state(UUID, State, false) ->
     libsniffle:vm_set(UUID, <<"state">>, State),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
 

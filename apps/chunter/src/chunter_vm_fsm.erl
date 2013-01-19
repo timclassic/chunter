@@ -165,7 +165,7 @@ init([UUID]) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec initialized(Action::load |
+-spec initialized(Action::lad |
                           {create,  PackageSpec::fifo:package(),
                            DatasetSpec::fifo:dataset(), VMSpec::fifo:config()}, State::term()) ->
                          {next_state, loading, State::term()} |
@@ -636,7 +636,7 @@ do_delete_snapshot(Path, SnapID) ->
 
 do_rollback_snapshot(Path, SnapID) ->
     <<_:1/binary, P/binary>> = Path,
-    CmdB = <<"/usr/sbin/zfs rollback ",
+    CmdB = <<"/usr/sbin/zfs rollback -r ",
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Deleting snapshot: ~s", [Cmd]),
@@ -645,6 +645,8 @@ do_rollback_snapshot(Path, SnapID) ->
 
 wait_for_port(Port, Reply) ->
     receive
+        {Port, {data, {eol, Data}}} ->
+            wait_for_port(Port, <<Reply/binary, Data/binary>>);
         {Port, {data, Data}} ->
             wait_for_port(Port, <<Reply/binary, Data/binary>>);
         {Port,{exit_status, 0}} ->

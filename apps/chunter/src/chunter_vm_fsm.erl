@@ -40,7 +40,6 @@
          terminate/3,
          code_change/4]).
 
-
 %% This functions have to be exported but are only used internally.
 -export([initialized/2,
          creating/2,
@@ -262,7 +261,6 @@ shutting_down({transition, NextState = <<"stopped">>}, State) ->
 shutting_down(_, State) ->
     {next_state, shutting_down, State}.
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -355,7 +353,6 @@ handle_event(delete, StateName, State) ->
             {next_state, StateName, State}
     end;
 
-
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
@@ -418,7 +415,6 @@ handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
                     {reply, error, StateName, State}
             end
     end;
-
 
 handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
     case load_vm(State#state.uuid) of
@@ -508,7 +504,6 @@ handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
             end
     end;
 
-
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.
@@ -570,7 +565,6 @@ install_image(DatasetUUID) ->
             os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
 
     end.
-
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
                                        Name::binary(),

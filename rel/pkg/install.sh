@@ -24,7 +24,7 @@ else
     read SKIP
     if [[ "$SKIP" = "yes" ]]
     then
-	echo "Okay we go on, but it mit not work!"
+	echo "Okay we go on, but it might not work!"
     else
 	echo "Exiting."
 	exit 1

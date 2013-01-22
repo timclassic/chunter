@@ -6,8 +6,8 @@ TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_2012072
 
 DST=/opt
 
-IFACE=`dladm show-phys -m | grep $admin_nic | awk -e '{print $1}'`
-IP=`ifconfig $IFACE | grep inet | awk -e '{print $2}'`
+IFACE=`dladm show-phys -m | grep $admin_nic | awk '{print $1}'`
+IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`
 
 DIR=`dirname $0`;
 if [[ "x$DIR" = "x." ]]

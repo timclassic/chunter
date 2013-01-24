@@ -373,140 +373,13 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
-    case load_vm(State#state.uuid) of
-        {error, not_found} ->
-            ok;
-        VMData ->
-            Spec = chunter_spec:to_sniffle(VMData),
-            case jsxd:get(<<"zonepath">>, Spec) of
-                {ok, P} ->
-                    case do_snapshot(P, UUID) of
-                        {ok, Reply} ->
-                            R = lists:foldl(
-                                  fun (Disk, {S, Reply0}) ->
-                                          case jsxd:get(<<"path">>, Disk) of
-                                              {ok, <<_:14/binary, P1/binary>>} ->
-                                                  case do_snapshot(P1, UUID) of
-                                                      {ok, Res} ->
-                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
-                                                      {error, Code, Res} ->
-                                                          lager:error("Failed to snapshot disk ~s from VM ~s ~p:~s.", [P1, State#state.uuid, Code, Res]),
-                                                          libsniffle:vm_log(
-                                                            State#state.uuid,
-                                                            <<"Failed to snapshot disk ", P1/binary, ": ", Reply/binary>>),
-                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
-                                                  end;
-                                              _ ->
-                                                  {error, missing}
-                                          end
-                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
-                            case R of
-                                {ok, Res} ->
-                                    libsniffle:vm_log(State#state.uuid, <<"Snapshot done ", Res/binary>>),
-                                    {reply, ok, StateName, State};
-                                {error, _} ->
-                                    {reply, error, StateName, State}
-                            end;
-                        {error, Code, Reply} ->
-                            lager:error("Failed to snapshot VM ~s ~p: ~s.", [State#state.uuid, Code, Reply]),
-                            libsniffle:vm_log(State#state.uuid, <<"Failed to snapshot: ", Reply/binary>>),
-                            {reply, error, StateName, State}
-                    end;
-                _ ->
-                    lager:error("Failed to snapshot VM ~s.", [State#state.uuid]),
-
-                    libsniffle:vm_log(State#state.uuid, <<"Failed to snapshot: can't find zonepath.">>),
-                    {reply, error, StateName, State}
-            end
-    end;
+    {reply, snapshot_action(State#state.uuid, UUID, fun do_snapshot/2), StateName, State};
 
 handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
-    case load_vm(State#state.uuid) of
-        {error, not_found} ->
-            ok;
-        VMData ->
-            Spec = chunter_spec:to_sniffle(VMData),
-            case jsxd:get(<<"zonepath">>, Spec) of
-                {ok, P} ->
-                    case do_delete_snapshot(P, UUID) of
-                        {ok, Reply} ->
-                            R = lists:foldl(
-                                  fun (Disk, {S, Reply0}) ->
-                                          case jsxd:get(<<"path">>, Disk) of
-                                              {ok, <<_:14/binary, P1/binary>>} ->
-                                                  case do_delete_snapshot(P1, UUID) of
-                                                      {ok, Res} ->
-                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
-                                                      {error, _Code, Res} ->
-                                                          libsniffle:vm_log(
-                                                            State#state.uuid,
-                                                            <<"Failed to delete snapshot disk ", P1/binary, ": ", Reply/binary>>),
-                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
-                                                  end;
-                                              _ ->
-                                                  {error, missing}
-                                          end
-                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
-                            case R of
-                                {ok, Res} ->
-                                    libsniffle:vm_log(State#state.uuid, <<"Snapshot delete done ", Res/binary>>),
-                                    {reply, ok, StateName, State};
-                                {error, _} ->
-                                    {reply, error, StateName, State}
-                            end;
-                        {error, _Code, Reply} ->
-                            libsniffle:vm_log(State#state.uuid, <<"Failed to delete snapshot: ", Reply/binary>>),
-                            {reply, error, StateName, State}
-                    end;
-                _ ->
-                    libsniffle:vm_log(State#state.uuid, <<"Failed to delete snapshot: can't find zonepath.">>),
-                    {reply, error, StateName, State}
-            end
-    end;
+    {reply, snapshot_action(State#state.uuid, UUID, fun do_delete_snapshot/2), StateName, State};
 
 handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
-    case load_vm(State#state.uuid) of
-        {error, not_found} ->
-            ok;
-        VMData ->
-            Spec = chunter_spec:to_sniffle(VMData),
-            case jsxd:get(<<"zonepath">>, Spec) of
-                {ok, P} ->
-                    case do_rollback_snapshot(P, UUID) of
-                        {ok, Reply} ->
-                            R = lists:foldl(
-                                  fun (Disk, {S, Reply0}) ->
-                                          case jsxd:get(<<"path">>, Disk) of
-                                              {ok, <<_:14/binary, P1/binary>>} ->
-                                                  case do_rollback_snapshot(P1, UUID) of
-                                                      {ok, Res} ->
-                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
-                                                      {error, _Code, Res} ->
-                                                          libsniffle:vm_log(
-                                                            State#state.uuid,
-                                                            <<"Failed to rollback snapshot disk ", P1/binary, ": ", Reply/binary>>),
-                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
-                                                  end;
-                                              _ ->
-                                                  {error, missing}
-                                          end
-                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
-                            case R of
-                                {ok, Res} ->
-                                    libsniffle:vm_log(State#state.uuid, <<"Snapshot ", UUID/binary, " rollback done ", Res/binary>>),
-                                    {reply, ok, StateName, State};
-                                {error, _} ->
-                                    {reply, error, StateName, State}
-                            end;
-                        {error, _Code, Reply} ->
-                            libsniffle:vm_log(State#state.uuid, <<"Failed to rollback snapshot: ", Reply/binary>>),
-                            {reply, error, StateName, State}
-                    end;
-                _ ->
-                    libsniffle:vm_log(State#state.uuid, <<"Failed to rollback snapshot: can't find zonepath.">>),
-                    {reply, error, StateName, State}
-            end
-    end;
+    {reply, snapshot_action(State#state.uuid, UUID, fun do_rollback_snapshot/2), StateName, State};
 
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
@@ -661,4 +534,52 @@ wait_for_port(Port, Reply) ->
             {ok, Reply};
         {Port,{exit_status, S}} ->
             {error, S, Reply}
+    end.
+
+
+snapshot_action(VM, UUID, Action) ->
+    case load_vm(VM) of
+        {error, not_found} ->
+            ok;
+        VMData ->
+            Spec = chunter_spec:to_sniffle(VMData),
+            case jsxd:get(<<"zonepath">>, Spec) of
+                {ok, P} ->
+                    case Action(P, UUID) of
+                        {ok, Reply} ->
+                            R = lists:foldl(
+                                  fun (Disk, {S, Reply0}) ->
+                                          case jsxd:get(<<"path">>, Disk) of
+                                              {ok, <<_:14/binary, P1/binary>>} ->
+                                                  case Action(P1, UUID) of
+                                                      {ok, Res} ->
+                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
+                                                      {error, Code, Res} ->
+                                                          lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
+                                                          libsniffle:vm_log(
+                                                            VM,
+                                                            <<"Failed snapshot disk ", P1/binary, ": ", Reply/binary>>),
+                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
+                                                  end;
+                                              _ ->
+                                                  {error, missing}
+                                          end
+                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
+                            case R of
+                                {ok, Res} ->
+                                    libsniffle:vm_log(VM, <<"Snapshot done ", Res/binary>>),
+                                    ok;
+                                {error, _} ->
+                                    error
+                            end;
+                        {error, Code, Reply} ->
+                            lager:error("Failed snapshot VM ~s ~p: ~s.", [VM, Code, Reply]),
+                            libsniffle:vm_log(VM, <<"Failed to snapshot: ", Reply/binary>>),
+                            error
+                    end;
+                _ ->
+                    lager:error("Failed to snapshot VM ~s.", [VM]),
+                    libsniffle:vm_log(VM, <<"Failed snapshot: can't find zonepath.">>),
+                    error
+            end
     end.

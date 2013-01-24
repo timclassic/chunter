@@ -385,7 +385,7 @@ handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
                             R = lists:foldl(
                                   fun (Disk, {S, Reply0}) ->
                                           case jsxd:get(<<"path">>, Disk) of
-                                              {ok, P1} ->
+                                              {ok, <<_:14/binary, P1/binary>>} ->
                                                   case do_snapshot(P1, UUID) of
                                                       {ok, Res} ->
                                                           {S, <<Reply0/binary, "\n", Res/binary>>};
@@ -433,7 +433,7 @@ handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
                             R = lists:foldl(
                                   fun (Disk, {S, Reply0}) ->
                                           case jsxd:get(<<"path">>, Disk) of
-                                              {ok, P1} ->
+                                              {ok, <<_:14/binary, P1/binary>>} ->
                                                   case do_delete_snapshot(P1, UUID) of
                                                       {ok, Res} ->
                                                           {S, <<Reply0/binary, "\n", Res/binary>>};
@@ -477,7 +477,7 @@ handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
                             R = lists:foldl(
                                   fun (Disk, {S, Reply0}) ->
                                           case jsxd:get(<<"path">>, Disk) of
-                                              {ok, P1} ->
+                                              {ok, <<_:14/binary, P1/binary>>} ->
                                                   case do_rollback_snapshot(P1, UUID) of
                                                       {ok, Res} ->
                                                           {S, <<Reply0/binary, "\n", Res/binary>>};
@@ -662,4 +662,3 @@ wait_for_port(Port, Reply) ->
         {Port,{exit_status, S}} ->
             {error, S, Reply}
     end.
-

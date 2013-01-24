@@ -142,7 +142,7 @@ parse_xml([{"device",
               Path}],
             Content }|T]) ->
     [{<<"disk">>,
-      [{<<"path">>, Path}|parse_xml(Content)]}
+      [{<<"path">>, list_to_binary(Path)}|parse_xml(Content)]}
      |parse_xml(T)];
 
 parse_xml([{"network",

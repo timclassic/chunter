@@ -389,7 +389,8 @@ handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
                                                   case do_snapshot(P1, UUID) of
                                                       {ok, Res} ->
                                                           {S, <<Reply0/binary, "\n", Res/binary>>};
-                                                      {error, _Code, Res} ->
+                                                      {error, Code, Res} ->
+                                                          lager:error("Failed to snapshot disk ~s from VM ~s ~p:~s.", [P1, State#state.uuid, Code, Res]),
                                                           libsniffle:vm_log(
                                                             State#state.uuid,
                                                             <<"Failed to snapshot disk ", P1/binary, ": ", Reply/binary>>),
@@ -406,11 +407,14 @@ handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
                                 {error, _} ->
                                     {reply, error, StateName, State}
                             end;
-                        {error, _Code, Reply} ->
+                        {error, Code, Reply} ->
+                            lager:error("Failed to snapshot VM ~s ~p: ~s.", [State#state.uuid, Code, Reply]),
                             libsniffle:vm_log(State#state.uuid, <<"Failed to snapshot: ", Reply/binary>>),
                             {reply, error, StateName, State}
                     end;
                 _ ->
+                    lager:error("Failed to snapshot VM ~s.", [State#state.uuid]),
+
                     libsniffle:vm_log(State#state.uuid, <<"Failed to snapshot: can't find zonepath.">>),
                     {reply, error, StateName, State}
             end

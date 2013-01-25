@@ -52,7 +52,7 @@ handle_info({_OK, Socket, BinData}, State = #state{port = undefined,
                                                    ok = _OK}) ->
     case binary_to_term(BinData) of
         {console, UUID} ->
-            Port = open_port({spawn, "/usr/sbin/zlogin -EC " ++ binary_to_list(UUID)},
+            Port = open_port({spawn, "/usr/sbin/zlogin " ++ binary_to_list(UUID)},
                              [use_stdio, binary, stream]),
             {noreply, State#state{port = Port}};
         ping ->

@@ -427,7 +427,8 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_info(_Info, StateName, State) ->
+handle_info(Info, StateName, State) ->
+    io:format("INFO> ~p~n", [Info]),
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -476,8 +477,8 @@ init_console(State = #state{write = undefined, read = undefined}) ->
             os:cmd("/opt/chunter/erts-5.9.1/bin/run_erl "++ Base ++
                        " /tmp \"/usr/sbin/zlogin -C "++ binary_to_list(Name) ++ "\"")
     end,
-    Write = open_port({spawn,"/bin/cat > " ++ WPath}, [binary, in, eof]),
-    Read = open_port({spawn,"/bin/cat " ++ RPath}, [binary, out, eof]),
+    Write = open_port({spawn,"/bin/cat > " ++ WPath}, [use_stdio, binary, out, eof]),
+    Read = open_port({spawn,"/bin/cat " ++ RPath}, [binary, in, eof]),
     State#state{read = Read, write = Write};
 
 init_console(State) ->

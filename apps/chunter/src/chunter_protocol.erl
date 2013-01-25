@@ -36,7 +36,9 @@ handle_info({_Port,{data,Data}}, State = #state{socket = Socket,
     Transport:send(Socket, Data),
     {noreply, State};
 
-handle_info({_Closed, _Socket}, State = #state{closed = _Closed}) ->
+handle_info({_Closed, _Socket}, State = #state{
+                                  uuid = undefined,
+                                  closed = _Closed}) ->
     {stop, normal, State};
 
 handle_info({_OK, Socket, BinData}, State = #state{transport = Transport,

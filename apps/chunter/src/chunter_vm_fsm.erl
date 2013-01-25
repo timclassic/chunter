@@ -441,7 +441,9 @@ handle_info(_Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, _State) ->
+terminate(_Reason, _StateName, State) ->
+    port_close(State#state.read),
+    port_close(State#state.write),
     ok.
 
 %%--------------------------------------------------------------------
@@ -475,7 +477,7 @@ init_console(State = #state{write = undefined, read = undefined}) ->
                        " /tmp \"/usr/sbin/zlogin -C "++ binary_to_list(Name) ++ "\"")
     end,
     Write = open_port({spawn,"/bin/cat > " ++ WPath}, [binary, in, eof]),
-    Read = open_port({spawn,"/bin/cat " ++ WPath}, [binary, out, eof]),
+    Read = open_port({spawn,"/bin/cat " ++ RPath}, [binary, out, eof]),
     State#state{read = Read, write = Write};
 
 init_console(State) ->

@@ -474,8 +474,8 @@ init_console(State) ->
             os:cmd("/opt/chunter/erts-5.9.1/bin/run_erl "++ Base ++
                        " /tmp \"/usr/sbin/zlogin -C "++ binary_to_list(Name) ++ "\"")
     end,
-    {ok, Write} = open_port({spawn,"/bin/cat > " ++ WPath}, [binary, out, eof]),
-    {ok, Read} = open_port({spawn,"/bin/cat " ++ WPath}, [binary, out, eof]),
+    Write = open_port({spawn,"/bin/cat > " ++ WPath}, [binary, out, eof]),
+    Read = open_port({spawn,"/bin/cat " ++ WPath}, [binary, out, eof]),
     State#state{read = Read, write = Write}.
 
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().

@@ -13,7 +13,7 @@
 -record(state, {socket,
                 transport,
                 ok, error, closed,
-                port}).
+                uuid}).
 
 start_link(ListenerPid, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [[ListenerPid, Socket, Transport, Opts]]).
@@ -31,30 +31,20 @@ init([ListenerPid, Socket, Transport, _Opts]) ->
                                      socket = Socket,
                                      transport = Transport}).
 
-handle_info({_Port,{data,Data}}, State = #state{port = _Port,
-                                                socket = Socket,
+handle_info({_Port,{data,Data}}, State = #state{socket = Socket,
                                                 transport = Transport}) ->
     Transport:send(Socket, Data),
     {noreply, State};
 
-handle_info({_Port, closed}, State = #state{socket = Socket,
-                                            transport = Transport,
-                                            port = _Port}) ->
-    ok = Transport:close(Socket),
+handle_info({_Closed, _Socket}, State = #state{closed = _Closed}) ->
     {stop, normal, State};
 
-handle_info({_Closed, _Socket}, State = #state{port=Port, closed = _Closed}) ->
-    Port ! {self(), close},
-    {stop, normal, State};
-
-handle_info({_OK, Socket, BinData}, State = #state{port = undefined,
-                                                   transport = Transport,
+handle_info({_OK, Socket, BinData}, State = #state{transport = Transport,
                                                    ok = _OK}) ->
     case binary_to_term(BinData) of
         {console, UUID} ->
-            Port = open_port({spawn, "/usr/sbin/zlogin " ++ binary_to_list(UUID)},
-                             [use_stdio, binary, stream]),
-            {noreply, State#state{port = Port}};
+            chunter_vm_fsm:console_link(UUID, self()),
+            {noreply, State#state{uuid = UUID}};
         ping ->
             Transport:send(Socket, term_to_binary(pong)),
             ok = Transport:close(Socket),
@@ -71,8 +61,8 @@ handle_info({_OK, Socket, BinData}, State = #state{port = undefined,
             end
     end;
 
-handle_info({_OK, _S, Data}, State = #state{port=Port, ok = _OK}) ->
-    Port ! {self(), {command, Data}},
+handle_info({_OK, _S, Data}, State = #state{uuid=UUID, ok = _OK}) ->
+    chunter_vm_fsm:console_send(UUID, Data),
     {noreply, State};
 
 handle_info(_Info, State) ->

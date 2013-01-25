@@ -38,6 +38,8 @@
          handle_sync_event/4,
          handle_info/3,
          terminate/3,
+         console_send/2,
+         console_link/2,
          code_change/4]).
 
 %% This functions have to be exported but are only used internally.
@@ -51,7 +53,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, uuid}).
+-record(state, {hypervisor, uuid, read, write}).
 
 %%%===================================================================
 %%% API
@@ -60,6 +62,7 @@
 -spec create(UUID::fifo:uuid(), PackageSpec::fifo:package(),
              DatasetSpec::fifo:dataset(), VMSpec::fifo:config()) ->
                     ok.
+
 
 create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
     start_link(UUID),
@@ -105,7 +108,6 @@ force_state(UUID, State) ->
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
 
-
 snapshot(UUID, SnapID) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
 
@@ -114,6 +116,13 @@ delete_snapshot(UUID, SnapID) ->
 
 rollback_snapshot(UUID, SnapID) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, rollback, SnapID}).
+
+
+console_send(UUID, Data) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, {console, send, Data}).
+
+console_link(UUID, Pid) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, {console, link, Pid}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -181,6 +190,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
     SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
     change_state(UUID, <<"installing_dataset">>),
     Info = chunter_vmadm:info(State#state.uuid),
+    State1 = init_console(State),
     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                         {<<"data">>,
                          [{<<"state">>, <<"installing_dataset">>},
@@ -191,7 +201,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
     change_state(UUID, <<"creating">>),
-    {next_state, creating, State};
+    {next_state, creating, State1};
 
 initialized(_, State) ->
     {next_state, initialized, State}.
@@ -235,8 +245,9 @@ booting({transition, NextState = <<"shutting_down">>}, State) ->
 booting({transition, NextState = <<"running">>}, State) ->
     change_state(State#state.uuid, NextState),
     Info = chunter_vmadm:info(State#state.uuid),
+    State1 = init_console(State),
     libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State1};
 
 booting(_, State) ->
     {next_state, booting, State}.
@@ -306,9 +317,10 @@ handle_event({force_state, NextState}, StateName, State) ->
             {next_state, StateName, State};
         running = N ->
             Info = chunter_vmadm:info(State#state.uuid),
+            State1 = init_console(State),
             libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
             change_state(State#state.uuid, NextState, StateName =:= N),
-            {next_state, running, State};
+            {next_state, running, State1};
         Other ->
             change_state(State#state.uuid, NextState, StateName =:= Other),
             {next_state, Other, State}
@@ -322,10 +334,11 @@ handle_event(register, StateName, State) ->
             {stop, not_found, State};
         VMData ->
             Info = chunter_vmadm:info(State#state.uuid),
+            State1 = init_console(State),
             libsniffle:vm_set(State#state.uuid, [{<<"state">>, atom_to_binary(StateName)},
                                                  {<<"config">>, chunter_spec:to_sniffle(VMData)},
                                                  {<<"info">>, Info}]),
-            {next_state, StateName, State}
+            {next_state, StateName, State1}
     end;
 
 handle_event({update, Data}, _StateName, State) ->
@@ -352,6 +365,21 @@ handle_event(delete, StateName, State) ->
             libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),
             {next_state, StateName, State}
     end;
+
+
+handle_event({console, send, _Data}, StateName, State = #state{write = undefined}) ->
+    {next_state, StateName, State};
+
+handle_event({console, link, _Pid}, StateName, State = #state{read = undefined}) ->
+    {next_state, StateName, State};
+
+handle_event({console, send, Data}, StateName, State) ->
+    port_command(State#state.write, Data),
+    {next_state, StateName, State};
+
+handle_event({console, link, Pid}, StateName, State) ->
+    port_connect(State#state.write, Pid),
+    {next_state, StateName, State};
 
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
@@ -398,6 +426,7 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
 handle_info(_Info, StateName, State) ->
     {next_state, StateName, State}.
 
@@ -430,6 +459,24 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+init_console(State) ->
+    [{_,Name,_, Path, _, _}] = zoneadm(State#state.uuid),
+    Base = binary_to_list(Path) ++ "/fifo",
+    RPath = Base ++ ".r",
+    WPath = Base ++ ".w",
+
+    case {filelib:is_file(RPath), filelib:is_file(WPath)} of
+        {true, true} ->
+            ok;
+        _ ->
+            os:cmd("/opt/chunter/erts-5.9.1/bin/run_erl "++ Base ++
+                       " /tmp \"/usr/sbin/zlogin -C "++ binary_to_list(Name) ++ "\"")
+    end,
+    {ok, Write} = open_port({spawn,"/bin/cat > " ++ WPath}, [binary, out, eof]),
+    {ok, Read} = open_port({spawn,"/bin/cat " ++ WPath}, [binary, out, eof]),
+    State#state{read = Read, write = Write}.
 
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 

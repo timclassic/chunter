@@ -378,7 +378,7 @@ handle_event({console, send, Data}, StateName, State) ->
     {next_state, StateName, State};
 
 handle_event({console, link, Pid}, StateName, State) ->
-    port_connect(State#state.write, Pid),
+    port_connect(State#state.read, Pid),
     {next_state, StateName, State};
 
 handle_event(_Event, StateName, State) ->

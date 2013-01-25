@@ -200,8 +200,8 @@ handle_cast({prov_mem, M}, State = #state{name = Name,
     MinMB = round(M / (1024*1024)),
     Provisioned = round(MinMB + P),
     Free = T - Provisioned,
-    libsniffle:hypervisor_set(Name, [{<<"free-memory">>, Free},
-                                     {<<"provisioned-memory">>, Provisioned}]),
+    libsniffle:hypervisor_set(Name, [{<<"resources.free-memory">>, Free},
+                                     {<<"resources.provisioned-memory">>, Provisioned}]),
     libhowl:send(Name, [{<<"event">>, <<"memorychange">>},
                         {<<"data">>, [{<<"free">>, Free},
                                       {<<"provisioned">>, Provisioned}]}]),
@@ -216,8 +216,8 @@ handle_cast({unprov_mem, M}, State = #state{name = Name,
     MinMB = round(M / (1024*1024)),
     Provisioned = round(P - MinMB),
     Free = T - Provisioned,
-    libsniffle:hypervisor_set(Name, [{<<"free-memory">>, Free},
-                                     {<<"provisioned-memory">>, Provisioned}]),
+    libsniffle:hypervisor_set(Name, [{<<"resources.free-memory">>, Free},
+                                     {<<"resources.provisioned-memory">>, Provisioned}]),
 
     libhowl:send(Name, [{<<"event">>, <<"memorychange">>},
                         {<<"data">>, [{<<"free">>, Free},
@@ -284,29 +284,23 @@ publish_datasets(Datasets) ->
                   end, Datasets).
 
 publish_dataset(JSON) ->
-    ID = proplists:get_value(<<"uuid">>, JSON),
+    Obj = jsxd:from_list(JSON),
+    {ok, ID} = jsxd:get(<<"uuid">>, Obj),
     libsniffle:dataset_create(ID),
-    Data0 = case proplists:get_value(<<"os">>, JSON) of
-                <<"smartos">> ->
-                    [{<<"type">>, <<"zone">>}];
-                _ ->
-                    [{<<"type">>, <<"kvm">>},
-                     {<<"disk_driver">>,  proplists:get_value(<<"disk_driver">>, JSON)},
-                     {<<"nic_driver">>,  proplists:get_value(<<"nic_driver">>, JSON)}]
-            end,
-    Data1 = case proplists:lookup(<<"metadata">>, JSON) of
-                none ->
-                    Data0;
-                {<<"metadata">>, Meta} ->
-                    [{<<"metadata">>, Meta} | Data0]
-            end,
-    Data = [{<<"dataset">>, ID},
-            {<<"name">>, proplists:get_value(<<"name">>, JSON)},
-            {<<"version">>, proplists:get_value(<<"version">>, JSON)},
-            {<<"networks">>,
-             proplists:get_value(<<"networks">>,
-                                 proplists:get_value(<<"requirements">>, JSON))} | Data1],
-    libsniffle:dataset_set(ID, Data).
+    Obj1 = jsxd:thread(
+             [{select,[<<"os">>, <<"metadata">>, <<"name">>, <<"version">>,
+                       <<"description">>, <<"disk_driver">>, <<"nic_driver">>,
+                       <<"image_size">>]},
+              {set, <<"dataset">>, ID},
+              {set, <<"networks">>, jsxd:get(<<"requirements.networks">>, [], Obj)}],
+             Obj),
+    Obj2 = case jsxd:get(<<"os">>, JSON) of
+               {ok, <<"smartos">>} ->
+                   jsxd:set(<<"type">>, <<"zone">>, Obj1);
+               {ok, _} ->
+                   jsxd:set(<<"type">>, <<"kvm">>, Obj1)
+           end,
+    libsniffle:dataset_set(ID, Obj2).
 
 list_datasets(Datasets) ->
     filelib:fold_files("/var/db/imgadm", ".*json", false,

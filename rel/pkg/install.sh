@@ -2,7 +2,7 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z
+TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z\|joyent_20121018T224723Z
 
 DST=/opt
 
@@ -18,13 +18,13 @@ BASE=`basename $0`;
 
 if uname -a | egrep $TESTED_VERSIONS
 then
-    echo "This SnartOS release is tested!"
+    echo "This SmartOS release is tested!"
 else
     echo "This SmartOS release WAS NOT tested! Are you sure you want to go on? [yes|NO] "
     read SKIP
     if [[ "$SKIP" = "yes" ]]
     then
-	echo "Okay we go on, but it mit not work!"
+	echo "Okay we go on, but it might not work!"
     else
 	echo "Exiting."
 	exit 1

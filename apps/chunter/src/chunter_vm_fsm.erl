@@ -26,6 +26,10 @@
          delete/1,
          remove/1,
          transition/2,
+         update/2,
+         snapshot/2,
+         delete_snapshot/2,
+         rollback_snapshot/2,
          force_state/2]).
 
 %% gen_fsm callbacks
@@ -36,8 +40,7 @@
          terminate/3,
          code_change/4]).
 
-
-                                                % This functions have to be exported but are only used internally.
+%% This functions have to be exported but are only used internally.
 -export([initialized/2,
          creating/2,
          loading/2,
@@ -62,6 +65,8 @@ create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
     start_link(UUID),
     gen_fsm:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
 
+update(UUID, Data) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, {update, Data}).
 
 -spec load(UUID::fifo:uuid()) -> ok.
 
@@ -99,6 +104,16 @@ force_state(UUID, State) ->
 
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
+
+
+snapshot(UUID, SnapID) ->
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
+
+delete_snapshot(UUID, SnapID) ->
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, delete, SnapID}).
+
+rollback_snapshot(UUID, SnapID) ->
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, rollback, SnapID}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -149,7 +164,7 @@ init([UUID]) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec initialized(Action::load |
+-spec initialized(Action::lad |
                           {create,  PackageSpec::fifo:package(),
                            DatasetSpec::fifo:dataset(), VMSpec::fifo:config()}, State::term()) ->
                          {next_state, loading, State::term()} |
@@ -246,7 +261,6 @@ shutting_down({transition, NextState = <<"stopped">>}, State) ->
 shutting_down(_, State) ->
     {next_state, shutting_down, State}.
 
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -290,28 +304,33 @@ handle_event({force_state, NextState}, StateName, State) ->
     case binary_to_atom(NextState) of
         StateName ->
             {next_state, StateName, State};
-        running ->
+        running = N ->
             Info = chunter_vmadm:info(State#state.uuid),
             libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
-            change_state(State#state.uuid, NextState),
+            change_state(State#state.uuid, NextState, StateName =:= N),
             {next_state, running, State};
         Other ->
-            change_state(State#state.uuid, NextState),
+            change_state(State#state.uuid, NextState, StateName =:= Other),
             {next_state, Other, State}
     end;
 
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
-    change_state(State#state.uuid, atom_to_binary(StateName)),
+%%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(State#state.uuid) of
         {error, not_found} ->
             {stop, not_found, State};
         VMData ->
             Info = chunter_vmadm:info(State#state.uuid),
-            libsniffle:vm_set(State#state.uuid, [{<<"config">>, chunter_spec:to_sniffle(VMData)},
+            libsniffle:vm_set(State#state.uuid, [{<<"state">>, atom_to_binary(StateName)},
+                                                 {<<"config">>, chunter_spec:to_sniffle(VMData)},
                                                  {<<"info">>, Info}]),
             {next_state, StateName, State}
     end;
+
+handle_event({update, Data}, _StateName, State) ->
+    spawn(chunter_vmadm, update, [Data, State#state.uuid]),
+    {stop, normal, State};
 
 handle_event(remove, _StateName, State) ->
     libsniffle:vm_unregister(State#state.uuid),
@@ -322,33 +341,17 @@ handle_event(delete, StateName, State) ->
         {error, not_found} ->
             {stop, not_found, State};
         VM ->
-            case proplists:get_value(<<"nics">>, VM) of
-                undefined ->
-                    [];
-                Nics ->
-                    [try
-                         Net = proplists:get_value(<<"nic_tag">>, Nic),
-                         IP = proplists:get_value(<<"ip">>, Nic),
-                         libsniffle:iprange_release(Net, libsniffle:ip_to_int(IP)),
-                         ok
-                     catch
-                         _:_ ->
-                             ok
-                     end
-                     || Nic <- Nics]
-            end,
-                                                %    case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
-                                                %   {ok, GUUID} ->
-                                                %       libsnarl:group_delete(system, GUUID);
-                                                %   _ ->
-                                                %       ok
-                                                %   end,
+            %%   case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
+            %%       {ok, GUUID} ->
+            %%           libsnarl:group_delete(system, GUUID);
+            %%       _ ->
+            %%           ok
+            %%   end,
             {ok, Mem} = jsxd:get(<<"max_physical_memory">>, VM),
             spawn(chunter_vmadm, delete, [State#state.uuid, Mem]),
             libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),
             {next_state, StateName, State}
     end;
-
 
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
@@ -369,6 +372,15 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
+handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
+    {reply, snapshot_action(State#state.uuid, UUID, fun do_snapshot/2), StateName, State};
+
+handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
+    {reply, snapshot_action(State#state.uuid, UUID, fun do_delete_snapshot/2), StateName, State};
+
+handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
+    {reply, snapshot_action(State#state.uuid, UUID, fun do_rollback_snapshot/2), StateName, State};
+
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.
@@ -431,7 +443,6 @@ install_image(DatasetUUID) ->
 
     end.
 
-
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
                                        Name::binary(),
                                        VMState::binary(),
@@ -459,12 +470,19 @@ load_vm(ZUUID) ->
             {error, not_found}
     end.
 
-
-
 -spec change_state(UUID::binary(), State::fifo:vm_state()) -> ok.
 
 change_state(UUID, State) ->
+    change_state(UUID, State, true).
+
+-spec change_state(UUID::binary(), State::fifo:vm_state(), true | false) -> ok.
+
+change_state(UUID, State, true) ->
     libsniffle:vm_log(UUID, <<"Transitioning ", State/binary>>),
+    libsniffle:vm_set(UUID, <<"state">>, State),
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]);
+
+change_state(UUID, State, false) ->
     libsniffle:vm_set(UUID, <<"state">>, State),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
 
@@ -478,3 +496,90 @@ atom_to_binary(B) when is_binary(B) ->
     B;
 atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
+
+do_snapshot(Path, SnapID) ->
+    <<_:1/binary, P/binary>> = Path,
+    CmdB = <<"/usr/sbin/zfs snapshot ",
+             P/binary, "@", SnapID/binary>>,
+    Cmd = binary_to_list(CmdB),
+    lager:info("Creating snapshot: ~s", [Cmd]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    wait_for_port(Port, <<>>).
+
+do_delete_snapshot(Path, SnapID) ->
+    <<_:1/binary, P/binary>> = Path,
+    CmdB = <<"/usr/sbin/zfs destroy ",
+             P/binary, "@", SnapID/binary>>,
+    Cmd = binary_to_list(CmdB),
+    lager:info("Deleting snapshot: ~s", [Cmd]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    wait_for_port(Port, <<>>).
+
+do_rollback_snapshot(Path, SnapID) ->
+    <<_:1/binary, P/binary>> = Path,
+    CmdB = <<"/usr/sbin/zfs rollback -r ",
+             P/binary, "@", SnapID/binary>>,
+    Cmd = binary_to_list(CmdB),
+    lager:info("Deleting snapshot: ~s", [Cmd]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    wait_for_port(Port, <<>>).
+
+wait_for_port(Port, Reply) ->
+    receive
+        {Port, {data, {eol, Data}}} ->
+            wait_for_port(Port, <<Reply/binary, Data/binary>>);
+        {Port, {data, Data}} ->
+            wait_for_port(Port, <<Reply/binary, Data/binary>>);
+        {Port,{exit_status, 0}} ->
+            {ok, Reply};
+        {Port,{exit_status, S}} ->
+            {error, S, Reply}
+    end.
+
+
+snapshot_action(VM, UUID, Action) ->
+    case load_vm(VM) of
+        {error, not_found} ->
+            ok;
+        VMData ->
+            Spec = chunter_spec:to_sniffle(VMData),
+            case jsxd:get(<<"zonepath">>, Spec) of
+                {ok, P} ->
+                    case Action(P, UUID) of
+                        {ok, Reply} ->
+                            R = lists:foldl(
+                                  fun (Disk, {S, Reply0}) ->
+                                          case jsxd:get(<<"path">>, Disk) of
+                                              {ok, <<_:14/binary, P1/binary>>} ->
+                                                  case Action(P1, UUID) of
+                                                      {ok, Res} ->
+                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
+                                                      {error, Code, Res} ->
+                                                          lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
+                                                          libsniffle:vm_log(
+                                                            VM,
+                                                            <<"Failed snapshot disk ", P1/binary, ": ", Reply/binary>>),
+                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
+                                                  end;
+                                              _ ->
+                                                  {error, missing}
+                                          end
+                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
+                            case R of
+                                {ok, Res} ->
+                                    libsniffle:vm_log(VM, <<"Snapshot done ", Res/binary>>),
+                                    ok;
+                                {error, _} ->
+                                    error
+                            end;
+                        {error, Code, Reply} ->
+                            lager:error("Failed snapshot VM ~s ~p: ~s.", [VM, Code, Reply]),
+                            libsniffle:vm_log(VM, <<"Failed to snapshot: ", Reply/binary>>),
+                            error
+                    end;
+                _ ->
+                    lager:error("Failed to snapshot VM ~s.", [VM]),
+                    libsniffle:vm_log(VM, <<"Failed snapshot: can't find zonepath.">>),
+                    error
+            end
+    end.

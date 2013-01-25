@@ -13,7 +13,7 @@
 -record(state, {socket,
                 transport,
                 ok, error, closed,
-                uuid}).
+                uuid = undefined}).
 
 start_link(ListenerPid, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [[ListenerPid, Socket, Transport, Opts]]).
@@ -41,8 +41,10 @@ handle_info({_Closed, _Socket}, State = #state{
                                   closed = _Closed}) ->
     {stop, normal, State};
 
-handle_info({_OK, Socket, BinData}, State = #state{transport = Transport,
-                                                   ok = _OK}) ->
+handle_info({_OK, Socket, BinData}, State = #state{
+                                      uuid = undefined,
+                                      transport = Transport,
+                                      ok = _OK}) ->
     case binary_to_term(BinData) of
         {console, UUID} ->
             chunter_vm_fsm:console_link(UUID, self()),

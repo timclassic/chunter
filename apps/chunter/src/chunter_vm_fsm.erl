@@ -370,7 +370,7 @@ handle_event(delete, StateName, State) ->
 handle_event({console, send, _Data}, StateName, State = #state{write = undefined}) ->
     {next_state, StateName, State};
 
-handle_event({console, link, _Pid}, StateName, State = #state{read = undefined}) ->
+handle_event({console, link, _Pid}, StateName, State = #state{write = undefined}) ->
     {next_state, StateName, State};
 
 handle_event({console, send, Data}, StateName, State) ->
@@ -378,7 +378,7 @@ handle_event({console, send, Data}, StateName, State) ->
     {next_state, StateName, State};
 
 handle_event({console, link, Pid}, StateName, State) ->
-    port_connect(State#state.read, Pid),
+    port_connect(State#state.write, Pid),
     {next_state, StateName, State};
 
 handle_event(_Event, StateName, State) ->
@@ -474,9 +474,8 @@ init_console(State) ->
             os:cmd("/opt/chunter/erts-5.9.1/bin/run_erl "++ Base ++
                        " /tmp \"/usr/sbin/zlogin -C "++ binary_to_list(Name) ++ "\"")
     end,
-    Write = open_port({spawn,"/bin/cat > " ++ WPath}, [binary, out, eof]),
-    Read = open_port({spawn,"/bin/cat " ++ WPath}, [binary, out, eof]),
-    State#state{read = Read, write = Write}.
+    Write = open_port({spawn, "/opt/chunter/erts-5.9.1/bin/to_erl " ++ Base}, [binary]),
+    State#state{write = Write}.
 
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 

@@ -374,6 +374,7 @@ handle_event({console, link, _Pid}, StateName, State = #state{read = undefined})
     {next_state, StateName, State};
 
 handle_event({console, send, Data}, StateName, State) ->
+    io:format("< ~p~n", [Data]),
     port_command(State#state.write, Data),
     {next_state, StateName, State};
 
@@ -426,6 +427,23 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
+
+handle_info({Port,eof}, StateName, State = #state{ read = Port}) ->
+    [{_,_,_, Path, _, _}] = zoneadm(State#state.uuid),
+    Base = binary_to_list(Path) ++ "/fifo",
+    RPath = Base ++ ".r",
+    port_close(State#state.read),
+    Read = open_port({spawn,"/bin/cat " ++ RPath}, [binary, in, eof]),
+
+    {next_state, StateName, State#state{read = Read}};
+handle_info({Port,eof}, StateName, State = #state{ write = Port}) ->
+    [{_,_,_, Path, _, _}] = zoneadm(State#state.uuid),
+    Base = binary_to_list(Path) ++ "/fifo",
+    WPath = Base ++ ".w",
+    port_close(State#state.write),
+    Write = open_port({spawn,"/bin/cat > " ++ WPath}, [use_stdio, binary, out, eof]),
+    {next_state, StateName, State#state{write = Write}};
 
 handle_info(Info, StateName, State) ->
     io:format("INFO> ~p~n", [Info]),

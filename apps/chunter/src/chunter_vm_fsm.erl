@@ -53,7 +53,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, uuid, console, listeners}).
+-record(state, {hypervisor, uuid, console, listeners = []}).
 
 %%%===================================================================
 %%% API

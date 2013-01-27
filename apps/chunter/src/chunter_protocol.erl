@@ -31,8 +31,8 @@ init([ListenerPid, Socket, Transport, _Opts]) ->
                                      socket = Socket,
                                      transport = Transport}).
 
-handle_info({_Port,{data,Data}}, State = #state{socket = Socket,
-                                                transport = Transport}) ->
+handle_info({data,Data}, State = #state{socket = Socket,
+                                        transport = Transport}) ->
     Transport:send(Socket, Data),
     {noreply, State};
 

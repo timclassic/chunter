@@ -53,7 +53,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, uuid, console}).
+-record(state, {hypervisor, uuid, console, listeners}).
 
 %%%===================================================================
 %%% API
@@ -370,9 +370,8 @@ handle_event({console, send, Data}, StateName, State = #state{console = C}) when
     port_command(C, Data),
     {next_state, StateName, State};
 
-handle_event({console, link, Pid}, StateName, State = #state{console = C}) when is_port(C) ->
-    port_connect(C, Pid),
-    {next_state, StateName, State};
+handle_event({console, link, Pid}, StateName, State = #state{console = C, listeners = Ls}) when is_port(C) ->
+    {next_state, StateName, State#state{listeners = [Pid | Ls]}};
 
 handle_event({console, send, _Data}, StateName, State) ->
     {next_state, StateName, State};
@@ -426,6 +425,13 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
+
+handle_info({C, {data, Data}}, StateName, State = #state{console = C,
+                                                         listeners = Ls}) ->
+    Ls1 = [ L || L <- Ls, is_process_alive(L)],
+    [ L ! {data, Data} || L <- Ls1],
+    {next_state, StateName, State#state{listeners = Ls1}};
+
 handle_info(Info, StateName, State) ->
     io:format("INFO> ~p~n", [Info]),
     {next_state, StateName, State}.
@@ -467,7 +473,7 @@ init_console(State = #state{console = _C}) when is_port(_C) ->
 init_console(State) ->
     [{_, Name, _, _, _, _}] = zoneadm(State#state.uuid),
     Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -C " ++ binary_to_list(Name),
-    ConsolePort = open_port({spawn, Console}, []),
+    ConsolePort = open_port({spawn, Console}, [binary]),
     State#state{console = ConsolePort}.
 
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().

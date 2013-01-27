@@ -366,7 +366,6 @@ handle_event(delete, StateName, State) ->
 
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
-    io:format("< ~p~n", [Data]),
     port_command(C, Data),
     {next_state, StateName, State};
 
@@ -430,11 +429,9 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
                                                          listeners = Ls}) ->
     Ls1 = [ L || L <- Ls, is_process_alive(L)],
     [ L ! {data, Data} || L <- Ls1],
-    io:format("Console (~s): ~s -> ~p~n", [State#state.uuid, Data, Ls1]),
     {next_state, StateName, State#state{listeners = Ls1}};
 
-handle_info(Info, StateName, State) ->
-    io:format("INFO> ~p~n", [Info]),
+handle_info(_Info, StateName, State) ->
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------

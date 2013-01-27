@@ -69,6 +69,9 @@ handle_info({_OK, _S, Data}, State = #state{uuid=UUID, ok = _OK}) ->
     chunter_vm_fsm:console_send(UUID, Data),
     {noreply, State};
 
+handle_info({tcp_closed, _}, State) ->
+    {stop, normal, State};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 

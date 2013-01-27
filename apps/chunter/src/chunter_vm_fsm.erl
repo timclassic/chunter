@@ -430,7 +430,7 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
                                                          listeners = Ls}) ->
     Ls1 = [ L || L <- Ls, is_process_alive(L)],
     [ L ! {data, Data} || L <- Ls1],
-    io:format("Console (~s): ~s~n", [State#state.uuid, Data]),
+    io:format("Console (~s): ~s -> ~p~n", [State#state.uuid, Data, Ls1]),
     {next_state, StateName, State#state{listeners = Ls1}};
 
 handle_info(Info, StateName, State) ->

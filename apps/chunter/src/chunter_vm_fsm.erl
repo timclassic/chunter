@@ -53,7 +53,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, uuid, read, write}).
+-record(state, {hypervisor, uuid, console}).
 
 %%%===================================================================
 %%% API
@@ -62,7 +62,6 @@
 -spec create(UUID::fifo:uuid(), PackageSpec::fifo:package(),
              DatasetSpec::fifo:dataset(), VMSpec::fifo:config()) ->
                     ok.
-
 
 create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
     start_link(UUID),
@@ -86,7 +85,6 @@ load(UUID) ->
 
 transition(UUID, State) ->
     gen_fsm:send_event({global, {vm, UUID}}, {transition, State}).
-
 
 -spec delete(UUID::fifo:uuid()) -> ok.
 
@@ -116,7 +114,6 @@ delete_snapshot(UUID, SnapID) ->
 
 rollback_snapshot(UUID, SnapID) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, rollback, SnapID}).
-
 
 console_send(UUID, Data) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, {console, send, Data}).
@@ -157,6 +154,7 @@ init([UUID]) ->
     [Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
     libsniffle:vm_register(UUID, Hypervisor),
     {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor}}.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -179,6 +177,7 @@ init([UUID]) ->
                          {next_state, loading, State::term()} |
                          {next_state, creating, State::term()} |
                          {next_state, initialized, State::term()}.
+
 initialized(load, State) ->
     {next_state, loading, State};
 
@@ -205,7 +204,6 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
 
 initialized(_, State) ->
     {next_state, initialized, State}.
-
 
 -spec creating({transition, NextState::fifo:vm_state()}, State::term()) ->
                       {next_state, atom(), State::term()}.
@@ -367,19 +365,19 @@ handle_event(delete, StateName, State) ->
     end;
 
 
-handle_event({console, send, _Data}, StateName, State = #state{write = undefined}) ->
-    {next_state, StateName, State};
-
-handle_event({console, link, _Pid}, StateName, State = #state{read = undefined}) ->
-    {next_state, StateName, State};
-
-handle_event({console, send, Data}, StateName, State) ->
+handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
     io:format("< ~p~n", [Data]),
-    port_command(State#state.write, Data),
+    port_command(C, Data),
     {next_state, StateName, State};
 
-handle_event({console, link, Pid}, StateName, State) ->
-    port_connect(State#state.read, Pid),
+handle_event({console, link, Pid}, StateName, State = #state{console = C}) when is_port(C) ->
+    port_connect(C, Pid),
+    {next_state, StateName, State};
+
+handle_event({console, send, _Data}, StateName, State) ->
+    {next_state, StateName, State};
+
+handle_event({console, link, _Pid}, StateName, State) ->
     {next_state, StateName, State};
 
 handle_event(_Event, StateName, State) ->
@@ -444,8 +442,7 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _StateName, State) ->
-    port_close(State#state.read),
-    port_close(State#state.write),
+    port_close(State#state.console),
     ok.
 
 %%--------------------------------------------------------------------
@@ -464,27 +461,14 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
-init_console(State = #state{write = undefined, read = undefined}) ->
-    [{_,Name,_, Path, _, _}] = zoneadm(State#state.uuid),
-    Base = binary_to_list(Path) ++ "/fifo",
-    RPath = Base ++ ".r",
-    WPath = Base ++ ".w",
-
-    case {filelib:is_file(RPath), filelib:is_file(WPath)} of
-        {true, true} ->
-            ok;
-        _ ->
-            os:cmd("/opt/chunter/erts-5.9.1/bin/run_erl "++ Base ++
-                       " /tmp \"/usr/sbin/zlogin -C "++ binary_to_list(Name) ++ "\"")
-    end,
-    Write = open_port({spawn,"/bin/cat > " ++ WPath}, [use_stdio, binary, out, eof]),
-    Read = open_port({spawn,"/bin/cat " ++ RPath}, [binary, in, eof]),
-    State#state{read = Read, write = Write};
+init_console(State = #state{console = _C}) when is_port(_C) ->
+    State;
 
 init_console(State) ->
-    State.
-
+    [{_, Name, _, _, _, _}] = zoneadm(State#state.uuid),
+    Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -C " ++ binary_to_list(Name),
+    ConsolePort = open_port({spawn, Console}, []),
+    State#state{console = ConsolePort}.
 
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 

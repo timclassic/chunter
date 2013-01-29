@@ -445,8 +445,11 @@ handle_info(_Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, State) ->
+terminate(_Reason, _StateName, State  = #state{console = _C}) is_port(_C) ->
     port_close(State#state.console),
+    ok;
+
+terminate(_Reason, _StateName, State) ->
     ok.
 
 %%--------------------------------------------------------------------

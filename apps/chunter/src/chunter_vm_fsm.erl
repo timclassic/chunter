@@ -188,19 +188,16 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
     {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
     SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
     change_state(UUID, <<"installing_dataset">>),
-    Info = chunter_vmadm:info(State#state.uuid),
-    State1 = init_console(State),
     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                         {<<"data">>,
-                         [{<<"state">>, <<"installing_dataset">>},
-                          {<<"hypervisor">>, Hypervisor},
+                         [{<<"hypervisor">>, Hypervisor},
                           {<<"config">>, SniffleData1}]}]),
     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1},
                              {<<"info">>, Info}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
     change_state(UUID, <<"creating">>),
-    {next_state, creating, State1};
+    {next_state, creating, State};
 
 initialized(_, State) ->
     {next_state, initialized, State}.

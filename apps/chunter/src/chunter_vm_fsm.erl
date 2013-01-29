@@ -188,19 +188,15 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor 
     {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
     SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
     change_state(UUID, <<"installing_dataset">>),
-    Info = chunter_vmadm:info(State#state.uuid),
-    State1 = init_console(State),
     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                         {<<"data">>,
-                         [{<<"state">>, <<"installing_dataset">>},
-                          {<<"hypervisor">>, Hypervisor},
+                         [{<<"hypervisor">>, Hypervisor},
                           {<<"config">>, SniffleData1}]}]),
-    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1},
-                             {<<"info">>, Info}]),
+    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
     change_state(UUID, <<"creating">>),
-    {next_state, creating, State1};
+    {next_state, creating, State};
 
 initialized(_, State) ->
     {next_state, initialized, State}.
@@ -445,8 +441,11 @@ handle_info(_Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, State) ->
+terminate(_Reason, _StateName, State  = #state{console = _C}) when is_port(_C) ->
     port_close(State#state.console),
+    ok;
+
+terminate(_Reason, _StateName, _State) ->
     ok.
 
 %%--------------------------------------------------------------------

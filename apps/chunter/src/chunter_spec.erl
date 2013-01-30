@@ -48,8 +48,7 @@ to_sniffle(Spec) ->
 generate_sniffle(In, _Type) ->
     KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>,
                 <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
-                <<"hostname">>,
-                <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
+                <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
                 <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>],
     jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
                       jsxd:merge(Int, Obj);
@@ -105,7 +104,9 @@ generate_sniffle(In, _Type) ->
 
 generate_spec(Package, Dataset, OwnerData) ->
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
+    {ok, UUID} = jsxd:get(<<"uuid">>, OwnerData),
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>]},
+                         {set, <<"zonename">>, UUID},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                          {set, <<"cpu_shares">>, Ram},
                          {set, [<<"internal_metadata">>, <<"package">>],

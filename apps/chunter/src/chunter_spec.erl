@@ -104,9 +104,7 @@ generate_sniffle(In, _Type) ->
 
 generate_spec(Package, Dataset, OwnerData) ->
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
-    {ok, UUID} = jsxd:get(<<"uuid">>, OwnerData),
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>]},
-                         {set, <<"zonename">>, UUID},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                          {set, <<"cpu_shares">>, Ram},
                          {set, [<<"internal_metadata">>, <<"package">>],

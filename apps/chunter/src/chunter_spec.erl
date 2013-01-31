@@ -161,14 +161,16 @@ generate_spec(Package, Dataset, OwnerData) ->
                           (_, _, Obj) ->
                               Obj
                       end, Base1, OwnerData),
-    case jsxd:get(<<"networks">>, Dataset) of
-        {ok, Nics} ->
-            jsxd:thread([{set, <<"nics">>, Nics},
-                         {set, [<<"nics">>, 0, <<"primary">>], true}],
-                        Base2);
-        _ ->
-            Base2
-    end.
+    Result = case jsxd:get(<<"networks">>, Dataset) of
+                 {ok, Nics} ->
+                     jsxd:thread([{set, <<"nics">>, Nics},
+                                  {set, [<<"nics">>, 0, <<"primary">>], true}],
+                                 Base2);
+                 _ ->
+                     Base2
+             end,
+    lager:debug("Converted ~p / ~p / ~p to: ~p.", [Package, Dataset, OwnerData, Result]),
+    Result.
 
 -spec ceiling(X::float()) -> integer().
 

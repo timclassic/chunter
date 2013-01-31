@@ -10,6 +10,8 @@
 
 -behaviour(gen_server).
 
+-include("chunter_version.hrl").
+
 %% API
 -export([start_link/0,
          provision_memory/1,
@@ -179,7 +181,8 @@ handle_cast(connect, #state{name = Host,
     IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
 
     libsniffle:hypervisor_register(Host, IPStr, 4200),
-    libsniffle:hypervisor_set(Host, [{<<"networks">>, Networks1},
+    libsniffle:hypervisor_set(Host, [{<<"version">>, ?VERSION},
+                                     {<<"networks">>, Networks1},
                                      {<<"resources.free-memory">>, TotalMem - ProvMem},
                                      {<<"etherstubs">>, Etherstub1},
                                      {<<"resources.provisioned-memory">>, ProvMem},

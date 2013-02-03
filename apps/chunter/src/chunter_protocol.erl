@@ -81,8 +81,8 @@ handle_message({machines, start, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:start(UUID),
     {stop, State};
 
-handle_message({machines, update, UUID, Spec}, State) when is_binary(UUID) ->
-    chunter_vm_fsm:update(UUID, Spec),
+handle_message({machines, update, UUID, Package, Config}, State) when is_binary(UUID) ->
+    chunter_vm_fsm:update(UUID, Package, Config),
     {stop, State};
 
 handle_message({machines, start, UUID, Image}, State) when is_binary(UUID),

@@ -14,7 +14,9 @@
 -endif.
 
 -export([to_vmadm/3,
-         to_sniffle/1]).
+         to_sniffle/1,
+         create_update/3
+        ]).
 
 
 -spec to_vmadm(Package::fifo:package(), Dataset::fifo:dataset(), OwnerData::fifo:config()) -> fifo:vm_config().
@@ -172,6 +174,59 @@ generate_spec(Package, Dataset, OwnerData) ->
     lager:debug("Converted ~p / ~p / ~p to: ~p.", [Package, Dataset, OwnerData, Result]),
     Result.
 
+
+-spec create_update(Original::fifo:vm_config(),
+                    Package::fifo:vm_config(),
+                    Config::fifo:vm_config()) -> fifo:config_list().
+
+create_update(Original, Package, Config) ->
+    {ok, Ram} = jsxd:get(<<"ram">>, Package),
+    Base0 = jsxd:thread([{set, [<<"set_internal_metadata">>, <<"package">>],
+                          jsxd:get(<<"name">>, <<"unnamed">>, Package)},
+                         {merge, jsxd:select([<<"cpu_cap">>], Package)}],
+                        jsxd:new()),
+    Base1 = case jsxd:get(<<"brand">>, Original) of
+                {ok, <<"kvm">>} ->
+                    Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
+                                 {ok, V} ->
+                                     jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
+                                 _ ->
+                                     Base0
+                             end,
+                    jsxd:thread([{set, <<"ram">>, Ram},
+                                 {set, <<"max_physical_memory">>, Ram + 1024}],
+                                Base01);
+                {ok, <<"joyent">>} ->
+                    jsxd:thread([{set, <<"max_physical_memory">>, Ram},
+                                 {set, <<"quota">>,
+                                  jsxd:get(<<"quota">>, 0, Package)}],
+                                Base0)
+            end,
+    Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
+                               jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
+                           (<<"root_pw">>, V, Obj) ->
+                               jsxd:set([<<"set_customer_metadata">>, <<"root_pw">>], V, Obj);
+                           (<<"resolvers">>, V, Obj) ->
+                               jsxd:set(<<"resolvers">>, V, Obj);
+                           (<<"hostname">>, V, Obj) ->
+                               jsxd:set(<<"hostname">>, V, Obj);
+                           (<<"admin_pw">>, V, Obj) ->
+                               jsxd:set([<<"set_customer_metadata">>, <<"admin_pw">>], V, Obj);
+                           (<<"metadata">>, V, Obj) ->
+                               jsxd:update(<<"set_customer_metadata">>,
+                                           fun(M) ->
+                                                   jsxd:merge(M, V)
+                                           end, V, Obj);
+                           (<<"note">>, V, Obj) ->
+                               jsxd:set([<<"set_internal_metadata">>, <<"note">>], V, Obj);
+                           (_, _, Obj) ->
+                               Obj
+                       end, Base1, Config),
+    lager:debug("Created Update package ~p / ~p / ~p to: ~p.", [Original, Package, Config, Result]),
+    Result.
+
+
+
 -spec ceiling(X::float()) -> integer().
 
 ceiling(X) ->
@@ -181,6 +236,9 @@ ceiling(X) ->
         Pos when Pos > 0 -> T + 1;
         _ -> T
     end.
+
+
+
 
 -ifdef(TEST).
 

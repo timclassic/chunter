@@ -341,7 +341,7 @@ handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) 
             {stop, not_found, State};
         VMData ->
             Update = chunter_spec:create_update(VMData, Package, Config),
-            chunter_vmadm:update(Update, UUID),
+            chunter_vmadm:update(UUID, Update),
             case load_vm(UUID) of
                 {error, not_found} ->
                     {stop, not_found, State};

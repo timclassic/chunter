@@ -108,9 +108,10 @@ generate_spec(Package, Dataset, OwnerData) ->
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>]},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
+                         {set, <<"zfs_io_priority">>, Ram},
                          {set, <<"cpu_shares">>, Ram},
                          {set, [<<"internal_metadata">>, <<"package">>],
-                          jsxd:get(<<"name">>, <<"unnamed">>, Package)},
+                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
                          {merge, jsxd:select([<<"cpu_cap">>], Package)},
                          {merge, jsxd:select([<<"nic_driver">>,
                                               <<"disk_driver">>], Dataset)}],
@@ -182,7 +183,9 @@ generate_spec(Package, Dataset, OwnerData) ->
 create_update(Original, Package, Config) ->
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
     Base0 = jsxd:thread([{set, [<<"set_internal_metadata">>, <<"package">>],
-                          jsxd:get(<<"name">>, <<"unnamed">>, Package)},
+                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
+                         {set, <<"cpu_shares">>, Ram},
+                         {set, <<"zfs_io_priority">>, Ram},
                          {merge, jsxd:select([<<"cpu_cap">>], Package)}],
                         jsxd:new()),
     Base1 = case jsxd:get(<<"brand">>, Original) of

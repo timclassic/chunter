@@ -1,3 +1,4 @@
+*.version
 apps/chunter/src/chunter_version.hrl
 rel/pkg/*.gz
 rel/pkg/*.tar

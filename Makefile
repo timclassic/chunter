@@ -5,12 +5,15 @@ REBAR = $(shell pwd)/rebar
 all: deps compile
 
 version:
-	echo "-define(VERSION, <<\"$(shell git symbolic-ref HEAD 2> /dev/null | cut -b 12-)-$(shell git log --pretty=format:'%h, %ad' -1)\">>)." > apps/chunter/src/chunter_version.hrl
+	echo "$(shell git symbolic-ref HEAD 2> /dev/null | cut -b 12-)-$(shell git log --pretty=format:'%h, %ad' -1)" > chunter.version
+
+version_header: version
+	echo "-define(VERSION, <<\"$(shell cat chunter.version)\">>)." > apps/chunter/src/chunter_version.hrl
 
 package: rel
 	make -C rel/pkg package
 
-compile: version
+compile: version_header
 	$(REBAR) compile
 
 deps:

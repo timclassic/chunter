@@ -348,9 +348,11 @@ handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) 
                 VMData1 ->
                     SniffleData = chunter_spec:to_sniffle(VMData1),
                     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
+                    libsniffle:vm_log(UUID, <<"Update complete.">>),
                     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                         {<<"data">>,
-                                         [{<<"config">>, SniffleData}]}]),
+                                         [{<<"package">>, jsxd:get(<<"uuid">>, <<"-">>, Package)},
+                                          {<<"config">>, SniffleData}]}]),
                     {next_state, StateName, State}
             end
     end;

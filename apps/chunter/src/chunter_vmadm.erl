@@ -133,7 +133,7 @@ update(UUID, Data) ->
     lager:info("~p", [<<"Updaring of VM '", UUID/binary, "' started.">>]),
     %%    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
-               "vmadm:create", []),
+               "vmadm:update", []),
     Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh update " ++ binary_to_list(UUID),
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),

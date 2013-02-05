@@ -14,7 +14,9 @@
 -endif.
 
 -export([to_vmadm/3,
-         to_sniffle/1]).
+         to_sniffle/1,
+         create_update/3
+        ]).
 
 
 -spec to_vmadm(Package::fifo:package(), Dataset::fifo:dataset(), OwnerData::fifo:config()) -> fifo:vm_config().
@@ -47,7 +49,7 @@ to_sniffle(Spec) ->
 
 generate_sniffle(In, _Type) ->
     KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>,
-                <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
+                <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
                 <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
                 <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>],
     jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
@@ -106,9 +108,10 @@ generate_spec(Package, Dataset, OwnerData) ->
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>]},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
+                         {set, <<"zfs_io_priority">>, Ram},
                          {set, <<"cpu_shares">>, Ram},
                          {set, [<<"internal_metadata">>, <<"package">>],
-                          jsxd:get(<<"name">>, <<"unnamed">>, Package)},
+                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
                          {merge, jsxd:select([<<"cpu_cap">>], Package)},
                          {merge, jsxd:select([<<"nic_driver">>,
                                               <<"disk_driver">>], Dataset)}],
@@ -172,6 +175,61 @@ generate_spec(Package, Dataset, OwnerData) ->
     lager:debug("Converted ~p / ~p / ~p to: ~p.", [Package, Dataset, OwnerData, Result]),
     Result.
 
+
+-spec create_update(Original::fifo:vm_config(),
+                    Package::fifo:vm_config(),
+                    Config::fifo:vm_config()) -> fifo:config_list().
+
+create_update(Original, Package, Config) ->
+    {ok, Ram} = jsxd:get(<<"ram">>, Package),
+    Base0 = jsxd:thread([{set, [<<"set_internal_metadata">>, <<"package">>],
+                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
+                         {set, <<"cpu_shares">>, Ram},
+                         {set, <<"zfs_io_priority">>, Ram},
+                         {merge, jsxd:select([<<"cpu_cap">>], Package)}],
+                        jsxd:new()),
+    Base1 = case jsxd:get(<<"brand">>, Original) of
+                {ok, <<"kvm">>} ->
+                    Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
+                                 {ok, V} ->
+                                     jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
+                                 _ ->
+                                     Base0
+                             end,
+                    jsxd:thread([{set, <<"ram">>, Ram},
+                                 {set, <<"max_physical_memory">>, Ram + 1024}],
+                                Base01);
+                {ok, <<"joyent">>} ->
+                    jsxd:thread([{set, <<"max_physical_memory">>, Ram},
+                                 {set, <<"quota">>,
+                                  jsxd:get(<<"quota">>, 0, Package)}],
+                                Base0)
+            end,
+    Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
+                               jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
+                           (<<"root_pw">>, V, Obj) ->
+                               jsxd:set([<<"set_customer_metadata">>, <<"root_pw">>], V, Obj);
+                           (<<"resolvers">>, V, Obj) ->
+                               jsxd:set(<<"resolvers">>, V, Obj);
+                           (<<"hostname">>, V, Obj) ->
+                               jsxd:set(<<"hostname">>, V, Obj);
+                           (<<"admin_pw">>, V, Obj) ->
+                               jsxd:set([<<"set_customer_metadata">>, <<"admin_pw">>], V, Obj);
+                           (<<"metadata">>, V, Obj) ->
+                               jsxd:update(<<"set_customer_metadata">>,
+                                           fun(M) ->
+                                                   jsxd:merge(M, V)
+                                           end, V, Obj);
+                           (<<"note">>, V, Obj) ->
+                               jsxd:set([<<"set_internal_metadata">>, <<"note">>], V, Obj);
+                           (_, _, Obj) ->
+                               Obj
+                       end, Base1, Config),
+    lager:debug("Created Update package ~p / ~p / ~p to: ~p.", [Original, Package, Config, Result]),
+    Result.
+
+
+
 -spec ceiling(X::float()) -> integer().
 
 ceiling(X) ->
@@ -182,25 +240,31 @@ ceiling(X) ->
         _ -> T
     end.
 
+
+
+
 -ifdef(TEST).
 
 type_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"alias">>, <<"vm">>}, {<<"hostname">>, <<"host">>}, {<<"uuid">>, <<"zone uuid">>}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"d">>}]),
+    InO = jsxd:from_list([{<<"alias">>, <<"a">>}, {<<"hostname">>, <<"h">>}, {<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {delete, <<"name">>},
                       {set, <<"package">>, <<"p">>},
-                      {set, <<"cpu_shares">>,0}],
+                      {set, <<"cpu_shares">>,0},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+    Res = ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO))),
+    ?assertEqual(In, Res).
 
 disk_driver_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>},
                           {<<"disk_driver">>, <<"virtio">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {delete, <<"name">>},
@@ -209,14 +273,16 @@ disk_driver_test() ->
                          {<<"image_uuid">>, <<"datasetuuid">>},
                          {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
-                      {set, <<"cpu_shares">>,0}],
+                      {set, <<"cpu_shares">>,0},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 created_at_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {delete, <<"name">>},
@@ -226,7 +292,9 @@ created_at_test() ->
                          {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"created_at">>, 123},
-                      {set, <<"cpu_shares">>, 0}],
+                      {set, <<"cpu_shares">>, 0},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      InO),
     VMData = jsxd:set(<<"created_at">>,
                       123,
@@ -235,10 +303,10 @@ created_at_test() ->
 
 
 nic_driver_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>},
                           {<<"nic_driver">>, <<"virtio">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {delete, <<"name">>},
@@ -247,28 +315,32 @@ nic_driver_test() ->
                          {<<"image_uuid">>, <<"datasetuuid">>},
                          {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
-                      {set, <<"cpu_shares">>,0}],
+                      {set, <<"cpu_shares">>,0},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 zone_ram_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10},{<<"ram">>, 1024}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10},{<<"ram">>, 1024}]),
     InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {delete, <<"name">>},
                       {set, <<"package">>, <<"p">>},
-                      {set, <<"cpu_shares">>,1024}],
+                      {set, <<"cpu_shares">>,1024},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 1024}],
                      InO),
     VMData = to_vmadm(InP, InD, InO),
     VMData1 = jsxd:set(<<"max_physical_memory">>, 1024*1024*1024, VMData),
     ?assertEqual(In, ordsets:from_list(to_sniffle(VMData1))).
 
 kvm_ram_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {delete, <<"name">>},
@@ -277,14 +349,16 @@ kvm_ram_test() ->
                          {<<"image_uuid">>, <<"datasetuuid">>},
                          {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
-                      {set, <<"cpu_shares">>,1024}],
+                      {set, <<"cpu_shares">>,1024},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 1024}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 kvm_cpu_cap1_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 100}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 100}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
@@ -294,14 +368,16 @@ kvm_cpu_cap1_test() ->
                          {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024},
-                      {set, <<"vcpus">>, 1}],
+                      {set, <<"vcpus">>, 1},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 1024}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 kvm_cpu_cap14_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 140}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 140}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
@@ -311,14 +387,16 @@ kvm_cpu_cap14_test() ->
                          {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024},
-                      {set, <<"vcpus">>, 2}],
+                      {set, <<"vcpus">>, 2},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 1024}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 kvm_cpu_cap15_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 150}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 150}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
@@ -328,14 +406,16 @@ kvm_cpu_cap15_test() ->
                          {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024},
-                      {set, <<"vcpus">>, 2}],
+                      {set, <<"vcpus">>, 2},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 1024}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 kvm_cpu_cap2_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 200}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 200}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
@@ -345,14 +425,16 @@ kvm_cpu_cap2_test() ->
                          {<<"size">>, 10240}]]},
                       {set, <<"package">>, <<"p">>},
                       {set, <<"cpu_shares">>,1024},
-                      {set, <<"vcpus">>, 2}],
+                      {set, <<"vcpus">>, 2},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 1024}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 kvm_cpu_cap21_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 210}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}, {<<"cpu_cap">>, 210}]),
     InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP}, {merge, InD},
                       {delete, <<"name">>},
                       {set, <<"package">>, <<"p">>},
@@ -362,27 +444,31 @@ kvm_cpu_cap21_test() ->
                          {<<"image_uuid">>, <<"datasetuuid">>},
                          {<<"size">>, 10240}]]},
                       {set, <<"cpu_shares">>,1024},
-                      {set, <<"vcpus">>, 3}],
+                      {set, <<"vcpus">>, 3},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 1024}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 
 resolver_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}, {<<"resolvers">>, [<<"8.8.8.8">>]}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}, {<<"resolvers">>, [<<"8.8.8.8">>]}]),
     In = jsxd:thread([{merge, InP},
                       {delete, <<"name">>},
                       {set, <<"package">>, <<"p">>},
                       {merge, InD},
-                      {set, <<"cpu_shares">>,0}],
+                      {set, <<"cpu_shares">>,0},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 ssh_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>},
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
                           {<<"ssh_keys">>,
                            <<"ssh-rsa">>}]),
     In = jsxd:thread([{merge, InP},
@@ -390,14 +476,16 @@ ssh_test() ->
                       {set, <<"package">>, <<"p">>},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {merge, InD},
-                      {set, <<"cpu_shares">>,0}],
+                      {set, <<"cpu_shares">>,0},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 passwd_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>},
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
                           {<<"admin_pw">>, <<"admin">>},
                           {<<"root_pw">>, <<"root">>}]),
     In = jsxd:thread([{merge, InP},
@@ -405,14 +493,16 @@ passwd_test() ->
                       {set, <<"package">>, <<"p">>},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {merge, InD},
-                      {set, <<"cpu_shares">>,0}],
+                      {set, <<"cpu_shares">>,0},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 metadata_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>},
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
                           {<<"admin_pw">>, <<"admin">>},
                           {<<"metadata">>, [{<<"key">>, <<"value">>}]}]),
     In = jsxd:thread([{merge, InP},
@@ -420,21 +510,25 @@ metadata_test() ->
                       {set, <<"package">>, <<"p">>},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {merge, InD},
-                      {set, <<"cpu_shares">>, 0}],
+                      {set, <<"cpu_shares">>, 0},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      InO),
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 nics_test() ->
-    InP = jsxd:from_list([{<<"name">>, <<"p">>}, {<<"quota">>, 10},{<<"ram">>, 0}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10},{<<"ram">>, 0}]),
     InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>},
                           {<<"networks">>, [[{<<"ip">>, <<"127.0.0.1">>},
                                              {<<"nic_tag">>, <<"admin">>}]]}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"zone uuid">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = jsxd:thread([{merge, InP},
                       {delete, <<"name">>},
                       {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"4.4.4.4">>]},
                       {set, <<"package">>, <<"p">>},
-                      {merge, InO}],
+                      {merge, InO},
+                      {set, <<"uuid">>, <<"z">>},
+                      {set, <<"zfs_io_priority">>, 0}],
                      jsxd:from_list([{<<"cpu_shares">>, 0},
                                      {<<"type">>, <<"zone">>}, {<<"dataset">>, <<"datasetuuid">>},
                                      {<<"networks">>, [[{<<"ip">>, <<"127.0.0.1">>},

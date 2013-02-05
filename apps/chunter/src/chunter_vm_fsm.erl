@@ -26,7 +26,7 @@
          delete/1,
          remove/1,
          transition/2,
-         update/2,
+         update/3,
          snapshot/2,
          delete_snapshot/2,
          rollback_snapshot/2,
@@ -67,8 +67,8 @@ create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
     start_link(UUID),
     gen_fsm:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
 
-update(UUID, Data) ->
-    gen_fsm:send_all_state_event({global, {vm, UUID}}, {update, Data}).
+update(UUID, Package, Config) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, {update, Package, Config}).
 
 -spec load(UUID::fifo:uuid()) -> ok.
 
@@ -335,9 +335,25 @@ handle_event(register, StateName, State) ->
             {next_state, StateName, State1}
     end;
 
-handle_event({update, Data}, _StateName, State) ->
-    spawn(chunter_vmadm, update, [Data, State#state.uuid]),
-    {stop, normal, State};
+handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) ->
+    case load_vm(UUID) of
+        {error, not_found} ->
+            {stop, not_found, State};
+        VMData ->
+            Update = chunter_spec:create_update(VMData, Package, Config),
+            chunter_vmadm:update(UUID, Update),
+            case load_vm(UUID) of
+                {error, not_found} ->
+                    {stop, not_found, State};
+                VMData1 ->
+                    SniffleData = chunter_spec:to_sniffle(VMData1),
+                    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
+                    libhowl:send(UUID, [{<<"event">>, <<"update">>},
+                                        {<<"data">>,
+                                         [{<<"config">>, SniffleData}]}]),
+                    {next_state, StateName, State}
+            end
+    end;
 
 handle_event(remove, _StateName, State) ->
     libsniffle:vm_unregister(State#state.uuid),

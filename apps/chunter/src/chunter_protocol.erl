@@ -60,16 +60,17 @@ handle_info({_OK, Socket, BinData}, State = #state{
             {noreply, State#state{state = Handle,
                                   type = dtrace}};
         {console, UUID} ->
+            lager:debug("Console: ~p.", [UUID]),
             chunter_vm_fsm:console_link(UUID, self()),
             {noreply, State#state{state = UUID,
                                   type = console}};
         ping ->
+            lager:debug("Ping.", []),
             Transport:send(Socket, term_to_binary(pong)),
             ok = Transport:close(Socket),
             {stop, normal, State};
         Data ->
-            lager:info("Default message: ~p.", [Data]),
-
+            lager:debug("Default message: ~p.", [Data]),
             case handle_message(Data, undefined) of
                 {stop, Reply, _} ->
                     Transport:send(Socket, term_to_binary({reply, Reply})),

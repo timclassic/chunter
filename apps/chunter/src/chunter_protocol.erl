@@ -48,7 +48,9 @@ handle_info({_OK, Socket, BinData}, State = #state{
                                       type = normal,
                                       transport = Transport,
                                       ok = _OK}) ->
-    case binary_to_term(BinData) of
+    Msg = binary_to_term(BinData),
+    lager:info("Got message: ~p~n.", [Msg]),
+    case  Msg of
         {dtrace, Script} ->
             lager:debug("Compiling DTrace script: ~p", [Script]),
             {ok, Handle} = erltrace:open(),
@@ -156,7 +158,6 @@ handle_message({machines, create, UUID, PSpec, DSpec, Config}, State) when is_bi
 
 handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
     chunter_vm_fsm:delete(UUID),
-
     {stop, State};
 
 handle_message(Oops, State) ->

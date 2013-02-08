@@ -49,7 +49,7 @@ handle_info({_OK, Socket, BinData}, State = #state{
                                       transport = Transport,
                                       ok = _OK}) ->
     Msg = binary_to_term(BinData),
-    lager:info("Got message: ~p~n.", [Msg]),
+    lager:info("Got binary message: ~p.", [Msg]),
     case Msg of
         {dtrace, Script} ->
             lager:debug("Compiling DTrace script: ~p.", [Script]),

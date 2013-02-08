@@ -50,9 +50,11 @@ handle_info({_OK, Socket, BinData}, State = #state{
                                       ok = _OK}) ->
     case binary_to_term(BinData) of
         {dtrace, Script} ->
+            lager:debug("Compiling DTrace script: ~p", [Script]),
             {ok, Handle} = erltrace:open(),
             ok = erltrace:compile(Handle, Script),
             ok = erltrace:go(Handle),
+            lager:debug("DTrace running.", [Script]),
             {noreply, State#state{state = Handle,
                                   type = dtrace}};
         {console, UUID} ->
@@ -92,6 +94,7 @@ handle_info({_OK, Socket, BinData},  State = #state{
                       consume ->
                           erltrace:consume(Handle)
                   end,
+            lager:debug("Reading from Dtrace(~p): ~p", [Act, Res]),
             Transport:send(Socket, term_to_binary(Res))
     end,
     {noreply, State};

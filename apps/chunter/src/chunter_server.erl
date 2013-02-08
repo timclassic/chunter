@@ -32,6 +32,7 @@
 
 -record(state, {name,
                 port,
+                sysinfo,
                 connected = false,
                 datasets = [],
                 capabilities = [],
@@ -98,13 +99,22 @@ init([]) ->
               chunter_vm_fsm:load(UUID)
       end, 0, list_vms()),
 
+    SysInfo = jsx:decode(list_to_binary(os:cmd("sysinfo"))),
+
+
     Capabilities = case os:cmd("ls /dev/kvm") of
                        "/dev/kvm\n" ->
                            [<<"zone">>, <<"kvm">>];
                        _ ->
                            [<<"zone">>]
                    end,
+
+    libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, SysInfo},
+                                     {<<"version">>, ?VERSION},
+                                     {<<"virtualisation">>, Capabilities}]),
+
     {ok, #state{
+       sysinfo = SysInfo,
        name = Host,
        datasets = DS,
        capabilities = Capabilities
@@ -181,7 +191,8 @@ handle_cast(connect, #state{name = Host,
     IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
 
     libsniffle:hypervisor_register(Host, IPStr, 4200),
-    libsniffle:hypervisor_set(Host, [{<<"version">>, ?VERSION},
+    libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, State#state.sysinfo},
+                                     {<<"version">>, ?VERSION},
                                      {<<"networks">>, Networks1},
                                      {<<"resources.free-memory">>, TotalMem - ProvMem},
                                      {<<"etherstubs">>, Etherstub1},

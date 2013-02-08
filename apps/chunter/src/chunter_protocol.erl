@@ -52,7 +52,7 @@ handle_info({_OK, Socket, BinData}, State = #state{
     lager:info("Got binary message: ~p.", [Msg]),
     case Msg of
         {dtrace, Script} ->
-            lager:debug("Compiling DTrace script: ~p.", [Script]),
+            lager:info("Compiling DTrace script: ~p.", [Script]),
             {ok, Handle} = erltrace:open(),
             ok = erltrace:compile(Handle, Script),
             ok = erltrace:go(Handle),
@@ -60,17 +60,17 @@ handle_info({_OK, Socket, BinData}, State = #state{
             {noreply, State#state{state = Handle,
                                   type = dtrace}};
         {console, UUID} ->
-            lager:debug("Console: ~p.", [UUID]),
+            lager:info("Console: ~p.", [UUID]),
             chunter_vm_fsm:console_link(UUID, self()),
             {noreply, State#state{state = UUID,
                                   type = console}};
         ping ->
-            lager:debug("Ping.", []),
+            lager:info("Ping."),
             Transport:send(Socket, term_to_binary(pong)),
             ok = Transport:close(Socket),
             {stop, normal, State};
         Data ->
-            lager:debug("Default message: ~p.", [Data]),
+            lager:info("Default message: ~p.", [Data]),
             case handle_message(Data, undefined) of
                 {stop, Reply, _} ->
                     Transport:send(Socket, term_to_binary({reply, Reply})),

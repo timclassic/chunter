@@ -82,23 +82,25 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                        ok = _OK}) ->
     case binary_to_term(BinData) of
         walk ->
-            case erltrace:walk(Handle) of
-                {ok, R} ->
-                    Transport:send(Socket, term_to_binary({ok, R}));
-                ok ->
-                    Transport:send(Socket, term_to_binary({ok, []}));
-                E ->
-                    Transport:send(Socket, term_to_binary({error, E}))
-            end;
+            Res = case erltrace:walk(Handle) of
+                      {ok, R} ->
+                          {ok, R};
+                      ok ->
+                          {ok, []};
+                      E ->
+                          {error, E}
+                  end,
+            Transport:send(Socket, term_to_binary(Res));
         consume ->
-            case erltrace:consume(Handle) of
-                {ok, R} ->
-                    Transport:send(Socket, term_to_binary({ok, R}));
-                ok ->
-                    Transport:send(Socket, term_to_binary({ok, []}));
-                E ->
-                    Transport:send(Socket, term_to_binary({error, E}))
-            end;
+            Res = case erltrace:consume(Handle) of
+                      {ok, R} ->
+                          {ok, R};
+                      ok ->
+                          {ok, []};
+                      E ->
+                          {error, E}
+                  end,
+            Transport:send(Socket, term_to_binary(Res));
         stop ->
             erltrace:stop(Handle);
         go ->

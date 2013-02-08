@@ -50,9 +50,9 @@ handle_info({_OK, Socket, BinData}, State = #state{
                                       ok = _OK}) ->
     Msg = binary_to_term(BinData),
     lager:info("Got message: ~p~n.", [Msg]),
-    case  Msg of
+    case Msg of
         {dtrace, Script} ->
-            lager:debug("Compiling DTrace script: ~p", [Script]),
+            lager:debug("Compiling DTrace script: ~p.", [Script]),
             {ok, Handle} = erltrace:open(),
             ok = erltrace:compile(Handle, Script),
             ok = erltrace:go(Handle),
@@ -68,6 +68,8 @@ handle_info({_OK, Socket, BinData}, State = #state{
             ok = Transport:close(Socket),
             {stop, normal, State};
         Data ->
+            lager:info("Default message: ~p.", [Data]),
+
             case handle_message(Data, undefined) of
                 {stop, Reply, _} ->
                     Transport:send(Socket, term_to_binary({reply, Reply})),

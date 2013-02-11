@@ -229,6 +229,8 @@ create_update(Original, Package, Config) ->
                                jsxd:set(<<"resolvers">>, V, Obj);
                            (<<"hostname">>, V, Obj) ->
                                jsxd:set(<<"hostname">>, V, Obj);
+                           (<<"alias">>, V, Obj) ->
+                               jsxd:set(<<"alias">>, V, Obj);
                            (<<"admin_pw">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"admin_pw">>], V, Obj);
                            (<<"metadata">>, V, Obj) ->

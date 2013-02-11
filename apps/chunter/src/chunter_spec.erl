@@ -188,39 +188,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                     Package::fifo:vm_config(),
                     Config::fifo:vm_config()) -> fifo:config_list().
 
-create_update(Original, Package, Config) ->
-    {ok, Ram} = jsxd:get(<<"ram">>, Package),
-    RamPerc = case string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")) of
-                  {TotalMem, _} when is_number(TotalMem),
-                                     TotalMem =/= 0 ->
-                      io:format("~p~n", [TotalMem]),
-                      Ram/TotalMem;
-                  _ ->
-                      0
-              end,
-    Base0 = jsxd:thread([{set, [<<"set_internal_metadata">>, <<"package">>],
-                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
-                         {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, round((1024*RamPerc)), Package)},
-                         {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, round((2048*RamPerc)), Package)},
-                         {merge, jsxd:select([<<"cpu_cap">>], Package)}],
-                        jsxd:new()),
-    Base1 = case jsxd:get(<<"brand">>, Original) of
-                {ok, <<"kvm">>} ->
-                    Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
-                                 {ok, V} ->
-                                     jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
-                                 _ ->
-                                     Base0
-                             end,
-                    jsxd:thread([{set, <<"ram">>, Ram},
-                                 {set, <<"max_physical_memory">>, Ram + 1024}],
-                                Base01);
-                {ok, <<"joyent">>} ->
-                    jsxd:thread([{set, <<"max_physical_memory">>, Ram},
-                                 {set, <<"quota">>,
-                                  jsxd:get(<<"quota">>, 0, Package)}],
-                                Base0)
-            end,
+create_update(_, [], Config) ->
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
                            (<<"root_pw">>, V, Obj) ->
@@ -242,11 +210,45 @@ create_update(Original, Package, Config) ->
                                jsxd:set([<<"set_internal_metadata">>, <<"note">>], V, Obj);
                            (_, _, Obj) ->
                                Obj
-                       end, Base1, Config),
+                       end, jsxd:new(), Config),
+    Result;
+
+create_update(Original, Package, Config) ->
+    Base = create_update(Original, [], Config),
+    {ok, Ram} = jsxd:get(<<"ram">>, Package),
+    RamPerc = case string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")) of
+                  {TotalMem, _} when is_number(TotalMem),
+                                     TotalMem =/= 0 ->
+                      io:format("~p~n", [TotalMem]),
+                      Ram/TotalMem;
+                  _ ->
+                      0
+              end,
+    Base0 = jsxd:thread([{set, [<<"set_internal_metadata">>, <<"package">>],
+                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
+                         {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, round((1024*RamPerc)), Package)},
+                         {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, round((2048*RamPerc)), Package)},
+                         {merge, jsxd:select([<<"cpu_cap">>], Package)}],
+                        Base),
+    Result = case jsxd:get(<<"brand">>, Original) of
+                 {ok, <<"kvm">>} ->
+                     Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
+                                  {ok, V} ->
+                                      jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
+                                  _ ->
+                                      Base0
+                              end,
+                     jsxd:thread([{set, <<"ram">>, Ram},
+                                  {set, <<"max_physical_memory">>, Ram + 1024}],
+                                 Base01);
+                 {ok, <<"joyent">>} ->
+                     jsxd:thread([{set, <<"max_physical_memory">>, Ram},
+                                  {set, <<"quota">>,
+                                   jsxd:get(<<"quota">>, 0, Package)}],
+                                 Base0)
+             end,
     lager:debug("Created Update package ~p / ~p / ~p to: ~p.", [Original, Package, Config, Result]),
     Result.
-
-
 
 -spec ceiling(X::float()) -> integer().
 

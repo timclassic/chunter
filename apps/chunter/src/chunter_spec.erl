@@ -131,19 +131,24 @@ generate_spec(Package, Dataset, OwnerData) ->
                                  _ ->
                                      Base0
                              end,
-                    jsxd:thread([{set, <<"ram">>, Ram},
-                                 {set, <<"brand">>, <<"kvm">>},
-                                 {set, <<"max_physical_memory">>, Ram + 1024},
-                                 {set, [<<"disks">>, 0, <<"boot">>], true},
-                                 {set, [<<"disks">>, 0, <<"image_size">>],
-                                  jsxd:get(<<"image_size">>, 0, Dataset)},
-                                 {set, [<<"disks">>, 0, <<"image_uuid">>],
-                                  jsxd:get(<<"dataset">>, <<"">>, Dataset)},
-
-                                 {set, [<<"disks">>, 1, <<"boot">>], false},
-                                 {set, [<<"disks">>, 1, <<"size">>],
-                                  jsxd:get(<<"quota">>, 0, Package) * 1024}],
-                                Base01);
+                    Base02 = jsxd:thread([{set, <<"ram">>, Ram},
+                                          {set, <<"brand">>, <<"kvm">>},
+                                          {set, <<"max_physical_memory">>, Ram + 1024},
+                                          {set, [<<"disks">>, 0, <<"boot">>], true},
+                                          {set, [<<"disks">>, 0, <<"image_size">>],
+                                           jsxd:get(<<"image_size">>, 0, Dataset)},
+                                          {set, [<<"disks">>, 0, <<"image_uuid">>],
+                                           jsxd:get(<<"dataset">>, <<"">>, Dataset)}],
+                                         Base01),
+                    case jsxd:get(<<"quota">>, 0, Package) of
+                        0 ->
+                            Base02;
+                        Q ->
+                            jsxd:thread([{set, [<<"disks">>, 1, <<"boot">>], false},
+                                         {set, [<<"disks">>, 1, <<"size">>],
+                                          Q * 1024}],
+                                        Base02)
+                    end;
                 {ok, <<"zone">>} ->
                     jsxd:thread([{set, <<"max_physical_memory">>, Ram},
                                  {set, <<"brand">>, <<"joyent">>},

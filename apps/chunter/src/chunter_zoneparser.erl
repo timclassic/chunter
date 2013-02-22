@@ -244,7 +244,7 @@ create_nic([T|R]) ->
     [T|create_nic(R)].
 
 ?DISK_RENAME(<<"match">>, <<"path">>);
-?DISK_RENAME_BOOL(<<"boot">>, <<"bool">>);
+?DISK_RENAME_BOOL(<<"boot">>, <<"boot">>);
 ?DISK_RENAME(<<"image-uuid">>, <<"image_uuid">>);
 ?DISK_RENAME(<<"image-name">>, <<"image_name">>);
 

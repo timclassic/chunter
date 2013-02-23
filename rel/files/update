@@ -1,0 +1,18 @@
+#!/bin/bash
+BRANCH=rel
+BASE=http://release.project-fifo.net/chunter/${BRANCH}
+curl -s ${BASE}/chunter.version > /tmp/chunter.version
+if diff /tmp/chunter.version etc/chunter.version > /dev/null
+then
+    echo "No update available."
+else
+    (
+        cd /opt;
+        curl -O ${BASE}/chunter-latest.gz &&
+        gunzip -f chunter-latest.gz &&
+        sh chunter-latest &&
+        svcadm restart chunter &&
+        echo "Chunter was updated updated" ||
+        echo "Chunter update failed, sorry you've to look into that."
+    )
+fi

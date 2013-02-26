@@ -12,8 +12,11 @@
 
 -record(state, {socket,
                 transport,
-                ok, error, closed,
-                uuid = undefined}).
+                ok,
+                error,
+                closed,
+                type = normal,
+                state = undefined}).
 
 start_link(ListenerPid, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [[ListenerPid, Socket, Transport, Opts]]).
@@ -37,23 +40,37 @@ handle_info({data,Data}, State = #state{socket = Socket,
     {noreply, State};
 
 handle_info({_Closed, _Socket}, State = #state{
-                                  uuid = undefined,
+                                  type = mornal,
                                   closed = _Closed}) ->
     {stop, normal, State};
 
 handle_info({_OK, Socket, BinData}, State = #state{
-                                      uuid = undefined,
+                                      type = normal,
                                       transport = Transport,
                                       ok = _OK}) ->
-    case binary_to_term(BinData) of
+    Msg = binary_to_term(BinData),
+    lager:info("Got binary message: ~p.", [Msg]),
+    case Msg of
+        {dtrace, Script} ->
+            lager:info("Compiling DTrace script: ~p.", [Script]),
+            {ok, Handle} = erltrace:open(),
+            ok = erltrace:compile(Handle, Script),
+            ok = erltrace:go(Handle),
+            lager:debug("DTrace running.", [Script]),
+            {noreply, State#state{state = Handle,
+                                  type = dtrace}};
         {console, UUID} ->
+            lager:info("Console: ~p.", [UUID]),
             chunter_vm_fsm:console_link(UUID, self()),
-            {noreply, State#state{uuid = UUID}};
+            {noreply, State#state{state = UUID,
+                                  type = console}};
         ping ->
+            lager:info("Ping."),
             Transport:send(Socket, term_to_binary(pong)),
             ok = Transport:close(Socket),
             {stop, normal, State};
         Data ->
+            lager:info("Default message: ~p.", [Data]),
             case handle_message(Data, undefined) of
                 {stop, Reply, _} ->
                     Transport:send(Socket, term_to_binary({reply, Reply})),
@@ -65,11 +82,36 @@ handle_info({_OK, Socket, BinData}, State = #state{
             end
     end;
 
-handle_info({_OK, _S, Data}, State = #state{uuid=UUID, ok = _OK}) ->
+handle_info({_OK, Socket, BinData},  State = #state{
+                                       state = Handle,
+                                       type = dtrace,
+                                       transport = Transport,
+                                       ok = _OK}) ->
+    case binary_to_term(BinData) of
+        stop ->
+            erltrace:stop(Handle);
+        go ->
+            erltrace:go(Handle);
+        Act ->
+            Res = case Act of
+                      walk ->
+                          erltrace:walk(Handle);
+                      consume ->
+                          erltrace:consume(Handle)
+                  end,
+            lager:debug("Reading from Dtrace(~p): ~p", [Act, Res]),
+            Transport:send(Socket, term_to_binary(Res))
+    end,
+    {noreply, State};
+
+handle_info({_OK, _S, Data}, State = #state{
+                               type = console,
+                               state = UUID,
+                               ok = _OK}) ->
     chunter_vm_fsm:console_send(UUID, Data),
     {noreply, State};
 
-handle_info({tcp_closed, _}, State) ->
+handle_info({_Closed, _}, State = #state{ closed = _Closed}) ->
     {stop, normal, State};
 
 handle_info(_Info, State) ->
@@ -119,7 +161,6 @@ handle_message({machines, create, UUID, PSpec, DSpec, Config}, State) when is_bi
 
 handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
     chunter_vm_fsm:delete(UUID),
-
     {stop, State};
 
 handle_message(Oops, State) ->

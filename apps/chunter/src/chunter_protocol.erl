@@ -105,6 +105,8 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                    end),
             {Time1, Res1} = timer:tc(fun () ->
                                              case Fn of
+                                                 llquantize ->
+                                                     llquantize(Res);
                                                  identity ->
                                                      Res
                                              end
@@ -189,3 +191,19 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+
+llquantize(Data) ->
+    lists:foldr(fun ({_, Path, Vals}, Obj) ->
+                        BPath = lists:map(fun(L) when is_list(L) ->
+                                                  list_to_binary(L);
+                                             (B) when is_binary(B) ->
+                                                  B;
+                                             (N) when is_number(N) ->
+                                                  list_to_binary(integer_to_list(N))
+                                          end, Path),
+                        lists:foldr(fun({{Start, End}, Value}, Obj1) ->
+                                            B = list_to_binary(io_lib:format("~p-~p", [Start, End])),
+                                            jsxd:set(BPath ++ [B], Value, Obj1)
+                                    end, Obj, Vals)
+                end, [], Data).

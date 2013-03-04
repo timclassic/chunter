@@ -25,7 +25,7 @@ init([ListenerPid, Socket, Transport, _Opts]) ->
     ok = proc_lib:init_ack({ok, self()}),
     %% Perform any required state initialization here.
     ok = ranch:accept_ack(ListenerPid),
-    ok = Transport:setopts(Socket, [{active, true}, {packet,4}]),
+    ok = Transport:setopts(Socket, [{active, true}, {packet,4}, {nodelay, true}]),
     {OK, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #state{
                                      ok = OK,

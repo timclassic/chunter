@@ -104,7 +104,8 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                            end
                                    end),
             {Time1, Res1} = timer:tc(fun() ->
-                                             Fn(Res)
+                                             %Fn(Res)
+                                             Res
                                      end),
             Now = now(),
             Transport:send(Socket, term_to_binary(Res1)),

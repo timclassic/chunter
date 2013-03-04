@@ -101,7 +101,7 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                                    erltrace:consume(Handle)
                                            end
                                    end),
-            lager:info("Dtrace ~p took ~fms.", [Act, Time]),
+            lager:info("Dtrace ~p took ~.3fms.", [Act, Time]),
             Transport:send(Socket, term_to_binary(Res))
     end,
     {noreply, State};

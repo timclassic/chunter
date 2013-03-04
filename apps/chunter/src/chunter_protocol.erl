@@ -104,7 +104,7 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                    end),
             Now = now(),
             Transport:send(Socket, term_to_binary(Res)),
-            lager:info("<~p> Dtrace ~p  took ~.3fms + ~p.", [Ref, Act, Time/1000, timer:now_diff(now(), Now)]),
+            lager:info("<~p> Dtrace ~p  took ~.3fms + ~pms.", [Ref, Act, Time/1000, timer:now_diff(now(), Now)]),
     end,
     {noreply, State};
 

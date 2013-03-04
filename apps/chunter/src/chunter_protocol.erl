@@ -92,7 +92,7 @@ handle_info({_OK, Socket, BinData},  State = #state{
             erltrace:stop(Handle);
         go ->
             erltrace:go(Handle);
-        {Act, Fn, Ref} ->
+        {Act, Ref, Fn} ->
             lager:info("<~p> Starting ~p.", [Ref, Act]),
             Transport:send(Socket, term_to_binary({ok, Ref})),
             {Time, Res} = timer:tc(fun() ->

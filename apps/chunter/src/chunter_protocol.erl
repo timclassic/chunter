@@ -25,7 +25,7 @@ init([ListenerPid, Socket, Transport, _Opts]) ->
     ok = proc_lib:init_ack({ok, self()}),
     %% Perform any required state initialization here.
     ok = ranch:accept_ack(ListenerPid),
-    ok = Transport:setopts(Socket, [{active, true}, {packet,4}]),
+    ok = Transport:setopts(Socket, [{active, true}, {packet,4}, {nodelay, true}]),
     {OK, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #state{
                                      ok = OK,
@@ -104,7 +104,7 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                    end),
             Now = now(),
             Transport:send(Socket, term_to_binary(Res)),
-            lager:info("<~p> Dtrace ~p  took ~.3fms + ~pms.", [Ref, Act, Time/1000, timer:now_diff(now(), Now)])
+            lager:info("<~p> Dtrace ~p  took ~pus + ~pus.", [Ref, Act, Time, timer:now_diff(now(), Now)])
     end,
     {noreply, State};
 

@@ -104,11 +104,16 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                            end
                                    end),
             {Time1, Res1} = timer:tc(fun () ->
-                                             case Fn of
-                                                 llquantize ->
-                                                     llquantize(Res);
-                                                 identity ->
-                                                     Res
+                                             case Res of
+                                                 {ok, D} ->
+                                                     case Fn of
+                                                         llquantize ->
+                                                             {ok, llquantize(D)};
+                                                         identity ->
+                                                             {ok, D}
+                                                     end;
+                                                 D ->
+                                                     D
                                              end
                                      end),
             Now = now(),

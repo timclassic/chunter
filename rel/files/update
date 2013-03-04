@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH=rel
+BRANCH=dev
 BASE=http://release.project-fifo.net/chunter/${BRANCH}
 curl -s ${BASE}/chunter.version > /tmp/chunter.version
 if diff /tmp/chunter.version etc/chunter.version > /dev/null

@@ -92,7 +92,7 @@ handle_info({_OK, Socket, BinData},  State = #state{
             erltrace:stop(Handle);
         go ->
             erltrace:go(Handle);
-        {Act, Ref, _Fn} ->
+        {Act, Ref, Fn} ->
             lager:info("<~p> Starting ~p.", [Ref, Act]),
             Transport:send(Socket, term_to_binary({ok, Ref})),
             {Time, Res} = timer:tc(fun() ->
@@ -103,10 +103,13 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                                    erltrace:consume(Handle)
                                            end
                                    end),
-            {Time1, Res1} = timer:tc(fun() ->
-                                                %Fn(Res)
-                                             Res
-                                     end),
+            cas
+                {Time1, Res1} = timer:tc(fun () ->
+                                                 case Fn of 
+                                                     identity ->
+                                                         Res
+                                                 end
+                                         end),
             Now = now(),
             Transport:send(Socket, term_to_binary(Res1)),
             lager:info("<~p> Dtrace ~p  took ~pus + ~pus + ~pus.", [Ref, Act, Time, Time1, timer:now_diff(now(), Now)])

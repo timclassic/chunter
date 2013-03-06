@@ -521,9 +521,10 @@ write_image(Port, UUID, [Idx|R]) ->
     write_image(Port, UUID, R);
 
 write_image(Port, _UUID, []) ->
-    lager:debug("<IMG> done", []),
+    lager:debug("<IMG> done going to wait 5s.", []),
     port_close(Port),
-    timer:sleep(1000).
+    timer:sleep(5000),
+    lager:debug("<IMG> done waiting.", []).
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
                                        Name::binary(),

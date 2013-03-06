@@ -445,7 +445,8 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
-handle_info(_Info, StateName, State) ->
+handle_info(Info, StateName, State) ->
+    lager:warning("unknown data: ~p", [Info]),
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------

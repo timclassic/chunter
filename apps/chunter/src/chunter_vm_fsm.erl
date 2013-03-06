@@ -507,6 +507,7 @@ install_image(DatasetUUID) ->
 
 
 write_image(Port, UUID, [Idx|R]) ->
+    lager:debug("<IMG> ~s[~p]", [UUID, Idx]),
     {ok, B} = libsniffle:img_get(UUID, Idx),
     port_command(Port, B),
     write_image(Port, UUID, R);

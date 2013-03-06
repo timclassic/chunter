@@ -494,14 +494,20 @@ init_console(State) ->
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 
 install_image(DatasetUUID) ->
-    case filelib:is_dir(filename:join(<<"/zones">>, DatasetUUID)) of
+    lager:debug("Installing dataset ~s.", [DatasetUUID]),
+    Path = filename:join(<<"/zones">>, DatasetUUID),
+    lager:debug("Checking path ~s.", [Path]),
+    case filelib:is_dir(Path) of
         true ->
+            lager:debug("found.", []),
             ok;
         false ->
             Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.sh",
+            lager:debug("not found going to run: ~s.", [Cmd]),
             Port = open_port({spawn, Cmd}, [use_stdio, binary, stderr_to_stdout, exit_status]),
             {ok, Parts} = libsniffle:img_list(DatasetUUID),
             Parts1 = lists:sort(Parts),
+            lager:debug("We have the following parts: ~p.", [Parts1]),
             write_image(Port, DatasetUUID, Parts1)
     end.
 
@@ -513,6 +519,7 @@ write_image(Port, UUID, [Idx|R]) ->
     write_image(Port, UUID, R);
 
 write_image(Port, _UUID, []) ->
+    lager:debug("<IMG> done", []),
     port_close(Port).
 
 

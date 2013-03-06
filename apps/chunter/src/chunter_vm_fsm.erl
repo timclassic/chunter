@@ -358,7 +358,7 @@ handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) 
     end;
 
 handle_event(remove, _StateName, State) ->
-    libsniffle:vm_unregister(State#state.uuid),
+    libsniffle:vm_delete(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, StateName, State) ->
@@ -445,7 +445,8 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
-handle_info(_Info, StateName, State) ->
+handle_info(Info, StateName, State) ->
+    lager:warning("unknown data: ~p", [Info]),
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -494,14 +495,36 @@ init_console(State) ->
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 
 install_image(DatasetUUID) ->
-    case filelib:is_regular(filename:join(<<"/var/db/imgadm">>, <<DatasetUUID/binary, ".json">>)) of
+    lager:debug("Installing dataset ~s.", [DatasetUUID]),
+    Path = filename:join(<<"/zones">>, DatasetUUID),
+    lager:debug("Checking path ~s.", [Path]),
+    case filelib:is_dir(Path) of
         true ->
+            lager:debug("found.", []),
             ok;
         false ->
-            os:cmd("/usr/sbin/imgadm update"),
-            os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
-
+            Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.sh",
+            lager:debug("not found going to run: ~s.", [Cmd]),
+            Port = open_port({spawn_executable, Cmd},
+                             [{args, [DatasetUUID]}, use_stdio, binary, stderr_to_stdout, exit_status]),
+            {ok, Parts} = libsniffle:img_list(DatasetUUID),
+            Parts1 = lists:sort(Parts),
+            lager:debug("We have the following parts: ~p.", [Parts1]),
+            write_image(Port, DatasetUUID, Parts1)
     end.
+
+
+write_image(Port, UUID, [Idx|R]) ->
+    lager:debug("<IMG> ~s[~p]", [UUID, Idx]),
+    {ok, B} = libsniffle:img_get(UUID, Idx),
+    port_command(Port, B),
+    write_image(Port, UUID, R);
+
+write_image(Port, _UUID, []) ->
+    lager:debug("<IMG> done going to wait 5s.", []),
+    port_close(Port),
+    timer:sleep(5000),
+    lager:debug("<IMG> done waiting.", []).
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
                                        Name::binary(),

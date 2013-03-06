@@ -34,7 +34,6 @@
                 port,
                 sysinfo,
                 connected = false,
-                datasets = [],
                 capabilities = [],
                 total_memory = 0,
                 provisioned_memory = 0}).
@@ -92,7 +91,6 @@ init([]) ->
     libsniffle:hypervisor_register(Host, IPStr, 4200),
     lager:info([{fifi_component, chunter}],
                "chunter:init - Host: ~s", [Host]),
-    {_, DS} = list_datasets([]),
     lists:foldl(
       fun (VM, _) ->
               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
@@ -116,7 +114,6 @@ init([]) ->
     {ok, #state{
        sysinfo = SysInfo,
        name = Host,
-       datasets = DS,
        capabilities = Capabilities
       }}.
 
@@ -159,7 +156,6 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 handle_cast(connect, #state{name = Host,
-                            datasets = Datasets,
                             capabilities = Caps} = State) ->
                                                 %    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
                                                 %    application:set_env(statsderl, hostname, Host),
@@ -171,8 +167,6 @@ handle_cast(connect, #state{name = Host,
                   ",\\s*|\n"),
     Etherstub1 = lists:delete(<<>>, Etherstub),
     VMS = list_vms(),
-    publish_datasets(Datasets),
-    list_datasets(Datasets),
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
                               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
@@ -291,54 +285,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-publish_datasets(Datasets) ->
-    lists:foreach(fun({_, JSON}) ->
-                          publish_dataset(JSON)
-                  end, Datasets).
-
-publish_dataset(JSON) ->
-    Obj = jsxd:from_list(JSON),
-    {ok, ID} = jsxd:get(<<"uuid">>, Obj),
-    libsniffle:dataset_create(ID),
-    Obj1 = jsxd:thread(
-             [{select,[<<"os">>, <<"metadata">>, <<"name">>, <<"version">>,
-                       <<"description">>, <<"disk_driver">>, <<"nic_driver">>,
-                       <<"image_size">>]},
-              {set, <<"dataset">>, ID},
-              {set, <<"networks">>, jsxd:get(<<"requirements.networks">>, [], Obj)}],
-             Obj),
-    Obj2 = case jsxd:get(<<"os">>, JSON) of
-               {ok, <<"smartos">>} ->
-                   jsxd:set(<<"type">>, <<"zone">>, Obj1);
-               {ok, _} ->
-                   jsxd:set(<<"type">>, <<"kvm">>, Obj1)
-           end,
-    libsniffle:dataset_set(ID, Obj2).
-
-list_datasets(Datasets) ->
-    filelib:fold_files("/var/db/imgadm", ".*json", false,
-                       fun ("/var/db/imgadm/imgcache.json", R) ->
-                               R;
-                           (F, {Fs, DsA}) ->
-                               {match, [_UUID]} = re:run(F, "/var/db/imgadm/(.*)\.json",
-                                                         [{capture, all_but_first, binary}]),
-                               {F1, DsA1} = read_dsmanifest(F, DsA),
-                               {[F1| Fs], DsA1}
-                       end, {[], Datasets}).
-
-read_dsmanifest(F, Ds) ->
-    case proplists:get_value(F, Ds) of
-        undefined ->
-            {ok, Data} = file:read_file(F),
-            JSON = jsx:json_to_term(Data),
-            ID = proplists:get_value(<<"uuid">>, JSON),
-            JSON1 = [{<<"id">>, ID}|JSON],
-            publish_dataset(JSON1),
-            {JSON1, [{F, JSON1}|Ds]};
-        JSON ->
-            {JSON, Ds}
-    end.
 
 list_vms() ->
     [chunter_zoneparser:load([{<<"name">>, Name}, {<<"uuid">>, UUID}]) ||

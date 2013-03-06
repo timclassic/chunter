@@ -494,14 +494,26 @@ init_console(State) ->
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 
 install_image(DatasetUUID) ->
-    case filelib:is_regular(filename:join(<<"/var/db/imgadm">>, <<DatasetUUID/binary, ".json">>)) of
+    case filelib:is_dir(filename:join(<<"/zones">>, DatasetUUID)) of
         true ->
             ok;
         false ->
-            os:cmd("/usr/sbin/imgadm update"),
-            os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
-
+            Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.sh",
+            Port = open_port({spawn, Cmd}, [use_stdio, binary, stderr_to_stdout, exit_status]),
+            {ok, Parts} = libsniffle:img_list(DatasetUUID),
+            Parts1 = lists:sort(Parts),
+            write_image(Port, DatasetUUID, Parts1)
     end.
+
+
+write_image(Port, UUID, [Idx|R]) ->
+    {ok, B} = libsniffle:img_get(UUID, Idx),
+    port_command(Port, B),
+    write_image(Port, UUID, R);
+
+write_image(Port, _UUID, []) ->
+    port_close(Port).
+
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
                                        Name::binary(),

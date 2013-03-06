@@ -150,7 +150,6 @@ update(UUID, Data) ->
             chunter_vm_fsm:load(UUID)
     end.
 
-
 %% This function reads the process's input untill it knows that the vm was created or failed.
 -spec wait_for_tex(Port::any()) ->
                           {ok, UUID::fifo:uuid()} |

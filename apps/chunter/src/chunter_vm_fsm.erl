@@ -358,7 +358,7 @@ handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) 
     end;
 
 handle_event(remove, _StateName, State) ->
-    libsniffle:vm_unregister(State#state.uuid),
+    libsniffle:vm_delete(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, StateName, State) ->
@@ -505,7 +505,8 @@ install_image(DatasetUUID) ->
         false ->
             Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.sh",
             lager:debug("not found going to run: ~s.", [Cmd]),
-            Port = open_port({spawn, Cmd}, [{args, [DatasetUUID]}, use_stdio, binary, stderr_to_stdout, exit_status]),
+            Port = open_port({spawn_executable, Cmd},
+                             [{args, [DatasetUUID]}, use_stdio, binary, stderr_to_stdout, exit_status]),
             {ok, Parts} = libsniffle:img_list(DatasetUUID),
             Parts1 = lists:sort(Parts),
             lager:debug("We have the following parts: ~p.", [Parts1]),

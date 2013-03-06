@@ -505,7 +505,7 @@ install_image(DatasetUUID) ->
         false ->
             Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.sh",
             lager:debug("not found going to run: ~s.", [Cmd]),
-            Port = open_port({spawn, Cmd}, [use_stdio, binary, stderr_to_stdout, exit_status]),
+            Port = open_port({spawn, Cmd}, [{args, [DatasetUUID]}, use_stdio, binary, stderr_to_stdout, exit_status]),
             {ok, Parts} = libsniffle:img_list(DatasetUUID),
             Parts1 = lists:sort(Parts),
             lager:debug("We have the following parts: ~p.", [Parts1]),

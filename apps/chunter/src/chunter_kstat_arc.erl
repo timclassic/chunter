@@ -107,7 +107,7 @@ handle_info(tick, State = #state{
                     l2hit = L2HitOld, l2miss = L2MissOld, l2size = L2SizeOld,
                     skipped = Skipped
                    }) ->
-    Values = get_stats("/usr/bin/kstat -p zfs:0:arcstats"),
+    Values = get_stats("/usr/bin/kstat -p zfs:0:arcstats:"),
     {State0, V0} = case lists:keyfind({<<"zfs">>,<<"0">>,<<"arcstats">>,<<"hits">>}, 1, Values) of
                        {_, L1HitOld} when Skipped < 120 -> {State#state{skipped = Skipped+1}, []};
                        {_, L1Hit} -> {State#state{l1hit = L1Hit}, [{<<"resources.l1hits">>, L1Hit}]}

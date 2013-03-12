@@ -164,8 +164,16 @@ handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),
     {stop, State};
 
+handle_message({machines, stop, force, UUID}, State) when is_binary(UUID) ->
+    chunter_vmadm:force_stop(UUID),
+    {stop, State};
+
 handle_message({machines, reboot, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:reboot(UUID),
+    {stop, State};
+
+handle_message({machines, reboot, force, UUID}, State) when is_binary(UUID) ->
+    chunter_vmadm:force_reboot(UUID),
     {stop, State};
 
 handle_message({machines, create, UUID, PSpec, DSpec, Config}, State) when is_binary(UUID),

@@ -17,6 +17,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-ignore_xref([start_link/0]).
+
 -define(SERVER, ?MODULE).
 
 -record(state, {}).
@@ -99,11 +101,11 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({tick, Which}, State) ->
-    Res = lists:fold(fun merge/2, [], eplugin:apply(Which)),
+    Res = lists:foldl(fun merge/2, [], eplugin:apply(Which)),
     Res1 = lists:map(fun ({K, V}) ->
-                             {<<K/binary "-metrics">>, V}
+                             {<<K/binary, "-metrics">>, V}
                      end, Res),
-    lobhowl:send(Res1),
+    libhowl:send(Res1),
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.

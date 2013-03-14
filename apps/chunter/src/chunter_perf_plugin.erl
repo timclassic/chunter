@@ -101,7 +101,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({tick, Which}, State) ->
-    Res = lists:foldl(fun merge/2, [], eplugin:apply(Which)),
+    Res = eplugin:apply(Which),
     Res1 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res),

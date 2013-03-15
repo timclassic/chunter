@@ -11,11 +11,19 @@ mpstat() ->
 
 
 build_obj([Idel, Intr, Kernel, User | R]) ->
-    [[{<<"usr">>, list_to_integer(binary_to_list(User))},
-      {<<"sys">>, list_to_integer(binary_to_list(Kernel))},
-      {<<"int">>, list_to_integer(binary_to_list(Intr))},
-      {<<"idl">>, list_to_integer(binary_to_list(Idel))}]] ++
+    [[{<<"usr">>, to_number(User)},
+      {<<"sys">>, to_number(Kernel)},
+      {<<"int">>, to_number(Intr)},
+      {<<"idl">>, to_number(Idel)}]] ++
         build_obj(R);
 
 build_obj(_) ->
     [].
+
+to_number(N) ->
+    case re:run(N, "\\.") of
+        nomatch ->
+            list_to_integer(binary_to_list(N));
+        _ ->
+            list_to_float(binary_to_list(N))
+    end.

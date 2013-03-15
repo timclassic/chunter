@@ -11,9 +11,9 @@ mpstat() ->
     [{Node,
       [{<<"event">>, <<"mpstat">>},
        {<<"data">>,
-        [ [{<<"usr">>, Usr},
-           {<<"sys">>, Sys},
-           {<<"idl">>, Idl}]
+        [ [{<<"usr">>, list_to_integer(binary_to_list(Usr))},
+           {<<"sys">>, list_to_integer(binary_to_list(Sys))},
+           {<<"idl">>, list_to_integer(binary_to_list(Idl))}]
           ||
             %% CPU minf mjf xcal intr ithr csw icsw migr smtx srw syscl usr  sys  wt idl
             [  _,  _,   _,  _,   _,   _,   _,  _,   _,   _,   _,  _,    Usr, Sys, _, Idl] <-

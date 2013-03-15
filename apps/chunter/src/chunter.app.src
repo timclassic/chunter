@@ -12,9 +12,10 @@
                   erlsom,
                   libsniffle,
                   libsnarl,
-		  libhowl,
-		  fifo_spec,
-		  ranch
+                  libhowl,
+                  fifo_spec,
+                  eplugin,
+                  ranch
                  ]},
   {mod, { chunter_app, []}},
   {env, [{port, 4200}]}

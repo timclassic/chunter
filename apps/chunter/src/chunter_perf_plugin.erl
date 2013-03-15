@@ -101,7 +101,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({tick, Which}, State) ->
-    Res = eplugin:apply(Which),
+    Res = lists:foldl(fun merge/2, [], eplugin:apply(Which)),
     Res1 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res),
@@ -138,3 +138,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+merge(A, B) ->
+    jsxd:merge(fun merge_fn/3, A, B).
+
+merge_fn(_, A, B) when is_list(A), is_list(B) ->
+    jsxd:merge(fun merge_fn/3, A, B);
+
+merge_fn(_, A, B) when is_number(A), is_number(B) ->
+    A + B.

@@ -184,6 +184,7 @@ initialized(load, State) ->
 initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
     {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
+    eplugin:apply('vm:create', [{UUID, VMData}]),
     SniffleData  = chunter_spec:to_sniffle(VMData),
     {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
     SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),

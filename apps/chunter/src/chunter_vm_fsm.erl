@@ -323,7 +323,7 @@ handle_event({force_state, NextState}, StateName, State) ->
 
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
-%%    change_state(State#state.uuid, atom_to_binary(StateName)),
+    %%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(State#state.uuid) of
         {error, not_found} ->
             {stop, not_found, State};
@@ -504,12 +504,25 @@ install_image(DatasetUUID) ->
             lager:debug("found.", []),
             ok;
         false ->
-            Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.sh",
-            lager:debug("not found going to run: ~s.", [Cmd]),
-            Port = open_port({spawn_executable, Cmd},
-                             [{args, [DatasetUUID]}, use_stdio, binary, stderr_to_stdout, exit_status]),
             {ok, Parts} = libsniffle:img_list(DatasetUUID),
-            Parts1 = lists:sort(Parts),
+            [Idx | Parts1] = lists:sort(Parts),
+            {Port, B} = case libsniffle:img_get(DatasetUUID, Idx) of
+                            {ok, <<31:8, 139:8, _/binary>> = AB} ->
+                                Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh",
+                                lager:debug("not found going to run: ~s.", [Cmd]),
+                                APort = open_port({spawn_executable, Cmd},
+                                                 [{args, [DatasetUUID]}, use_stdio, binary,
+                                                  stderr_to_stdout, exit_status]),
+                                {APort, AB};
+                            {ok, <<"BZh", _/binary>> = AB} ->
+                                Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh",
+                                lager:debug("not found going to run: ~s.", [Cmd]),
+                                APort = open_port({spawn_executable, Cmd},
+                                                 [{args, [DatasetUUID]}, use_stdio, binary,
+                                                  stderr_to_stdout, exit_status]),
+                                {APort, AB}
+                        end,
+            port_command(Port, B),
             lager:debug("We have the following parts: ~p.", [Parts1]),
             write_image(Port, DatasetUUID, Parts1)
     end.

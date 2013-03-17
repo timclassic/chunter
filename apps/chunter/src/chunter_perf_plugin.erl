@@ -53,10 +53,11 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    timer:send_interval(1000, {tick, perf_tick_1s}),
-    timer:send_interval(10000, {tick, perf_tick_10s}),
-    timer:send_interval(30000, {tick, perf_tick_30s}),
-    timer:send_interval(60000, {tick, perf_tick_1m}),
+    timer:send_interval(1000, {tick, 'perf:tick:1s'}),
+    timer:send_interval(10000, {tick, 'perf:tick:10s'}),
+    timer:send_interval(30000, {tick, 'perf:tick:30s'}),
+    timer:send_interval(60000, {tick, 'perf:tick:1m'}),
+    eplugin:call('perf:init'),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -101,7 +102,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({tick, Which}, State) ->
-    Res = lists:foldl(fun merge/2, [], eplugin:apply(Which)),
+    Res = lists:foldl(fun merge/2, [], eplugin:call(Which)),
     Res1 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res),

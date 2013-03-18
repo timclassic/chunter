@@ -499,11 +499,11 @@ install_image(DatasetUUID) ->
     lager:debug("Installing dataset ~s.", [DatasetUUID]),
     Path = filename:join(<<"/zones">>, DatasetUUID),
     lager:debug("Checking path ~s.", [Path]),
-    case filelib:is_dir(Path) of
-        true ->
+    case os:cmd("zfs list zones/" ++ binary_to_list(DatasetUUID) ++"; echo $?") of
+        "0\n" ->
             lager:debug("found.", []),
             ok;
-        false ->
+        _ ->
             {ok, Parts} = libsniffle:img_list(DatasetUUID),
             [Idx | Parts1] = lists:sort(Parts),
             {Port, B} = case libsniffle:img_get(DatasetUUID, Idx) of

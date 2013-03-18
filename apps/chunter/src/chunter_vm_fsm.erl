@@ -184,7 +184,7 @@ initialized(load, State) ->
 initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
     {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
-    eplugin:apply('vm:create', [{UUID, VMData}]),
+    eplugin:call('vm:create', UUID, VMData),
     SniffleData  = chunter_spec:to_sniffle(VMData),
     {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
     SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
@@ -499,29 +499,24 @@ install_image(DatasetUUID) ->
     lager:debug("Installing dataset ~s.", [DatasetUUID]),
     Path = filename:join(<<"/zones">>, DatasetUUID),
     lager:debug("Checking path ~s.", [Path]),
-    case os:cmd("zfs list zones/" ++ binary_to_list(DatasetUUID) ++"; echo $?") of
+    case os:cmd("zfs list zones/" ++ binary_to_list(DatasetUUID) ++">/dev/null; echo $?") of
         "0\n" ->
             lager:debug("found.", []),
             ok;
         _ ->
             {ok, Parts} = libsniffle:img_list(DatasetUUID),
             [Idx | Parts1] = lists:sort(Parts),
-            {Port, B} = case libsniffle:img_get(DatasetUUID, Idx) of
-                            {ok, <<31:8, 139:8, _/binary>> = AB} ->
-                                Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh",
-                                lager:debug("not found going to run: ~s.", [Cmd]),
-                                APort = open_port({spawn_executable, Cmd},
-                                                 [{args, [DatasetUUID]}, use_stdio, binary,
-                                                  stderr_to_stdout, exit_status]),
-                                {APort, AB};
-                            {ok, <<"BZh", _/binary>> = AB} ->
-                                Cmd =  code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh",
-                                lager:debug("not found going to run: ~s.", [Cmd]),
-                                APort = open_port({spawn_executable, Cmd},
-                                                 [{args, [DatasetUUID]}, use_stdio, binary,
-                                                  stderr_to_stdout, exit_status]),
-                                {APort, AB}
-                        end,
+            {Cmd, B} = case libsniffle:img_get(DatasetUUID, Idx) of
+                           {ok, <<31:8, 139:8, _/binary>> = AB} ->
+                               {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
+                           {ok, <<"BZh", _/binary>> = AB} ->
+                               {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
+                       end,
+            lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
+            Port = open_port({spawn_executable, Cmd},
+                              [{args, [DatasetUUID]}, use_stdio, binary,
+                               stderr_to_stdout, exit_status]),
+            
             port_command(Port, B),
             lager:debug("We have the following parts: ~p.", [Parts1]),
             write_image(Port, DatasetUUID, Parts1)

@@ -4,7 +4,7 @@
 
 mpstat() ->
     [Node |_] = re:split(os:cmd("uname -n"), "\n"),
-    Data = re:split(os:cmd("/usr/bin/kstat -p cpu | grep sys:cpu_nsec_ | awk '{print $2}'"), "\n"),
+    Data = re:split(os:cmd("/usr/bin/kstat -p -m cpu | grep sys:cpu_nsec_ | awk '{print $2}'"), "\n"),
     [{Node,
       [{<<"event">>, <<"mpstat">>},
        {<<"data">>, build_obj(Data)}]}].

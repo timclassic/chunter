@@ -516,7 +516,6 @@ install_image(DatasetUUID) ->
             Port = open_port({spawn_executable, Cmd},
                               [{args, [DatasetUUID]}, use_stdio, binary,
                                stderr_to_stdout, exit_status]),
-            
             port_command(Port, B),
             lager:debug("We have the following parts: ~p.", [Parts1]),
             write_image(Port, DatasetUUID, Parts1)

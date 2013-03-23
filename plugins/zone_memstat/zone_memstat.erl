@@ -11,7 +11,7 @@ zone_memstat({KStat, Acc}) ->
                                             K =:= "physcap" orelse
                                             K =:= "swap" orelse
                                             K =:= "swapcap"] || Vs <- Data1],
-    build_obj(Data2, Acc).
+    {KStat, build_obj(Data2, Acc)}.
 
 build_obj([Keys | R], Data) ->
     UUID = list_to_binary(proplists:get_value(<<"zonename">>, Keys)),

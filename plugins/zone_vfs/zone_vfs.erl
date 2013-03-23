@@ -1,35 +1,23 @@
 -module(zone_vfs).
 
--export([zone_vfs/0]).
+-export([zone_vfs/1]).
 
-zone_vfs() ->
-    Data = [{Id, Field, to_number(Value)} ||
-               [_, Id,_,Field, Value] <-
-                   [re:split(L, ":|\\t") ||
-                       L <- re:split(os:cmd("kstat  -p -m zone_vfs | grep -v zone_vfs:0:"), "\n")],
-               Field =/= <<"class">>,
-               Field =/= <<"zonename">>],
-    build_obj(Data, zone_map(), []).
+zone_vfs(KStat) ->
+    Data = ekstat:read(KStat, "zone_vfs", "zone_vfs"),
+    Data1 = [Keys || {_,_,_ID,_, Keys} <- Data, _ID =/= 0],
+    build_obj(Data1, []).
 
-build_obj([{Id, Field, Value} | R], ZoneMap, Data) ->
-    UUID = proplists:get_value(Id, ZoneMap),
+build_obj([Keys | R], Data) ->
+    UUID = list_to_binary(proplists:get_value("zonename", Keys)),
+    Statistics = lists:foldl(fun({"zonename", _}, Obj) ->
+                                     Obj;
+                                ({K, V}, Obj) ->
+                                     jsxd:set([list_to_binary(K)], V, Obj)
+                             end, [], Keys),
     Data1 = jsxd:thread([{set, [UUID, <<"event">>], <<"vfs">>},
-                         {set, [UUID, <<"data">>, Field], Value}],
+                         {set, [UUID, <<"data">>], Statistics}],
                         Data),
-    build_obj(R, ZoneMap, Data1);
+    build_obj(R, Data1);
 
-build_obj([], _, Data) ->
+build_obj([], Data) ->
     Data.
-
-zone_map() ->
-    [_ | R] = re:split(os:cmd("zoneadm list -p"), "\n"),
-    [{Id, UUID} || [Id, UUID | _] <- [re:split(L, ":") || L <- R, L =/= <<>>]].
-
-
-to_number(N) ->
-    case re:run(N, "\\.") of
-        nomatch ->
-            list_to_integer(binary_to_list(N));
-        _ ->
-            list_to_float(binary_to_list(N))
-    end.

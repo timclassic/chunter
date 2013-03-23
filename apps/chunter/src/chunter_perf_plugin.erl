@@ -21,7 +21,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {i=0, kstat}).
 
 %%%===================================================================
 %%% API
@@ -53,12 +53,10 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    timer:send_interval(1000, {tick, 'perf:tick:1s'}),
-    timer:send_interval(10000, {tick, 'perf:tick:10s'}),
-    timer:send_interval(30000, {tick, 'perf:tick:30s'}),
-    timer:send_interval(60000, {tick, 'perf:tick:1m'}),
+    timer:send_interval(1000, tick),
     eplugin:call('perf:init'),
-    {ok, #state{}}.
+    {ok, Handle} = ekstat:open(),
+    {ok, #state{kstat = Handle}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -101,8 +99,29 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({tick, Which}, State) ->
-    Res = lists:foldl(fun merge/2, [], eplugin:call(Which)),
+handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 30) =:=0->
+    ekstat:update(KStat),
+    Res = lists:foldl(fun merge/2, [], eplugin:call('perf:tick:30s', KStat)),
+    Res1 = lists:foldl(fun merge/2, Res, eplugin:call('perf:tick:10s', KStat)),
+    Res2 = lists:foldl(fun merge/2, Res1, eplugin:call('perf:tick:1s', KStat)),
+    Res3 = lists:map(fun ({K, V}) ->
+                             {<<K/binary, "-metrics">>, V}
+                     end, Res2),
+    libhowl:send(Res3),
+    {noreply, State};
+
+handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
+    ekstat:update(KStat),
+    Res = lists:foldl(fun merge/2, [], eplugin:call('perf:tick:10s', KStat)),
+    Res1 = lists:foldl(fun merge/2, Res, eplugin:call('perf:tick:1s', KStat)),
+    Res2 = lists:map(fun ({K, V}) ->
+                             {<<K/binary, "-metrics">>, V}
+                     end, Res1),
+    libhowl:send(Res2),
+    {noreply, State};
+handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
+    ekstat:update(KStat),
+    Res = lists:foldl(fun merge/2, [], eplugin:call('perf:tick:1s', KStat)),
     Res1 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res),

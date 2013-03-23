@@ -1,29 +1,14 @@
 -module(host_cpu_perf).
 
--export([mpstat/0]).
+-export([mpstat/1]).
 
-mpstat() ->
+mpstat(KStat) ->
+    Data = ekstat:read(KStat, "misc", "cpu"),
+    Data1 = lists:sort([{ID, Keys} ||
+                           {_,_,ID, _Name, Keys} <- Data, _Name =:= "sys"]),
+    Data2 = [jsxd:from_list([{list_to_binary(K), V} ||
+                                {"cpu_nsec_" ++ K, V} <- Ks]) || {_, Ks} <- Data1],
     [Node |_] = re:split(os:cmd("uname -n"), "\n"),
-    Data = re:split(os:cmd("/usr/bin/kstat -p -m cpu | grep sys:cpu_nsec_ | awk '{print $2}'"), "\n"),
     [{Node,
       [{<<"event">>, <<"mpstat">>},
-       {<<"data">>, build_obj(Data)}]}].
-
-
-build_obj([Idel, Intr, Kernel, User | R]) ->
-    [[{<<"usr">>, to_number(User)},
-      {<<"sys">>, to_number(Kernel)},
-      {<<"int">>, to_number(Intr)},
-      {<<"idl">>, to_number(Idel)}]] ++
-        build_obj(R);
-
-build_obj(_) ->
-    [].
-
-to_number(N) ->
-    case re:run(N, "\\.") of
-        nomatch ->
-            list_to_integer(binary_to_list(N));
-        _ ->
-            list_to_float(binary_to_list(N))
-    end.
+       {<<"data">>, Data2}]}].

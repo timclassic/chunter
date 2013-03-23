@@ -25,6 +25,7 @@
 -record(state, {host,
                 l1hit, l1miss, l1size,
                 l2hit, l2miss, l2size,
+                kstat = undefined,
                 skipped = 0}).
 
 %%%===================================================================
@@ -59,7 +60,8 @@ start_link() ->
 init([]) ->
     timer:send_interval(1000, tick),
     [Host|_] = re:split(os:cmd("uname -n"), "\n"),
-    {ok, #state{host = Host}}.
+    {ok, #state{host = Host,
+                kstat = ekstat:open()}}.
 
 %%--------------------------------------------------------------------
 %% @private

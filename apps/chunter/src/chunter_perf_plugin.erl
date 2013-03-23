@@ -162,8 +162,14 @@ code_change(_OldVsn, State, _Extra) ->
 merge(A, B) ->
     jsxd:merge(fun merge_fn/3, A, B).
 
-merge_fn(_, A, B) when is_list(A), is_list(B) ->
+merge_fn(_, [{_,_} |_] = A, B) when is_list(A), is_list(B) ->
     jsxd:merge(fun merge_fn/3, A, B);
+
+merge_fn(_, A, [{_,_} |_] = B) when is_list(A), is_list(B) ->
+    jsxd:merge(fun merge_fn/3, A, B);
+
+merge_fn(_, A, B) when is_list(A), is_list(B) ->
+    A ++ B;
 
 merge_fn(_, A, B) when is_number(A), is_number(B) ->
     A + B.

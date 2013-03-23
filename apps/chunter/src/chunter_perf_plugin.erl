@@ -101,32 +101,32 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 30) =:=0->
     ekstat:update(KStat),
-    Res = lists:foldl(fun merge/2, [], eplugin:call('perf:tick:30s', KStat)),
-    Res1 = lists:foldl(fun merge/2, Res, eplugin:call('perf:tick:10s', KStat)),
-    Res2 = lists:foldl(fun merge/2, Res1, eplugin:call('perf:tick:1s', KStat)),
+    Res = eplugin:fold('perf:tick:1s', {KStat, []}),
+    Res1 = eplugin:fold('perf:tick:10s', Res),
+    {KStat, Res2} = eplugin:fold('perf:tick:30s', Res1),
     Res3 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res2),
     libhowl:send(Res3),
-    {noreply, State};
+    {noreply, State#state{i = I + 1}};
 
 handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
     ekstat:update(KStat),
-    Res = lists:foldl(fun merge/2, [], eplugin:call('perf:tick:10s', KStat)),
-    Res1 = lists:foldl(fun merge/2, Res, eplugin:call('perf:tick:1s', KStat)),
+    Res = eplugin:fold('perf:tick:1s', {KStat, []}),
+    {KStat, Res1} = eplugin:fold('perf:tick:10s', Res),
     Res2 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res1),
     libhowl:send(Res2),
-    {noreply, State};
-handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
+    {noreply, State#state{i = I + 1}};
+handle_info(tick, State = #state{kstat = KStat, i = I}) ->
     ekstat:update(KStat),
-    Res = lists:foldl(fun merge/2, [], eplugin:call('perf:tick:1s', KStat)),
+    {KStat, Res} = eplugin:fold('perf:tick:1s', {KStat, []}),
     Res1 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res),
     libhowl:send(Res1),
-    {noreply, State};
+    {noreply, State#state{i = I + 1}};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -158,12 +158,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-merge(A, B) ->
-    jsxd:merge(fun merge_fn/3, A, B).
-
-merge_fn(_, A, B) when is_list(A), is_list(B) ->
-    jsxd:merge(fun merge_fn/3, A, B);
-
-merge_fn(_, A, B) when is_number(A), is_number(B) ->
-    A + B.

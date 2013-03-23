@@ -102,8 +102,8 @@ handle_cast(_Msg, State) ->
 handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 30) =:=0->
     ekstat:update(KStat),
     Res = eplugin:fold('perf:tick:1s', {KStat, []}),
-    Res1 = eplugin:fold('perf:tick:10s', {KStat, Res}),
-    Res2 = eplugin:fold('perf:tick:30s', {KStat, Res1}),
+    Res1 = eplugin:fold('perf:tick:10s', Res),
+    {KStat, Res2} = eplugin:fold('perf:tick:30s', Res1),
     Res3 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res2),
@@ -113,7 +113,7 @@ handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 30) =:=0->
 handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
     ekstat:update(KStat),
     Res = eplugin:fold('perf:tick:1s', {KStat, []}),
-    Res1 = eplugin:fold('perf:tick:10s', {KStat, Res}),
+    {KStat, Res1} = eplugin:fold('perf:tick:10s', Res),
     Res2 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res1),
@@ -121,7 +121,7 @@ handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
     {noreply, State};
 handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
     ekstat:update(KStat),
-    Res = eplugin:fold('perf:tick:1s', {KStat, []}),
+    {KStat, Res} = eplugin:fold('perf:tick:1s', {KStat, []}),
     Res1 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res),

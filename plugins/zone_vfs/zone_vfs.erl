@@ -14,7 +14,7 @@ build_obj([Keys | R], Data) ->
                                 ({K, V}, Obj) ->
                                      jsxd:set([list_to_binary(K)], V, Obj)
                              end, [], Keys),
-    Data1 = [{UUID, [{<<"data">> Statistics},
+    Data1 = [{UUID, [{<<"data">>, Statistics},
                      {<<"event">>, <<"vfs">>}]}|Data],
     build_obj(R, Data1);
 

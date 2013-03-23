@@ -108,7 +108,7 @@ handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 30) =:=0->
                              {<<K/binary, "-metrics">>, V}
                      end, Res2),
     libhowl:send(Res3),
-    {noreply, State};
+    {noreply, State#state{i = I + 1}};
 
 handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
     ekstat:update(KStat),
@@ -118,15 +118,15 @@ handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
                              {<<K/binary, "-metrics">>, V}
                      end, Res1),
     libhowl:send(Res2),
-    {noreply, State};
-handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
+    {noreply, State#state{i = I + 1}};
+handle_info(tick, State = #state{kstat = KStat, i = I}) ->
     ekstat:update(KStat),
     {KStat, Res} = eplugin:fold('perf:tick:1s', {KStat, []}),
     Res1 = lists:map(fun ({K, V}) ->
                              {<<K/binary, "-metrics">>, V}
                      end, Res),
     libhowl:send(Res1),
-    {noreply, State};
+    {noreply, State#state{i = I + 1}};
 handle_info(_Info, State) ->
     {noreply, State}.
 

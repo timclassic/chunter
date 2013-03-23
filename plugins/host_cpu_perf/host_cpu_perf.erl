@@ -9,6 +9,5 @@ mpstat({KStat, Acc}) ->
     Data2 = [jsxd:from_list([{list_to_binary(K), V} ||
                                 {"cpu_nsec_" ++ K, V} <- Ks]) || {_, Ks} <- Data1],
     [Node |_] = re:split(os:cmd("uname -n"), "\n"),
-    {KStat, jsxd:append([Node], [{<<"data">>, Data2},
-                                 {<<"event">>, <<"mpstat">>}],
-                        Acc)}.
+    {KStat, [{Node, [{<<"data">>, Data2},
+                     {<<"event">>, <<"mpstat">>}]}|Acc]}.

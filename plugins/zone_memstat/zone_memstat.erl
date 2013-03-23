@@ -20,9 +20,8 @@ build_obj([Keys | R], Data) ->
                                 ({K, V}, Obj) ->
                                      jsxd:set([K], V, Obj)
                              end, [], Keys),
-    Data1 = jsxd:apend([UUID], [{<<"data">> Statistics},
-                                {<<"event">>, <<"memstat">>}],
-                       Data),
+    Data1 = [{UUID, [{<<"data">> Statistics},
+                     {<<"event">>, <<"memstat">>}]}|Data],
     build_obj(R, Data1);
 
 build_obj([], Data) ->

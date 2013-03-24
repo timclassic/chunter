@@ -20,7 +20,7 @@ fix_name(Name) ->
         [Name1] ->
             Name1;
 	[_ | Name1] ->
-            iolist_to_binary(Name1);
+            iolist_to_binary(Name1)
     end.
 
 build_obj([Keys | R], Data) ->

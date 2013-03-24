@@ -7,6 +7,7 @@ zone_net({KStat, Acc}) ->
     Data1 = [[{"ifname", fix_name(Name)} | Keys] || {_,_,_ID, Name, Keys} <- Data],
     Data2 = [[{list_to_binary(K), V} || {K, V} <- Vs,
                                         K =:= "zonename" orelse
+                                            K =:= "ifname" orelse
                                             K =:= "opackets64" orelse
                                             K =:= "obytes64" orelse
                                             K =:= "oerrors" orelse

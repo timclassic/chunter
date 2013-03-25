@@ -239,10 +239,8 @@ booting({transition, NextState = <<"shutting_down">>}, State) ->
 
 booting({transition, NextState = <<"running">>}, State) ->
     change_state(State#state.uuid, NextState),
-    Info = chunter_vmadm:info(State#state.uuid),
-    State1 = init_console(State),
-    libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
-    {next_state, binary_to_atom(NextState), State1};
+    timer:send_after(500, get_info),
+    {next_state, binary_to_atom(NextState), State};
 
 booting(_, State) ->
     {next_state, booting, State}.
@@ -311,11 +309,9 @@ handle_event({force_state, NextState}, StateName, State) ->
         StateName ->
             {next_state, StateName, State};
         running = N ->
-            Info = chunter_vmadm:info(State#state.uuid),
-            State1 = init_console(State),
-            libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
+            timer:send_after(500, get_info),
             change_state(State#state.uuid, NextState, StateName =:= N),
-            {next_state, running, State1};
+            {next_state, running, State};
         Other ->
             change_state(State#state.uuid, NextState, StateName =:= Other),
             {next_state, Other, State}
@@ -328,12 +324,10 @@ handle_event(register, StateName, State) ->
         {error, not_found} ->
             {stop, not_found, State};
         VMData ->
-            Info = chunter_vmadm:info(State#state.uuid),
-            State1 = init_console(State),
+            timer:send_after(500, get_info),
             libsniffle:vm_set(State#state.uuid, [{<<"state">>, atom_to_binary(StateName)},
-                                                 {<<"config">>, chunter_spec:to_sniffle(VMData)},
-                                                 {<<"info">>, Info}]),
-            {next_state, StateName, State1}
+                                                 {<<"config">>, chunter_spec:to_sniffle(VMData)}]),
+            {next_state, StateName, State}
     end;
 
 handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) ->
@@ -445,6 +439,12 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     Ls1 = [ L || L <- Ls, is_process_alive(L)],
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
+
+handle_info(get_info, StateName, State) ->
+    Info = chunter_vmadm:info(State#state.uuid),
+    State1 = init_console(State),
+    libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
+    {next_state, StateName, State1};
 
 handle_info(Info, StateName, State) ->
     lager:warning("unknown data: ~p", [Info]),

@@ -1,8 +1,9 @@
 #!/bin/bash
-BRANCH=rel
+BRANCH=dev
+ETC=/opt/chunter/etc
 BASE=http://release.project-fifo.net/chunter/${BRANCH}
 curl -s ${BASE}/chunter.version > /tmp/chunter.version
-if diff /tmp/chunter.version etc/chunter.version > /dev/null
+if diff /tmp/chunter.version ${ETC}/chunter.version > /dev/null
 then
     echo "No update available."
 else

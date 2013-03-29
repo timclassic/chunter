@@ -184,6 +184,7 @@ initialized(load, State) ->
 initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
     {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
+    eplugin:call('vm:create', UUID, VMData),
     SniffleData  = chunter_spec:to_sniffle(VMData),
     {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
     SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
@@ -238,10 +239,8 @@ booting({transition, NextState = <<"shutting_down">>}, State) ->
 
 booting({transition, NextState = <<"running">>}, State) ->
     change_state(State#state.uuid, NextState),
-    Info = chunter_vmadm:info(State#state.uuid),
-    State1 = init_console(State),
-    libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
-    {next_state, binary_to_atom(NextState), State1};
+    timer:send_after(500, get_info),
+    {next_state, binary_to_atom(NextState), State};
 
 booting(_, State) ->
     {next_state, booting, State}.
@@ -310,11 +309,9 @@ handle_event({force_state, NextState}, StateName, State) ->
         StateName ->
             {next_state, StateName, State};
         running = N ->
-            Info = chunter_vmadm:info(State#state.uuid),
-            State1 = init_console(State),
-            libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
+            timer:send_after(500, get_info),
             change_state(State#state.uuid, NextState, StateName =:= N),
-            {next_state, running, State1};
+            {next_state, running, State};
         Other ->
             change_state(State#state.uuid, NextState, StateName =:= Other),
             {next_state, Other, State}
@@ -322,17 +319,15 @@ handle_event({force_state, NextState}, StateName, State) ->
 
 handle_event(register, StateName, State) ->
     libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
-%%    change_state(State#state.uuid, atom_to_binary(StateName)),
+    %%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(State#state.uuid) of
         {error, not_found} ->
             {stop, not_found, State};
         VMData ->
-            Info = chunter_vmadm:info(State#state.uuid),
-            State1 = init_console(State),
+            timer:send_after(500, get_info),
             libsniffle:vm_set(State#state.uuid, [{<<"state">>, atom_to_binary(StateName)},
-                                                 {<<"config">>, chunter_spec:to_sniffle(VMData)},
-                                                 {<<"info">>, Info}]),
-            {next_state, StateName, State1}
+                                                 {<<"config">>, chunter_spec:to_sniffle(VMData)}]),
+            {next_state, StateName, State}
     end;
 
 handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) ->
@@ -358,7 +353,7 @@ handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) 
     end;
 
 handle_event(remove, _StateName, State) ->
-    libsniffle:vm_unregister(State#state.uuid),
+    libsniffle:vm_delete(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, StateName, State) ->
@@ -445,7 +440,14 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
-handle_info(_Info, StateName, State) ->
+handle_info(get_info, StateName, State) ->
+    Info = chunter_vmadm:info(State#state.uuid),
+    State1 = init_console(State),
+    libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
+    {next_state, StateName, State1};
+
+handle_info(Info, StateName, State) ->
+    lager:warning("unknown data: ~p", [Info]),
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -494,14 +496,43 @@ init_console(State) ->
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 
 install_image(DatasetUUID) ->
-    case filelib:is_regular(filename:join(<<"/var/db/imgadm">>, <<DatasetUUID/binary, ".json">>)) of
-        true ->
+    lager:debug("Installing dataset ~s.", [DatasetUUID]),
+    Path = filename:join(<<"/zones">>, DatasetUUID),
+    lager:debug("Checking path ~s.", [Path]),
+    case os:cmd("zfs list zones/" ++ binary_to_list(DatasetUUID) ++">/dev/null; echo $?") of
+        "0\n" ->
+            lager:debug("found.", []),
             ok;
-        false ->
-            os:cmd("/usr/sbin/imgadm update"),
-            os:cmd(binary_to_list(<<"/usr/sbin/imgadm import ", DatasetUUID/binary>>))
-
+        _ ->
+            {ok, Parts} = libsniffle:img_list(DatasetUUID),
+            [Idx | Parts1] = lists:sort(Parts),
+            {Cmd, B} = case libsniffle:img_get(DatasetUUID, Idx) of
+                           {ok, <<31:8, 139:8, _/binary>> = AB} ->
+                               {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
+                           {ok, <<"BZh", _/binary>> = AB} ->
+                               {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
+                       end,
+            lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
+            Port = open_port({spawn_executable, Cmd},
+                              [{args, [DatasetUUID]}, use_stdio, binary,
+                               stderr_to_stdout, exit_status]),
+            port_command(Port, B),
+            lager:debug("We have the following parts: ~p.", [Parts1]),
+            write_image(Port, DatasetUUID, Parts1)
     end.
+
+
+write_image(Port, UUID, [Idx|R]) ->
+    lager:debug("<IMG> ~s[~p]", [UUID, Idx]),
+    {ok, B} = libsniffle:img_get(UUID, Idx),
+    port_command(Port, B),
+    write_image(Port, UUID, R);
+
+write_image(Port, _UUID, []) ->
+    lager:debug("<IMG> done going to wait 5s.", []),
+    port_close(Port),
+    timer:sleep(5000),
+    lager:debug("<IMG> done waiting.", []).
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
                                        Name::binary(),

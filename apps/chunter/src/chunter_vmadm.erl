@@ -12,8 +12,10 @@
 -export([start/1,
          start/2,
          stop/1,
+         force_stop/1,
          info/1,
          reboot/1,
+         force_reboot/1,
          delete/2,
          create/1,
          update/2
@@ -85,12 +87,33 @@ stop(UUID) ->
                 "vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
 
+-spec force_stop(UUID::fifo:uuid()) -> list().
+
+force_stop(UUID) ->
+    lager:info([{fifi_component, chunter}],
+               "vmadm:stop - UUID: ~s.", [UUID]),
+    Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary, " -F">>,
+    lager:debug([{fifi_component, chunter}],
+                "vmadm:cmd - ~s.", [Cmd]),
+    os:cmd(binary_to_list(Cmd)).
+
 -spec reboot(UUID::fifo:uuid()) -> list().
 
 reboot(UUID) ->
     lager:info([{fifi_component, chunter}],
                "vmadm:reboot - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary>>,
+    lager:debug([{fifi_component, chunter}],
+                "vmadm:cmd - ~s.", [Cmd]),
+    os:cmd(binary_to_list(Cmd)).
+
+
+-spec force_reboot(UUID::fifo:uuid()) -> list().
+
+force_reboot(UUID) ->
+    lager:info([{fifi_component, chunter}],
+               "vmadm:reboot - UUID: ~s.", [UUID]),
+    Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary, " -F">>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)).
@@ -149,7 +172,6 @@ update(UUID, Data) ->
         60000 ->
             chunter_vm_fsm:load(UUID)
     end.
-
 
 %% This function reads the process's input untill it knows that the vm was created or failed.
 -spec wait_for_tex(Port::any()) ->

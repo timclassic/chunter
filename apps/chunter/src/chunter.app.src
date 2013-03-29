@@ -1,6 +1,6 @@
 {application, chunter,
  [{description, "SmartOS hypervisor manager."},
-  {vsn, "0.3.6p2"},
+  {vsn, "0.3.7"},
   {registered, []},
   {applications, [
                   kernel,
@@ -12,9 +12,10 @@
                   erlsom,
                   libsniffle,
                   libsnarl,
-		  libhowl,
-		  fifo_spec,
-		  ranch
+                  libhowl,
+                  fifo_spec,
+                  eplugin,
+                  ranch
                  ]},
   {mod, { chunter_app, []}},
   {env, [{port, 4200}]}

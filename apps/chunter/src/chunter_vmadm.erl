@@ -39,7 +39,7 @@ start(UUID) ->
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", R),
+    lager:debug("[vmadm] ~s", [R]),
     R.
 
 -spec start(UUID::fifo:uuid(), Image::binary()) -> list().
@@ -51,7 +51,7 @@ start(UUID, Image) ->
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", R),
+    lager:debug("[vmadm] ~s", [R]),
     R.
 
 -spec delete(UUID::fifo:uuid(), Mem::binary()) -> ok.
@@ -64,7 +64,7 @@ delete(UUID, Mem) ->
                 "vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)),
     R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", R),
+    lager:debug("[vmadm] ~s", [R]),
     chunter_server:unprovision_memory(Mem),
     chunter_vm_fsm:remove(UUID).
 
@@ -92,7 +92,7 @@ stop(UUID) ->
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", R),
+    lager:debug("[vmadm] ~s", [R]),
     R.
 
 -spec force_stop(UUID::fifo:uuid()) -> list().
@@ -104,7 +104,7 @@ force_stop(UUID) ->
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", R),
+    lager:debug("[vmadm] ~s", [R]),
     R.
 
 -spec reboot(UUID::fifo:uuid()) -> list().
@@ -116,7 +116,7 @@ reboot(UUID) ->
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", R),
+    lager:debug("[vmadm] ~s", [R]),
     R.
 
 
@@ -129,7 +129,7 @@ force_reboot(UUID) ->
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", R),
+    lager:debug("[vmadm] ~s", [R]),
     R.
 
 -spec create(UUID::fifo:vm_config()) -> ok |
@@ -181,7 +181,7 @@ update(UUID, Data) ->
     port_command(Port, "\nEOF\n"),
     receive
         {Port, {data, Data}} ->
-            lager:debug("vmadm output: ~s", Data);
+            lager:debug("vmadm output: ~s", [Data]);
         {Port, {exit_status, _}} ->
             chunter_vm_fsm:load(UUID)
     after
@@ -198,7 +198,7 @@ update(UUID, Data) ->
 wait_for_tex(Port) ->
     receive
         {Port, {data, Data}} ->
-            lager:debug("[vmadm] ~s", Data);
+            lager:debug("[vmadm] ~s", [Data]);
         {Port,{exit_status, 0}} ->
             ok;
         {Port,{exit_status, S}} ->

@@ -180,6 +180,8 @@ update(UUID, Data) ->
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     receive
+        {Port, {data, {eol, Data}}} ->
+            lager:debug("[vmadm] ~s", [Data]);
         {Port, {data, Data}} ->
             lager:debug("vmadm output: ~s", [Data]);
         {Port, {exit_status, _}} ->
@@ -197,6 +199,8 @@ update(UUID, Data) ->
                                         unknown}.
 wait_for_tex(Port) ->
     receive
+        {Port, {data, {eol, Data}}} ->
+            lager:debug("[vmadm] ~s", [Data]);
         {Port, {data, Data}} ->
             lager:debug("[vmadm] ~s", [Data]);
         {Port,{exit_status, 0}} ->

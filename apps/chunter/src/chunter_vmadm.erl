@@ -38,7 +38,9 @@ start(UUID) ->
     Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[vmadm] ~s", [R]),
+    R.
 
 -spec start(UUID::fifo:uuid(), Image::binary()) -> list().
 
@@ -48,7 +50,9 @@ start(UUID, Image) ->
     Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[vmadm] ~s", [R]),
+    R.
 
 -spec delete(UUID::fifo:uuid(), Mem::binary()) -> ok.
 
@@ -59,6 +63,8 @@ delete(UUID, Mem) ->
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     os:cmd(binary_to_list(Cmd)),
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[vmadm] ~s", [R]),
     chunter_server:unprovision_memory(Mem),
     chunter_vm_fsm:remove(UUID).
 
@@ -85,7 +91,9 @@ stop(UUID) ->
     Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[vmadm] ~s", [R]),
+    R.
 
 -spec force_stop(UUID::fifo:uuid()) -> list().
 
@@ -95,7 +103,9 @@ force_stop(UUID) ->
     Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary, " -F">>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[vmadm] ~s", [R]),
+    R.
 
 -spec reboot(UUID::fifo:uuid()) -> list().
 
@@ -105,7 +115,9 @@ reboot(UUID) ->
     Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[vmadm] ~s", [R]),
+    R.
 
 
 -spec force_reboot(UUID::fifo:uuid()) -> list().
@@ -116,7 +128,9 @@ force_reboot(UUID) ->
     Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary, " -F">>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)).
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[vmadm] ~s", [R]),
+    R.
 
 -spec create(UUID::fifo:vm_config()) -> ok |
                                         {error, binary() |
@@ -166,6 +180,10 @@ update(UUID, Data) ->
     port_command(Port, jsx:to_json(Data)),
     port_command(Port, "\nEOF\n"),
     receive
+        {Port, {data, {eol, Data}}} ->
+            lager:debug("[vmadm] ~s", [Data]);
+        {Port, {data, Data}} ->
+            lager:debug("vmadm output: ~s", [Data]);
         {Port, {exit_status, _}} ->
             chunter_vm_fsm:load(UUID)
     after
@@ -181,10 +199,17 @@ update(UUID, Data) ->
                                         unknown}.
 wait_for_tex(Port) ->
     receive
+        {Port, {data, {eol, Data}}} ->
+            lager:debug("[vmadm] ~s", [Data]);
+        {Port, {data, Data}} ->
+            lager:debug("[vmadm] ~s", [Data]);
         {Port,{exit_status, 0}} ->
             ok;
         {Port,{exit_status, S}} ->
             {error, S}
+    after
+        60000 ->
+            lager:debug("[vmadm] timeout after 10m")
     end.
 
 %%%===================================================================

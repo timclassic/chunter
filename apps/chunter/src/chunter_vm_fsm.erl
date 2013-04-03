@@ -528,10 +528,18 @@ write_image(Port, UUID, [Idx|R]) ->
     port_command(Port, B),
     write_image(Port, UUID, R);
 
-write_image(Port, _UUID, []) ->
-    lager:debug("<IMG> done going to wait 2m.", []),
+write_image(Port, UUID, []) ->
+    lager:debug("<IMG> done going to wait for imgamd.", []),
     port_close(Port),
-    timer:sleep(2*60*1000),
+    Cmd = "zfs list -Hp -t all -r  zones/" ++ binary_to_list(UUID),
+    wait_image(0, Cmd).
+
+
+wait_image(N, Cmd) when N < 3 ->
+    timer:sleep(5000),
+    wait_image(length(re:split(os:cmd(Cmd), "\n")), Cmd);
+
+wait_image(_, _) ->
     lager:debug("<IMG> done waiting.", []).
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),

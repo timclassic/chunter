@@ -541,7 +541,8 @@ write_image(Port, UUID, []) ->
                                  {<<"uuid">>, UUID},
                                  {<<"disabled">>, false},
                                  {<<"type">>, <<"zvol">>},
-                                 {<<"state">>, <<"active">>}]}]),
+                                 {<<"state">>, <<"active">>}]},
+                              {<<"zpool">>, <<"zones">>}]),
     %% Need to set the correct type
     Manifest1 = case jsxd:get([<<"type">>], DS) of
                     {ok, <<"zone">>} ->

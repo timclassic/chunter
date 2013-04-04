@@ -155,13 +155,8 @@ create(Data) ->
     Res = case wait_for_tex(Port) of
               ok ->
                   chunter_vm_fsm:load(UUID);
-              {error, 1 = E} ->
-                  lager:error([{fifi_component, chunter}],
-                              "vmad:create - Failed: ~p.", [E]),
-                  chunter_vm_fsm:load(UUID);
               {error, E} ->
-                  chunter_server:unprovision_memory(Mem*1024*1024),
-
+                  delete(UUID, Mem*1024*1024),
                   lager:error([{fifi_component, chunter}],
                               "vmad:create - Failed: ~p.", [E]),
                   E

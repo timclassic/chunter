@@ -113,10 +113,11 @@ generate_spec(Package, Dataset, OwnerData) ->
                   _ ->
                       0
               end,
+    RamShare = round(1024*RamPerc),
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>]},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
-                         {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, round((1024*RamPerc)), Package)},
-                         {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, round((2048*RamPerc)), Package)},
+                         {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
+                         {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare, Package)},
                          {set, [<<"internal_metadata">>, <<"package">>],
                           jsxd:get(<<"uuid">>, <<"-">>, Package)},
                          {set, <<"cpu_cap">>, jsxd:get([<<"cpu_cap">>], 100, Package)},

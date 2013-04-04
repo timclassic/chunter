@@ -550,7 +550,7 @@ write_image(Port, UUID, []) ->
                         Manifest
                 end,
     %% and write it to zoneamd's new destination folder ...
-    file:write_file("/var/imgadm/images/zones-" ++ UUIDL + ".json", jsx:encode(Manifest1)),
+    file:write_file("/var/imgadm/images/zones-" ++ UUIDL ++ ".json", jsx:encode(Manifest1)),
     Cmd = "zfs list -Hp -t all -r  zones/" ++ UUIDL,
 
     wait_image(0, Cmd).

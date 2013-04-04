@@ -531,7 +531,28 @@ write_image(Port, UUID, [Idx|R]) ->
 write_image(Port, UUID, []) ->
     lager:debug("<IMG> done going to wait for imgamd.", []),
     port_close(Port),
-    Cmd = "zfs list -Hp -t all -r  zones/" ++ binary_to_list(UUID),
+    UUIDL = binary_to_list(UUID),
+    %% We need to satisfy imgadm *shakes fist* this seems to be a minimal
+    %% manifest that is enough to not make it throw up.
+
+    {ok, DS} = libsniffle:dataset_get(UUID),
+    Manifest = jsxd:from_list([{<<"manifest">>,
+                                [{<<"v">>, 2},
+                                 {<<"uuid">>, UUID},
+                                 {<<"disabled">>, false},
+                                 {<<"type">>, <<"zvol">>},
+                                 {<<"state">>, <<"active">>}]}]),
+    %% Need to set the correct type
+    Manifest1 = case jsxd:get([<<"type">>], DS) of
+                    {ok, <<"zone">>} ->
+                        jsxd:set([<<"manifest">>, <<"type">>], <<"zone-dataset">>, Manifest);
+                    _ ->
+                        Manifest
+                end,
+    %% and write it to zoneamd's new destination folder ...
+    file:write_file("/var/imgadm/images/zones-" ++ UUIDL + ".json", jsx:encode(Manifest1)),
+    Cmd = "zfs list -Hp -t all -r  zones/" ++ UUIDL,
+
     wait_image(0, Cmd).
 
 
@@ -540,6 +561,10 @@ wait_image(N, Cmd) when N < 3 ->
     wait_image(length(re:split(os:cmd(Cmd), "\n")), Cmd);
 
 wait_image(_, _) ->
+
+
+
+
     lager:debug("<IMG> done waiting.", []).
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),

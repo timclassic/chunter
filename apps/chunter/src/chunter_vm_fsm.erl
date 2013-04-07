@@ -171,7 +171,7 @@ init([UUID]) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec initialized(Action::lad |
+-spec initialized(Action::load |
                           {create,  PackageSpec::fifo:package(),
                            DatasetSpec::fifo:dataset(), VMSpec::fifo:config()}, State::term()) ->
                          {next_state, loading, State::term()} |
@@ -462,7 +462,12 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _StateName, State  = #state{console = _C}) when is_port(_C) ->
-    port_close(State#state.console),
+    case erlang:port_info(State#state.console) of
+        undefined ->
+            ok;
+        _ ->
+            port_close(State#state.console)
+    end,
     ok;
 
 terminate(_Reason, _StateName, _State) ->

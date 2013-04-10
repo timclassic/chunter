@@ -31,6 +31,9 @@ else
     fi
 fi
 
+# We've to initialize imgadm or it will die horribly .... *sigh*
+[ -d /var/imgadm ] || imgadm update
+
 (cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
 mkdir -p /var/log/chunter
 sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/app.config

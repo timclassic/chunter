@@ -133,7 +133,8 @@ handle_info({_Closed, _}, State = #state{ closed = _Closed}) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
--spec handle_message(Message::fifo:chunter_message(), State::term()) -> {stop, term()}.
+-spec handle_message(Message::fifo:chunter_message(), State::term()) ->
+                            {stop, term()} | {stop, term(), term()}.
 
 handle_message({machines, start, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:start(UUID),

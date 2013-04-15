@@ -54,7 +54,7 @@ start(UUID, Image) ->
     lager:debug("[vmadm] ~s", [R]),
     R.
 
--spec delete(UUID::fifo:uuid(), Mem::binary()) -> ok.
+-spec delete(UUID::fifo:uuid(), Mem::number()) -> ok.
 
 delete(UUID, Mem) ->
     lager:info([{fifi_component, chunter}],

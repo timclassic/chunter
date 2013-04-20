@@ -353,7 +353,7 @@ handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) 
     end;
 
 handle_event(remove, _StateName, State) ->
-    libsniffle:vm_delete(State#state.uuid),
+    libsniffle:vm_unregister(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, StateName, State) ->

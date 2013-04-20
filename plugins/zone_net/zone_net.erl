@@ -13,7 +13,7 @@ zone_net({KStat, Acc}) ->
                                             K =:= "oerrors" orelse
                                             K =:= "ipackets64" orelse
                                             K =:= "rbytes64" orelse
-                                            K =:= "ierrors"] || Vs <- Data1],
+                                            K =:= "ierrors"] || Vs <- Data1, is_list(Vs)],
     {KStat, build_obj(Data2, Acc)}.
 
 fix_name(Name) ->

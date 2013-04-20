@@ -14,7 +14,7 @@ zone_cpu({KStat, Acc}) ->
                                             K =:= "effective" orelse
                                             K =:= "maxusage" orelse
                                             K =:= "bursting_sec"
-             ] || Vs <- Data1],
+             ] || Vs <- Data1, is_list(Vs)],
     {KStat, build_obj(Data2, Acc)}.
 
 build_obj([Keys | R], Data) ->

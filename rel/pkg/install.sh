@@ -2,7 +2,7 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z\|joyent_20121018T224723Z\|joyent_20130222T000747Z
+TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z\|joyent_20121018T224723Z\|joyent_20130222T000747Z\|joyent_20130405T010449Z
 
 DST=/opt
 
@@ -30,6 +30,10 @@ else
 	exit 1
     fi
 fi
+
+# We've to initialize imgadm or it will die horribly .... *sigh*
+[ -d /var/imgadm ] || imgadm update
+[ -d /var/imgadm/images ] || mkdir -p /var/imgadm/images
 
 (cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
 mkdir -p /var/log/chunter

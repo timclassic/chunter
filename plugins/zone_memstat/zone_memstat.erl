@@ -10,7 +10,7 @@ zone_memstat({KStat, Acc}) ->
                                             K =:= "rss" orelse
                                             K =:= "physcap" orelse
                                             K =:= "swap" orelse
-                                            K =:= "swapcap"] || Vs <- Data1],
+                                            K =:= "swapcap"] || Vs <- Data1, is_list(Vs)],
     {KStat, build_obj(Data2, Acc)}.
 
 build_obj([Keys | R], Data) ->

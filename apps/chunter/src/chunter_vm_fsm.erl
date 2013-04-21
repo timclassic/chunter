@@ -171,7 +171,7 @@ init([UUID]) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec initialized(Action::lad |
+-spec initialized(Action::load |
                           {create,  PackageSpec::fifo:package(),
                            DatasetSpec::fifo:dataset(), VMSpec::fifo:config()}, State::term()) ->
                          {next_state, loading, State::term()} |
@@ -353,7 +353,7 @@ handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) 
     end;
 
 handle_event(remove, _StateName, State) ->
-    libsniffle:vm_delete(State#state.uuid),
+    libsniffle:vm_unregister(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, StateName, State) ->
@@ -462,7 +462,12 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _StateName, State  = #state{console = _C}) when is_port(_C) ->
-    port_close(State#state.console),
+    case erlang:port_info(State#state.console) of
+        undefined ->
+            ok;
+        _ ->
+            port_close(State#state.console)
+    end,
     ok;
 
 terminate(_Reason, _StateName, _State) ->
@@ -528,10 +533,40 @@ write_image(Port, UUID, [Idx|R]) ->
     port_command(Port, B),
     write_image(Port, UUID, R);
 
-write_image(Port, _UUID, []) ->
-    lager:debug("<IMG> done going to wait 2m.", []),
+write_image(Port, UUID, []) ->
+    lager:debug("<IMG> done going to wait for imgamd.", []),
     port_close(Port),
-    timer:sleep(120000),
+    UUIDL = binary_to_list(UUID),
+    %% We need to satisfy imgadm *shakes fist* this seems to be a minimal
+    %% manifest that is enough to not make it throw up.
+
+    {ok, DS} = libsniffle:dataset_get(UUID),
+    Manifest = jsxd:from_list([{<<"manifest">>,
+                                [{<<"v">>, 2},
+                                 {<<"uuid">>, UUID},
+                                 {<<"disabled">>, false},
+                                 {<<"type">>, <<"zvol">>},
+                                 {<<"state">>, <<"active">>}]},
+                              {<<"zpool">>, <<"zones">>}]),
+    %% Need to set the correct type
+    Manifest1 = case jsxd:get([<<"type">>], DS) of
+                    {ok, <<"zone">>} ->
+                        jsxd:set([<<"manifest">>, <<"type">>], <<"zone-dataset">>, Manifest);
+                    _ ->
+                        Manifest
+                end,
+    %% and write it to zoneamd's new destination folder ...
+    file:write_file("/var/imgadm/images/zones-" ++ UUIDL ++ ".json", jsx:encode(Manifest1)),
+    Cmd = "zfs list -Hp -t all -r  zones/" ++ UUIDL,
+
+    wait_image(0, Cmd).
+
+
+wait_image(N, Cmd) when N < 3 ->
+    timer:sleep(5000),
+    wait_image(length(re:split(os:cmd(Cmd), "\n")), Cmd);
+
+wait_image(_, _) ->
     lager:debug("<IMG> done waiting.", []).
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),

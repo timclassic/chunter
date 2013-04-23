@@ -162,7 +162,7 @@ handle_message({machines, snapshot, rollback, UUID, SnapId}, State) when is_bina
     {stop, chunter_vm_fsm:rollback_snapshot(UUID, SnapId), State};
 
 handle_message({machines, snapshot, store, UUID, SnapId, Img}, State) when is_binary(UUID),
-                                                               is_binary(SnapId) ->
+                                                                           is_binary(SnapId) ->
     spawn(fun() ->
                   write_snapshot(UUID, SnapId, Img)
           end),
@@ -231,9 +231,9 @@ llquantize(Data) ->
 
 write_snapshot(UUID, SnapId, Img) ->
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
-    {ok, Port} = open_port({spawn_executable, Cmd},
-                           [{args, [UUID, SnapId]}, use_stdio, binary,
-                            stderr_to_stdout, exit_status, stream]),
+    Port = open_port({spawn_executable, Cmd},
+                     [{args, [UUID, SnapId]}, use_stdio, binary,
+                      stderr_to_stdout, exit_status, stream]),
     libsniffle:dataset_set(Img, <<"imported">>, 0),
     write_snapshot(Port, Img, <<>>, 0).
 

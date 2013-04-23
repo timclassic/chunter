@@ -237,14 +237,12 @@ write_snapshot(UUID, SnapId, Img) ->
     libsniffle:dataset_set(Img, <<"imported">>, 0),
     write_snapshot(Port, Img, <<>>, 0).
 
-
-
 write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx) ->
-    sniffle_img:create(Img, Idx, binary:copy(MB)),
+    libsniffle:img_create(Img, Idx, binary:copy(MB)),
     write_snapshot(Port, Img, Acc, Idx+1);
 
 write_snapshot(undefiend, Img, MB, Idx) ->
-    sniffle_img:create(Img, Idx, binary:copy(MB)),
+    libsniffle:img_create(Img, Idx, binary:copy(MB)),
     libsniffle:dataset_set(Img, <<"imported">>, 1),
     ok;
 

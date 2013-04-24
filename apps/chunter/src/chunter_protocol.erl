@@ -241,22 +241,20 @@ write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx) ->
     libsniffle:img_create(Img, Idx, binary:copy(MB)),
     write_snapshot(Port, Img, Acc, Idx+1);
 
-write_snapshot(undefiend, Img, <<>>, _Idx) ->
-    libsniffle:dataset_set(Img, <<"imported">>, 1),
-    ok;
-
-write_snapshot(undefiend, Img, MB, Idx) ->
-    libsniffle:img_create(Img, Idx, binary:copy(MB)),
-    libsniffle:dataset_set(Img, <<"imported">>, 1),
-    ok;
-
 write_snapshot(Port, Img, Acc, Idx) ->
     receive
         {Port, {data, Data}} ->
             write_snapshot(Port, Img, <<Acc/binary, Data/binary>>, Idx);
         {Port,{exit_status, 0}} ->
             lager:info("Writing image ~s finished with ~p parts.", [Img, Idx]),
-            write_snapshot(undefined, Img, Acc, Idx);
+            libsniffle:dataset_set(Img, <<"imported">>, 1),
+            case Acc of
+                <<>> ->
+                    ok;
+                _ ->
+                    libsniffle:img_create(Img, Idx, binary:copy(MB)),
+                    ok
+            end
         {Port,{exit_status, S}} ->
             lager:info("Writing image ~s failed after ~p parts with exit status ~p.", [Img, Idx, S]),
             ok

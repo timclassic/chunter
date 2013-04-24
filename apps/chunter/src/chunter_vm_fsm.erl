@@ -153,6 +153,8 @@ start_link(UUID) ->
 init([UUID]) ->
     [Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
     libsniffle:vm_register(UUID, Hypervisor),
+    timer:send_interval(900000, update_snapshots), % This is every 15 minutes
+    snapshot_sizes(UUID),
     {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor}}.
 
 %%--------------------------------------------------------------------
@@ -440,6 +442,9 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
+handle_info(update_snapshots, StateName, State) ->
+    snapshot_sizes(State#state.uuid),
+    {next_state, StateName, State};
 handle_info(get_info, StateName, State) ->
     Info = chunter_vmadm:info(State#state.uuid),
     State1 = init_console(State),
@@ -713,3 +718,14 @@ snapshot_action(VM, UUID, Action) ->
                     error
             end
     end.
+
+
+snapshot_sizes(VM) ->
+    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/" ++ binary_to_list(VM)),
+    Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
+                                  L =/= <<>>],
+    [libsniffle:vm_set(
+       VM,
+       [<<"snapshots">>, lists:last(re:split(Name, "@")), <<"size">>],
+       list_to_integer(binary_to_list(Size))) ||
+        [Name, Size, _, _, _] <- Lines].

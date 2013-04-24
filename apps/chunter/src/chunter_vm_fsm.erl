@@ -326,6 +326,7 @@ handle_event(register, StateName, State) ->
         {error, not_found} ->
             {stop, not_found, State};
         VMData ->
+            snapshot_sizes(State#state.uuid),
             timer:send_after(500, get_info),
             libsniffle:vm_set(State#state.uuid, [{<<"state">>, atom_to_binary(StateName)},
                                                  {<<"config">>, chunter_spec:to_sniffle(VMData)}]),

@@ -80,7 +80,12 @@ info(UUID) ->
         "Unable" ++ _ ->
             [];
         JSON ->
-            jsx:to_term(list_to_binary(JSON))
+            case jsx:to_term(list_to_binary(JSON)) of
+                {incomplete, _} ->
+                    [];
+                R ->
+                    R
+            end
     end.
 
 -spec stop(UUID::fifo:uuid()) -> list().

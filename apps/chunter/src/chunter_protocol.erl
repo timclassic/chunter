@@ -231,6 +231,7 @@ llquantize(Data) ->
 
 write_snapshot(UUID, SnapId, Img) ->
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
+    lager:debug("Running ZFS command: ~p", [Cmd]),
     Port = open_port({spawn_executable, Cmd},
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
@@ -256,6 +257,6 @@ write_snapshot(Port, Img, Acc, Idx) ->
             libsniffle:dataset_set(Img, <<"imported">>, 1),
             ok;
         {Port,{exit_status, S}} ->
-            lager:info("Writing image ~s failed after ~p parts with exit status ~p.", [Img, Idx, S]),
+            lager:error("Writing image ~s failed after ~p parts with exit status ~p.", [Img, Idx, S]),
             ok
     end.

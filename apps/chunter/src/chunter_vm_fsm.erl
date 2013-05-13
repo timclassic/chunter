@@ -529,17 +529,27 @@ install_image(DatasetUUID) ->
                                stderr_to_stdout, exit_status]),
             port_command(Port, B),
             lager:debug("We have the following parts: ~p.", [Parts1]),
-            write_image(Port, DatasetUUID, Parts1)
+            write_image(Port, DatasetUUID, Parts1, 0)
     end.
 
+write_image(Port, UUID, [Idx|_], 2) ->
+    lager:debug("<IMG> ~p import failed at chunk ~p.", [UUID, Idx]),
+    port_close(Port),
+    {error, retries_exceeded};
 
-write_image(Port, UUID, [Idx|R]) ->
+write_image(Port, UUID, [Idx|R], Retry) ->
     lager:debug("<IMG> ~s[~p]", [UUID, Idx]),
-    {ok, B} = libsniffle:img_get(UUID, Idx),
-    port_command(Port, B),
-    write_image(Port, UUID, R);
+    case libsniffle:img_get(UUID, Idx) of
+        {ok, B} ->
+            port_command(Port, B),
+            write_image(Port, UUID, R, 0);
+        _ ->
+            lager:warning("<IMG> ~p[~p]: retry!", [UUID, Idx]),
+            timer:sleep(1000),
+            write_image(Port, UUID, [Idx|R], Retry+1)
+    end;
 
-write_image(Port, UUID, []) ->
+write_image(Port, UUID, [], _) ->
     lager:debug("<IMG> done going to wait for imgamd.", []),
     port_close(Port),
     UUIDL = binary_to_list(UUID),
@@ -573,10 +583,6 @@ wait_image(N, Cmd) when N < 3 ->
     wait_image(length(re:split(os:cmd(Cmd), "\n")), Cmd);
 
 wait_image(_, _) ->
-
-
-
-
     lager:debug("<IMG> done waiting.", []).
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
@@ -656,7 +662,7 @@ do_rollback_snapshot(Path, SnapID) ->
     CmdB = <<"/usr/sbin/zfs rollback -r ",
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
-    lager:info("Deleting snapshot: ~s", [Cmd]),
+    lager:info("Rolling back snapshot: ~s", [Cmd]),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 

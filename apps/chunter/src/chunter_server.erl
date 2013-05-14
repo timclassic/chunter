@@ -87,8 +87,11 @@ init([]) ->
                undefined ->
                    [H|_] = re:split(os:cmd("uname -n"), "\n"),
                    H;
-               {ok, H} ->
-                   H
+               {ok, H} when is_binary(H) ->
+                   H;
+               {ok, H} when is_list(H) ->
+                   binary_to_list(H)
+
            end,
     {A,B,C,D} = case application:get_env(ip) of
                     undefined ->

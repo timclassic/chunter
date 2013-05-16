@@ -90,7 +90,7 @@ init([]) ->
                {ok, H} when is_binary(H) ->
                    H;
                {ok, H} when is_list(H) ->
-                   binary_to_list(H)
+                   list_to_binary(H)
 
            end,
     {A,B,C,D} = case application:get_env(ip) of

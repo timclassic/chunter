@@ -198,16 +198,11 @@ generate_spec(Package, Dataset, OwnerData) ->
                     Config::fifo:vm_config()) -> fifo:config_list().
 
 create_update(_, [], Config) ->
+    KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>],
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
                            (<<"root_pw">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"root_pw">>], V, Obj);
-                           (<<"resolvers">>, V, Obj) ->
-                               jsxd:set(<<"resolvers">>, V, Obj);
-                           (<<"hostname">>, V, Obj) ->
-                               jsxd:set(<<"hostname">>, V, Obj);
-                           (<<"alias">>, V, Obj) ->
-                               jsxd:set(<<"alias">>, V, Obj);
                            (<<"admin_pw">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"admin_pw">>], V, Obj);
                            (<<"metadata">>, V, Obj) ->
@@ -219,7 +214,9 @@ create_update(_, [], Config) ->
                                jsxd:set([<<"set_internal_metadata">>, <<"note">>], V, Obj);
                            (_, _, Obj) ->
                                Obj
-                       end, jsxd:new(), Config),
+                       end,
+                       jsxd:select(KeepKeys, Config),
+                       jsxd:new(), Config),
     Result;
 
 create_update(Original, Package, Config) ->

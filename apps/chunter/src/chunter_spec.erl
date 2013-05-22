@@ -216,7 +216,7 @@ create_update(_, [], Config) ->
                                Obj
                        end,
                        jsxd:select(KeepKeys, Config),
-                       jsxd:new(), Config),
+                       Config),
     Result;
 
 create_update(Original, Package, Config) ->

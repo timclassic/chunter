@@ -319,17 +319,21 @@ handle_event({force_state, NextState}, StateName, State) ->
             {next_state, Other, State}
     end;
 
-handle_event(register, StateName, State) ->
-    libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
+handle_event(register, StateName, State = #state{uuid = UUID}) ->
+    libsniffle:vm_register(UUID, State#state.hypervisor),
     %%    change_state(State#state.uuid, atom_to_binary(StateName)),
-    case load_vm(State#state.uuid) of
+    case load_vm(UUID) of
         {error, not_found} ->
             {stop, not_found, State};
         VMData ->
-            snapshot_sizes(State#state.uuid),
+            snapshot_sizes(UUID),
             timer:send_after(500, get_info),
-            libsniffle:vm_set(State#state.uuid, [{<<"state">>, atom_to_binary(StateName)},
-                                                 {<<"config">>, chunter_spec:to_sniffle(VMData)}]),
+            SniffleData = chunter_spec:to_sniffle(VMData),
+            libhowl:send(UUID, [{<<"event">>, <<"update">>},
+                                {<<"data">>,
+                                 [{<<"config">>, SniffleData}]}]),
+            libsniffle:vm_set(UUID, [{<<"state">>, atom_to_binary(StateName)},
+                                     {<<"config">>, SniffleData}]),
             {next_state, StateName, State}
     end;
 

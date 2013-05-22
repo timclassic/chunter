@@ -198,7 +198,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                     Config::fifo:vm_config()) -> fifo:config_list().
 
 create_update(_, [], Config) ->
-    KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>],
+    KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>,
+                <<"update_nics">>],
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
                            (<<"root_pw">>, V, Obj) ->

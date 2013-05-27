@@ -554,7 +554,7 @@ write_image(Port, UUID, [Idx|R], Retry) ->
     end;
 
 write_image(Port, UUID, [], _) ->
-    lager:debug("<IMG> done going to wait for imgamd.", []),
+    lager:debug("<IMG> done, going to wait for zfs to finish now.", []),
     port_close(Port),
     UUIDL = binary_to_list(UUID),
     %% We need to satisfy imgadm *shakes fist* this seems to be a minimal

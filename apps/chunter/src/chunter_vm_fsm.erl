@@ -153,6 +153,8 @@ start_link(UUID) ->
 init([UUID]) ->
     [Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
     libsniffle:vm_register(UUID, Hypervisor),
+    timer:send_interval(900000, update_snapshots), % This is every 15 minutes
+    snapshot_sizes(UUID),
     {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor}}.
 
 %%--------------------------------------------------------------------
@@ -317,16 +319,21 @@ handle_event({force_state, NextState}, StateName, State) ->
             {next_state, Other, State}
     end;
 
-handle_event(register, StateName, State) ->
-    libsniffle:vm_register(State#state.uuid, State#state.hypervisor),
+handle_event(register, StateName, State = #state{uuid = UUID}) ->
+    libsniffle:vm_register(UUID, State#state.hypervisor),
     %%    change_state(State#state.uuid, atom_to_binary(StateName)),
-    case load_vm(State#state.uuid) of
+    case load_vm(UUID) of
         {error, not_found} ->
             {stop, not_found, State};
         VMData ->
+            snapshot_sizes(UUID),
             timer:send_after(500, get_info),
-            libsniffle:vm_set(State#state.uuid, [{<<"state">>, atom_to_binary(StateName)},
-                                                 {<<"config">>, chunter_spec:to_sniffle(VMData)}]),
+            SniffleData = chunter_spec:to_sniffle(VMData),
+            libhowl:send(UUID, [{<<"event">>, <<"update">>},
+                                {<<"data">>,
+                                 [{<<"config">>, SniffleData}]}]),
+            libsniffle:vm_set(UUID, [{<<"state">>, atom_to_binary(StateName)},
+                                     {<<"config">>, SniffleData}]),
             {next_state, StateName, State}
     end;
 
@@ -440,6 +447,9 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
+handle_info(update_snapshots, StateName, State) ->
+    snapshot_sizes(State#state.uuid),
+    {next_state, StateName, State};
 handle_info(get_info, StateName, State) ->
     Info = chunter_vmadm:info(State#state.uuid),
     State1 = init_console(State),
@@ -523,18 +533,28 @@ install_image(DatasetUUID) ->
                                stderr_to_stdout, exit_status]),
             port_command(Port, B),
             lager:debug("We have the following parts: ~p.", [Parts1]),
-            write_image(Port, DatasetUUID, Parts1)
+            write_image(Port, DatasetUUID, Parts1, 0)
     end.
 
+write_image(Port, UUID, [Idx|_], 2) ->
+    lager:debug("<IMG> ~p import failed at chunk ~p.", [UUID, Idx]),
+    port_close(Port),
+    {error, retries_exceeded};
 
-write_image(Port, UUID, [Idx|R]) ->
+write_image(Port, UUID, [Idx|R], Retry) ->
     lager:debug("<IMG> ~s[~p]", [UUID, Idx]),
-    {ok, B} = libsniffle:img_get(UUID, Idx),
-    port_command(Port, B),
-    write_image(Port, UUID, R);
+    case libsniffle:img_get(UUID, Idx) of
+        {ok, B} ->
+            port_command(Port, B),
+            write_image(Port, UUID, R, 0);
+        _ ->
+            lager:warning("<IMG> ~p[~p]: retry!", [UUID, Idx]),
+            timer:sleep(1000),
+            write_image(Port, UUID, [Idx|R], Retry+1)
+    end;
 
-write_image(Port, UUID, []) ->
-    lager:debug("<IMG> done going to wait for imgamd.", []),
+write_image(Port, UUID, [], _) ->
+    lager:debug("<IMG> done, going to wait for zfs to finish now.", []),
     port_close(Port),
     UUIDL = binary_to_list(UUID),
     %% We need to satisfy imgadm *shakes fist* this seems to be a minimal
@@ -646,7 +666,7 @@ do_rollback_snapshot(Path, SnapID) ->
     CmdB = <<"/usr/sbin/zfs rollback -r ",
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
-    lager:info("Deleting snapshot: ~s", [Cmd]),
+    lager:info("Rolling back snapshot: ~s", [Cmd]),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
@@ -709,3 +729,14 @@ snapshot_action(VM, UUID, Action) ->
                     error
             end
     end.
+
+
+snapshot_sizes(VM) ->
+    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/" ++ binary_to_list(VM)),
+    Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
+                                  L =/= <<>>],
+    [libsniffle:vm_set(
+       VM,
+       [<<"snapshots">>, lists:last(re:split(Name, "@")), <<"size">>],
+       list_to_integer(binary_to_list(Size))) ||
+        [Name, Size, _, _, _] <- Lines].

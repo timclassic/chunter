@@ -161,6 +161,14 @@ handle_message({machines, snapshot, rollback, UUID, SnapId}, State) when is_bina
                                                                          is_binary(SnapId) ->
     {stop, chunter_vm_fsm:rollback_snapshot(UUID, SnapId), State};
 
+handle_message({machines, snapshot, store, UUID, SnapId, Img}, State) when is_binary(UUID),
+                                                                           is_binary(SnapId) ->
+    spawn(fun() ->
+                  write_snapshot(UUID, SnapId, Img)
+          end),
+    {stop, ok, State};
+
+
 handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),
     {stop, State};
@@ -219,3 +227,36 @@ llquantize(Data) ->
                                             jsxd:set(BPath ++ [B], Value, Obj1)
                                     end, Obj, Vals)
                 end, [], Data).
+
+
+write_snapshot(UUID, SnapId, Img) ->
+    Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
+    lager:debug("Running ZFS command: ~p", [Cmd]),
+    Port = open_port({spawn_executable, Cmd},
+                     [{args, [UUID, SnapId]}, use_stdio, binary,
+                      stderr_to_stdout, exit_status, stream]),
+    libsniffle:dataset_set(Img, <<"imported">>, 0),
+    write_snapshot(Port, Img, <<>>, 0).
+
+write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx) ->
+    libsniffle:img_create(Img, Idx, binary:copy(MB)),
+    write_snapshot(Port, Img, Acc, Idx+1);
+
+write_snapshot(Port, Img, Acc, Idx) ->
+    receive
+        {Port, {data, Data}} ->
+            write_snapshot(Port, Img, <<Acc/binary, Data/binary>>, Idx);
+        {Port,{exit_status, 0}} ->
+            case Acc of
+                <<>> ->
+                    ok;
+                _ ->
+                    libsniffle:img_create(Img, Idx, binary:copy(Acc))
+            end,
+            lager:info("Writing image ~s finished with ~p parts.", [Img, Idx]),
+            libsniffle:dataset_set(Img, <<"imported">>, 1),
+            ok;
+        {Port,{exit_status, S}} ->
+            lager:error("Writing image ~s failed after ~p parts with exit status ~p.", [Img, Idx, S]),
+            ok
+    end.

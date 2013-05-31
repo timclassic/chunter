@@ -80,7 +80,12 @@ info(UUID) ->
         "Unable" ++ _ ->
             [];
         JSON ->
-            jsx:to_term(list_to_binary(JSON))
+            case jsx:to_term(list_to_binary(JSON)) of
+                {incomplete, _} ->
+                    [];
+                R ->
+                    R
+            end
     end.
 
 -spec stop(UUID::fifo:uuid()) -> list().
@@ -143,14 +148,13 @@ create(Data) ->
     %%    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
                "vmadm:create", []),
-    Cmd =  code:priv_dir(chunter) ++ "/vmadm_wrap.sh create",
+    Cmd = "/usr/sbin/vmadm create",
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
     {ok, Mem} = jsxd:get(<<"max_physical_memory">>, Data),
     chunter_server:provision_memory(Mem*1024*1024),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
     port_command(Port, jsx:to_json(Data)),
-    port_command(Port, "\nEOF\n"),
 
     Res = case wait_for_tex(Port) of
               ok ->

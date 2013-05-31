@@ -1,2 +1,3 @@
 #!/bin/sh
-gunzip | zfs receive zones/$1
+echo "`date +'%Y-%m-%d %H:%M:%S'` Importing dataset $1 encoded as gzip"
+gunzip | zfs receive zones/$1 >> /var/log/chunter/zfs_receive.log 2>> /var/log/chunter/zfs.log

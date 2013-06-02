@@ -1,5 +1,5 @@
 ## Name of the node
--name chunter@127.0.0.1
+-sname chunter
 
 ## Cookie for distributed erlang
 -setcookie fifo

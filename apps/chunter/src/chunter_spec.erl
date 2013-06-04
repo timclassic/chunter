@@ -218,7 +218,14 @@ create_update(_, [], Config) ->
                        end,
                        jsxd:select(KeepKeys, Config),
                        Config),
-    Result;
+    jsxd:update(<<"add_nics">>,
+                fun(Ns) ->
+                        [jsxd:update(<<"nic_driver">>,
+                                     fun(D) ->
+                                             D
+                                     end, <<"virtio">>, N) ||
+                            N <- Ns]
+                end, [], Result);
 
 create_update(Original, Package, Config) ->
     Base = create_update(Original, [], Config),

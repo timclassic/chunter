@@ -220,7 +220,7 @@ create_update(_, [], Config) ->
                        Config),
     R1 = jsxd:update([<<"add_nics">>],
                      fun(Ns) ->
-                             [jsxd:update([<<"nic_driver">>],
+                             [jsxd:update([<<"model">>],
                                           fun(D) ->
                                                   D
                                           end, <<"virtio">>, N) ||

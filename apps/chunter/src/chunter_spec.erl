@@ -218,14 +218,16 @@ create_update(_, [], Config) ->
                        end,
                        jsxd:select(KeepKeys, Config),
                        Config),
-    jsxd:update(<<"add_nics">>,
-                fun(Ns) ->
-                        [jsxd:update(<<"nic_driver">>,
-                                     fun(D) ->
-                                             D
-                                     end, <<"virtio">>, N) ||
-                            N <- Ns]
-                end, [], Result);
+    R1 = jsxd:update([<<"add_nics">>],
+                     fun(Ns) ->
+                             [jsxd:update([<<"nic_driver">>],
+                                          fun(D) ->
+                                                  D
+                                          end, <<"virtio">>, N) ||
+                                 N <- Ns]
+                     end, [], Result),
+    lager:debug("Generated update: ~p.~n", [R1]),
+    R1;
 
 create_update(Original, Package, Config) ->
     Base = create_update(Original, [], Config),

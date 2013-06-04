@@ -218,7 +218,16 @@ create_update(_, [], Config) ->
                        end,
                        jsxd:select(KeepKeys, Config),
                        Config),
-    Result;
+    R1 = jsxd:update([<<"add_nics">>],
+                     fun(Ns) ->
+                             [jsxd:update([<<"model">>],
+                                          fun(D) ->
+                                                  D
+                                          end, <<"virtio">>, N) ||
+                                 N <- Ns]
+                     end, [], Result),
+    lager:debug("Generated update: ~s.~n", [jsx:encode(R1)]),
+    R1;
 
 create_update(Original, Package, Config) ->
     Base = create_update(Original, [], Config),

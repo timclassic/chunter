@@ -226,7 +226,7 @@ create_update(_, [], Config) ->
                                           end, <<"virtio">>, N) ||
                                  N <- Ns]
                      end, [], Result),
-    lager:debug("Generated update: ~p.~n", [R1]),
+    lager:debug("Generated update: ~s.~n", [jsx:encode(R1)]),
     R1;
 
 create_update(Original, Package, Config) ->

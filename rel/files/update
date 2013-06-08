@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH=dev
+BRANCH=rel
 ETC=/opt/chunter/etc
 BASE=http://release.project-fifo.net/chunter/${BRANCH}
 curl -s ${BASE}/chunter.version > /tmp/chunter.version

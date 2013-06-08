@@ -6,8 +6,8 @@ TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_2012072
 
 DST=/opt
 
-IFACE=`dladm show-phys -m | grep $admin_nic | awk '{print $1}'`
-IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`
+#IFACE=`dladm show-phys -m | grep $admin_nic | awk '{print $1}'`
+#IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`
 
 DIR=`dirname $0`;
 if [[ "x$DIR" = "x." ]]
@@ -37,11 +37,21 @@ fi
 
 (cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
 mkdir -p /var/log/chunter
-sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/app.config
-sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/vm.args
+#sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/app.config
+#sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/vm.args
+
+if [ ! -f /opt/chunter/etc/app.config ]
+then
+    cp /opt/chunter/etc/app.config.example /opt/chunter/etc/app.config
+fi
+
+if [ ! -f /opt/chunter/etc/vm.args ]
+then
+    cp /opt/chunter/etc/vm.args.example /opt/chunter/etc/vm.args
+fi
 
 mkdir -p /opt/custom/smf
-cp /opt/chunter/etc/epmd.xml /opt/chunter/etc/chunter.xml /opt/custom/smf
+cp /opt/chunter/share/epmd.xml /opt/chunter/share/chunter.xml /opt/custom/smf
 
 svccfg import /opt/custom/smf/epmd.xml
 svccfg import /opt/custom/smf/chunter.xml

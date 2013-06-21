@@ -732,18 +732,23 @@ snapshot_action(VM, UUID, Action) ->
 
 
 snapshot_sizes(VM) ->
-    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/" ++ binary_to_list(VM)),
-    Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
-                                  L =/= <<>>],
-    {ok, V} = libsniffle:vm_get(VM),
-    {ok, S} = jsxd:get([<<"snapshots">>], V),
-    Known = [ ID || {ID, _} <- S],
-    Snaps = [{lists:last(re:split(Name, "@")), list_to_integer(binary_to_list(Size))}
-             || [Name, Size, _, _, _] <- Lines],
-    Snaps1 =lists:filter(fun ({Name, _}) ->
-                                 lists:member(Name, Known)
-                         end, Snaps),
-    [libsniffle:vm_set(
-       VM,
-       [<<"snapshots">>, Name, <<"size">>],
-       Size) || {Name, Size} <- Snaps1].
+    case libsniffle:servers() of
+        [] ->
+            ok;
+        _ ->
+            Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/" ++ binary_to_list(VM)),
+            Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
+                                          L =/= <<>>],
+            {ok, V} = libsniffle:vm_get(VM),
+            {ok, S} = jsxd:get([<<"snapshots">>], V),
+            Known = [ ID || {ID, _} <- S],
+            Snaps = [{lists:last(re:split(Name, "@")), list_to_integer(binary_to_list(Size))}
+                     || [Name, Size, _, _, _] <- Lines],
+            Snaps1 =lists:filter(fun ({Name, _}) ->
+                                         lists:member(Name, Known)
+                                 end, Snaps),
+            [libsniffle:vm_set(
+               VM,
+               [<<"snapshots">>, Name, <<"size">>],
+               Size) || {Name, Size} <- Snaps1]
+    end.

@@ -529,8 +529,8 @@ install_image(DatasetUUID) ->
                        end,
             lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
             Port = open_port({spawn_executable, Cmd},
-                              [{args, [DatasetUUID]}, use_stdio, binary,
-                               stderr_to_stdout, exit_status]),
+                             [{args, [DatasetUUID]}, use_stdio, binary,
+                              stderr_to_stdout, exit_status]),
             port_command(Port, B),
             lager:debug("We have the following parts: ~p.", [Parts1]),
             write_image(Port, DatasetUUID, Parts1, 0)
@@ -567,7 +567,7 @@ write_image(Port, UUID, [], _) ->
                                  {<<"disabled">>, false},
                                  {<<"type">>, <<"zvol">>},
                                  {<<"state">>, <<"active">>}]},
-                              {<<"zpool">>, <<"zones">>}]),
+                               {<<"zpool">>, <<"zones">>}]),
     %% Need to set the correct type
     Manifest1 = case jsxd:get([<<"type">>], DS) of
                     {ok, <<"zone">>} ->
@@ -735,8 +735,15 @@ snapshot_sizes(VM) ->
     Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/" ++ binary_to_list(VM)),
     Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
                                   L =/= <<>>],
+    {ok, V} = libsniffle:vm_get(VM),
+    {ok, S} = jsxd:get([<<"snapshots">>], V),
+    Known = [ ID || {ID, _} <- S],
+    Snaps = [{lists:last(re:split(Name, "@")), list_to_integer(binary_to_list(Size))}
+             || [Name, Size, _, _, _] <- Lines],
+    Snaps1 =lists:filter(fun ({Name, _}) ->
+                                 lists:member(Name, Known)
+                         end, Snaps),
     [libsniffle:vm_set(
        VM,
-       [<<"snapshots">>, lists:last(re:split(Name, "@")), <<"size">>],
-       list_to_integer(binary_to_list(Size))) ||
-        [Name, Size, _, _, _] <- Lines].
+       [<<"snapshots">>, Name, <<"size">>],
+       Size) || {Name, Size} <- Snaps1].

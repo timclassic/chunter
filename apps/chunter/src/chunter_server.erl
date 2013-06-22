@@ -83,24 +83,7 @@ disconnect() ->
 init([]) ->
     lager:info([{fifi_component, chunter}],
                "chunter:init.", []),
-    Host = case application:get_env(hostname) of
-               undefined ->
-                   [H|_] = re:split(os:cmd("uname -n"), "\n"),
-                   H;
-               {ok, H} when is_binary(H) ->
-                   H;
-               {ok, H} when is_list(H) ->
-                   list_to_binary(H)
-
-           end,
-    {A,B,C,D} = case application:get_env(ip) of
-                    undefined ->
-                        {ok, R} = inet:getaddr(binary_to_list(Host), inet),
-                        R;
-                    {ok, R} ->
-                        R
-                end,
-    IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
+    {Host, IPStr} = host_info(),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
     libsniffle:hypervisor_register(Host, IPStr, 4200),
@@ -196,9 +179,7 @@ handle_cast(connect, #state{name = Host,
                                                 %    statsderl:increment([Name, ".net.join"], 1, 1.0),
                                                 %    libsniffle:join_client_channel(),
 
-    {ok, {A,B,C,D}} = inet:getaddr(binary_to_list(Host), inet),
-    IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
-
+    {Host, IPStr} = host_info(),
     libsniffle:hypervisor_register(Host, IPStr, 4200),
     libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, State#state.sysinfo},
                                      {<<"version">>, ?VERSION},
@@ -307,3 +288,24 @@ list_vms() ->
             [ re:split(Line, ":")
               || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
         ID =/= <<"0">>].
+
+
+host_info() ->
+    Host = case application:get_env(hostname) of
+               undefined ->
+                   [H|_] = re:split(os:cmd("uname -n"), "\n"),
+                   H;
+               {ok, H} when is_binary(H) ->
+                   H;
+               {ok, H} when is_list(H) ->
+                   list_to_binary(H)
+           end,
+    {A,B,C,D} = case application:get_env(ip) of
+                    undefined ->
+                        {ok, R} = inet:getaddr(binary_to_list(Host), inet),
+                        R;
+                    {ok, R} ->
+                        R
+                end,
+    IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
+    {Host, IPStr}.

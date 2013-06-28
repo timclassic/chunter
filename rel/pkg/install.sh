@@ -37,8 +37,6 @@ fi
 
 (cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
 mkdir -p /var/log/chunter
-#sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/app.config
-#sed -i .bak -e "s/127.0.0.1/${IP}/g" /opt/chunter/etc/vm.args
 
 if [ ! -f /opt/chunter/etc/app.config ]
 then

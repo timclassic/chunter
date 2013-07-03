@@ -136,8 +136,14 @@ generate_spec(Package, Dataset, OwnerData) ->
                                           {set, <<"brand">>, <<"kvm">>},
                                           {set, <<"max_physical_memory">>, Ram + 1024},
                                           {set, [<<"disks">>, 0, <<"boot">>], true},
+                                          %% Hack for dataset bug that image size is handled a string
                                           {set, [<<"disks">>, 0, <<"image_size">>],
-                                           jsxd:get(<<"image_size">>, 0, Dataset)},
+                                           case jsxd:get(<<"image_size">>, 0, Dataset) of
+                                               I when is_integer(I) ->
+                                                   I;
+                                               S when is_list(S) ->
+                                                   list_to_integer(S)
+                                           end},
                                           {set, [<<"disks">>, 0, <<"image_uuid">>],
                                            jsxd:get(<<"dataset">>, <<"">>, Dataset)}],
                                          Base01),

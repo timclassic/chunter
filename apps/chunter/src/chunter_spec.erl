@@ -141,8 +141,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                                            case jsxd:get(<<"image_size">>, 0, Dataset) of
                                                I when is_integer(I) ->
                                                    I;
-                                               S when is_list(S) ->
-                                                   list_to_integer(S)
+                                               S when is_binary(S) ->
+                                                   list_to_integer(binary_to_list(S))
                                            end},
                                           {set, [<<"disks">>, 0, <<"image_uuid">>],
                                            jsxd:get(<<"dataset">>, <<"">>, Dataset)}],

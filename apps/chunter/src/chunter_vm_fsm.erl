@@ -447,22 +447,27 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
-handle_info({D, {data, Data}}, StateName,
+handle_info({D, {data, {eol, Data}}}, StateName,
             State = #state{
                        sshdoor = D,
                        uuid = UUID
                       }) ->
-    [_, _, KeyID] = re:split(Data),
-    case libsnarl:user_key_find(libsnarl:keystr_to_id(KeyID)) of
-        {ok, UserID} ->
-            case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) of
-                true ->
-                    port_command(D, "1\n");
+    case re:split(Data, " ") of
+        [_, _, KeyID] ->
+            KeyBin = libsnarl:keystr_to_id(KeyID),
+            case libsnarl:user_key_find(KeyBin) of
+                {ok, UserID} ->
+                    case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) of
+                        true ->
+                            port_command(D, [1]);
+                        _ ->
+                            port_command(D, [0])
+                    end;
                 _ ->
-                    port_command(D, "0\n")
-                end;
+                    port_command(D, "0")
+            end;
         _ ->
-            port_command(D, "0\n")
+            ok
     end,
     {next_state, StateName, State};
 
@@ -532,12 +537,15 @@ init_sshdoor(State = #state{sshdoor = _C}) when is_port(_C) ->
     State;
 
 init_sshdoor(State) ->
-    Cmd = code:priv_dir(chunter) ++ "/sshdoor /zones/" ++
+    Cmd = code:priv_dir(chunter) ++ "/sshdoor",
+    Arg = "/zones/" ++
         binary_to_list(State#state.uuid) ++
         "/root/var/tmp/._joyent_sshd_key_is_authorized",
-    DoorPort = open_port({spawn, Cmd}, [binary]),
+    io:format("Starting with cmd: ~s~n", [Cmd]),
+    DoorPort = open_port({spawn_executable, Cmd},
+                         [{args, [Arg]}, use_stdio, binary, {line, 1024},
+                          stderr_to_stdout, exit_status]),
     State#state{sshdoor = DoorPort}.
-
 
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 

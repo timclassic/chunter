@@ -4,6 +4,10 @@ REBAR = $(shell pwd)/rebar
 
 all: deps compile
 
+apps/chunter/priv/sshdoor: utils/sshdoor.c
+	gcc utils/sshdoor.c -o apps/chunter/priv/sshdoor
+sshdoor: apps/chunter/priv/sshdoor
+
 version:
 	echo "$(shell git symbolic-ref HEAD 2> /dev/null | cut -b 12-)-$(shell git log --pretty=format:'%h, %ad' -1)" > chunter.version
 
@@ -14,7 +18,7 @@ version_header: version
 package: rel
 	make -C rel/pkg package
 
-compile: version_header
+compile: sshdoor: version_header
 	$(REBAR) compile
 
 deps:

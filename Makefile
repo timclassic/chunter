@@ -18,7 +18,7 @@ version_header: version
 package: rel
 	make -C rel/pkg package
 
-compile: sshdoor: version_header
+compile: sshdoor version_header
 	$(REBAR) compile
 
 deps:

@@ -29,11 +29,11 @@ server(void *cookie, char *argp, size_t arg_size, door_desc_t *dp,
        uint_t n_desc)
 {
   fprintf(stdout, "%s\n", argp);
-  fflush(stdout),
-    if (getc(stdin) == 1)
-      door_return("1", 256, NULL, 0); // allow all logins - yay!
-    else
-      door_return("0", 256, NULL, 0); // allow all logins - yay!
+  fflush(stdout);
+  if (getc(stdin) == 1)
+    door_return("1", 256, NULL, 0); // allow all logins - yay!
+  else
+    door_return("0", 256, NULL, 0); // allow all logins - yay!
   /* NOTREACHED */
 }
 

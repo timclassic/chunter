@@ -53,7 +53,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, uuid, console, listeners = []}).
+-record(state, {hypervisor, uuid, console, sshdoor, listeners = []}).
 
 %%%===================================================================
 %%% API
@@ -447,14 +447,39 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
+handle_info({D, {data, {eol, Data}}}, StateName,
+            State = #state{
+                       sshdoor = D,
+                       uuid = UUID
+                      }) ->
+    case re:split(Data, " ") of
+        [_, _, KeyID] ->
+            KeyBin = libsnarl:keystr_to_id(KeyID),
+            case libsnarl:user_key_find(KeyBin) of
+                {ok, UserID} ->
+                    case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) of
+                        true ->
+                            port_command(D, [1]);
+                        _ ->
+                            port_command(D, [0])
+                    end;
+                _ ->
+                    port_command(D, "0")
+            end;
+        _ ->
+            ok
+    end,
+    {next_state, StateName, State};
+
 handle_info(update_snapshots, StateName, State) ->
     snapshot_sizes(State#state.uuid),
     {next_state, StateName, State};
 handle_info(get_info, StateName, State) ->
     Info = chunter_vmadm:info(State#state.uuid),
     State1 = init_console(State),
+    State2 = init_sshdoor(State1),
     libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
-    {next_state, StateName, State1};
+    {next_state, StateName, State2};
 
 handle_info(Info, StateName, State) ->
     lager:warning("unknown data: ~p", [Info]),
@@ -507,6 +532,20 @@ init_console(State) ->
     Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -C " ++ binary_to_list(Name),
     ConsolePort = open_port({spawn, Console}, [binary]),
     State#state{console = ConsolePort}.
+
+init_sshdoor(State = #state{sshdoor = _C}) when is_port(_C) ->
+    State;
+
+init_sshdoor(State) ->
+    Cmd = code:priv_dir(chunter) ++ "/sshdoor",
+    Arg = "/zones/" ++
+        binary_to_list(State#state.uuid) ++
+        "/root/var/tmp/._joyent_sshd_key_is_authorized",
+    io:format("Starting with cmd: ~s~n", [Cmd]),
+    DoorPort = open_port({spawn_executable, Cmd},
+                         [{args, [Arg]}, use_stdio, binary, {line, 1024},
+                          stderr_to_stdout, exit_status]),
+    State#state{sshdoor = DoorPort}.
 
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 
@@ -741,7 +780,7 @@ snapshot_sizes(VM) ->
                 {ok, S} ->
                     Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/" ++ binary_to_list(VM)),
                     Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
-                                          L =/= <<>>],
+                                                  L =/= <<>>],
                     Known = [ ID || {ID, _} <- S],
                     Snaps = [{lists:last(re:split(Name, "@")), list_to_integer(binary_to_list(Size))}
                              || [Name, Size, _, _, _] <- Lines],

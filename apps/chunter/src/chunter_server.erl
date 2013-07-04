@@ -17,6 +17,7 @@
          provision_memory/1,
          unprovision_memory/1,
          connect/0,
+         update_mem/0,
          disconnect/0]).
 
 
@@ -61,6 +62,9 @@ unprovision_memory(M) ->
 
 connect() ->
     gen_server:cast(?SERVER, connect).
+
+update_mem() ->
+    gen_server:cast(?SERVER, update_mem).
 
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
@@ -153,10 +157,24 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
+handle_cast(update_mem, #state{name = Host}) ->
+    ProvMem = round(lists:foldl(
+                      fun (VM, Mem) ->
+                              {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
+                              chunter_vm_fsm:load(UUID),
+                              {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+                              Mem + M
+                      end, 0, list_vms()) / (1024*1024)),
+    {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ProvMem},
+                                     {<<"resources.provisioned-memory">>, ProvMem},
+                                     {<<"resources.total-memory">>, TotalMem}]),
+    {noreply};
+
 handle_cast(connect, #state{name = Host,
                             capabilities = Caps} = State) ->
-                                                %    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
-                                                %    application:set_env(statsderl, hostname, Host),
+    %%    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
+    %%    application:set_env(statsderl, hostname, Host),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     Networks = re:split(os:cmd("cat /usbkey/config  | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
     Networks1 = lists:delete(<<>>, Networks),
@@ -173,11 +191,11 @@ handle_cast(connect, #state{name = Host,
                               Mem + M
                       end, 0, VMS) / (1024*1024)),
 
-                                                %    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
-                                                %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
+    %%    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
+    %%    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
 
-                                                %    statsderl:increment([Name, ".net.join"], 1, 1.0),
-                                                %    libsniffle:join_client_channel(),
+    %%    statsderl:increment([Name, ".net.join"], 1, 1.0),
+    %%    libsniffle:join_client_channel(),
 
     {Host, IPStr} = host_info(),
     libsniffle:hypervisor_register(Host, IPStr, 4200),

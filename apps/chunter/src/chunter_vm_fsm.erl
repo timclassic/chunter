@@ -183,7 +183,8 @@ init([UUID]) ->
 initialized(load, State) ->
     {next_state, loading, State};
 
-initialized({create, PackageSpec, DatasetSpec, VMSpec}, State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
+initialized({create, PackageSpec, DatasetSpec, VMSpec},
+            State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
     {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
     eplugin:call('vm:create', UUID, VMData),
@@ -337,7 +338,8 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             {next_state, StateName, State}
     end;
 
-handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) ->
+handle_event({update, Package, Config}, StateName,
+             State = #state{uuid = UUID}) ->
     case load_vm(UUID) of
         {error, not_found} ->
             {stop, not_found, State};
@@ -348,6 +350,7 @@ handle_event({update, Package, Config}, StateName, State = #state{uuid = UUID}) 
                 {error, not_found} ->
                     {stop, not_found, State};
                 VMData1 ->
+                    chunter_server:update_mem(),
                     SniffleData = chunter_spec:to_sniffle(VMData1),
                     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
                     libsniffle:vm_log(UUID, <<"Update complete.">>),

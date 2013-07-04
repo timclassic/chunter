@@ -1,3 +1,4 @@
+apps/chunter/priv/sshdoor
 *.version
 apps/chunter/src/chunter_version.hrl
 rel/pkg/*.gz

@@ -53,7 +53,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, uuid, console, sshdoor, listeners = []}).
+-record(state, {hypervisor, type, uuid, console, sshdoor, listeners = []}).
 
 %%%===================================================================
 %%% API
@@ -482,15 +482,38 @@ handle_info({D, {data, {eol, Data}}}, StateName,
     end,
     {next_state, StateName, State};
 
+handle_info({_C,{exit_status,1}}, StateName,
+            State = #state{
+                       console = _C,
+                       type = zone
+                      }) ->
+    timer:send_after(1000, init_console),
+    {next_state, StateName, State};
+
+handle_info({_D,{exit_status,1}}, StateName,
+            State = #state{
+                       sshdoor = _D,
+                       type = zone
+                      }) ->
+    timer:send_after(1000, init_sshdoor),
+    {next_state, StateName, State};
+
 handle_info(update_snapshots, StateName, State) ->
     snapshot_sizes(State#state.uuid),
     {next_state, StateName, State};
+
 handle_info(get_info, StateName, State) ->
     Info = chunter_vmadm:info(State#state.uuid),
     State1 = init_console(State),
     State2 = init_sshdoor(State1),
     libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
     {next_state, StateName, State2};
+
+handle_info(init_console, StateName, State) ->
+    {next_state, StateName, init_console(State)};
+
+handle_info(init_sshdoor, StateName, State) ->
+    {next_state, StateName, init_sshdoor(State)};
 
 handle_info(Info, StateName, State) ->
     lager:warning("unknown data: ~p", [Info]),

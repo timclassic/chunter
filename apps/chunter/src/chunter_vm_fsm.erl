@@ -455,21 +455,29 @@ handle_info({D, {data, {eol, Data}}}, StateName,
                        sshdoor = D,
                        uuid = UUID
                       }) ->
+
     case re:split(Data, " ") of
-        [_, _, KeyID] ->
+        [User, _, KeyID] ->
+            lager:info("[sshdoor:~s] User ~s trying to connect with key ~s",
+                       [UUID, User, KeyID]),
             KeyBin = libsnarl:keystr_to_id(KeyID),
             case libsnarl:user_key_find(KeyBin) of
                 {ok, UserID} ->
-                    case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) of
+                    case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) orelse
+                        libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"ssh">>, User]) of
                         true ->
+                            lager:info("[sshdoor:~s] granted.", [UUID]),
                             port_command(D, [1]);
                         _ ->
+                            lager:info("[sshdoor:~s] denied.", [UUID]),
                             port_command(D, [0])
                     end;
                 _ ->
-                    port_command(D, "0")
+                    lager:info("[sshdoor:~s] denied.", [UUID]),
+                    port_command(D, [0])
             end;
         _ ->
+            lager:info("[sshdoor:~s] can't parse auth request.", [UUID]),
             ok
     end,
     {next_state, StateName, State};
@@ -506,6 +514,12 @@ terminate(_Reason, _StateName, State  = #state{console = _C}) when is_port(_C) -
         _ ->
             port_close(State#state.console)
     end,
+    case erlang:port_info(State#state.sshdoor) of
+        undefined ->
+            ok;
+        _ ->
+            port_close(State#state.sshdoor)
+    end,
     ok;
 
 terminate(_Reason, _StateName, _State) ->
@@ -536,15 +550,18 @@ init_console(State) ->
     ConsolePort = open_port({spawn, Console}, [binary]),
     State#state{console = ConsolePort}.
 
-init_sshdoor(State = #state{sshdoor = _C}) when is_port(_C) ->
-    State;
-
 init_sshdoor(State) ->
+    case erlang:port_info(State#state.sshdoor) of
+        undefined ->
+            ok;
+        _ ->
+            port_close(State#state.sshdoor)
+    end,
     Cmd = code:priv_dir(chunter) ++ "/sshdoor",
     Arg = "/zones/" ++
         binary_to_list(State#state.uuid) ++
         "/root/var/tmp/._joyent_sshd_key_is_authorized",
-    io:format("Starting with cmd: ~s~n", [Cmd]),
+    lager:info("[sshdoor] Starting with cmd: ~s~n", [Cmd]),
     DoorPort = open_port({spawn_executable, Cmd},
                          [{args, [Arg]}, use_stdio, binary, {line, 1024},
                           stderr_to_stdout, exit_status]),

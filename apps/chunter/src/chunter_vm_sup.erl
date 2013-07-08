@@ -57,7 +57,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     Element = {chunter_vm_fsm, {chunter_vm_fms, start_link, []},
-               transient, brutal_kill, worker, [chunter_vm_fsm]},
+               transient, kill, worker, [chunter_vm_fsm]},
     Children = [Element],
     RestartStrategy = {simple_one_for_one, 5, 10},
     {ok, {RestartStrategy, Children}}.

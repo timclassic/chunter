@@ -567,7 +567,8 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 incinerate(Port) ->
     {os_pid, OsPid} = erlang:port_info(Port, os_pid),
     port_close(Port),
-    os:cmd(io_lib:format("kill -9 ~p", [OsPid])).
+    lager:info("Killing ~p with -9", [OsPid]),
+    os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
 
 
 init_console(State = #state{console = _C}) when is_port(_C) ->

@@ -531,14 +531,17 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _StateName, State) ->
+    lager:info("Terminating vm fsm."),
     case erlang:port_info(State#state.console) of
         undefined ->
+            lager:info("console not running"),
             ok;
         _ ->
             port_close(State#state.console)
     end,
     case erlang:port_info(State#state.sshdoor) of
         undefined ->
+            lager:info("ssh door not running"),
             ok;
         _ ->
             %% Since the SSH process does not close with a exit we kill it with

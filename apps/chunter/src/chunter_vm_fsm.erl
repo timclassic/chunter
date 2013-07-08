@@ -531,17 +531,17 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _StateName, State) ->
-    lager:info("Terminating vm fsm."),
+    lager:warning("Terminating vm fsm."),
     case erlang:port_info(State#state.console) of
         undefined ->
-            lager:info("console not running"),
+            lager:warning("console not running"),
             ok;
         _ ->
             port_close(State#state.console)
     end,
     case erlang:port_info(State#state.sshdoor) of
         undefined ->
-            lager:info("ssh door not running"),
+            lager:warning("ssh door not running"),
             ok;
         _ ->
             %% Since the SSH process does not close with a exit we kill it with
@@ -570,7 +570,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 incinerate(Port) ->
     {os_pid, OsPid} = erlang:port_info(Port, os_pid),
     port_close(Port),
-    lager:info("Killing ~p with -9", [OsPid]),
+    lager:warning("Killing ~p with -9", [OsPid]),
     os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
 
 

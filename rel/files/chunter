@@ -115,9 +115,9 @@ case "$1" in
         $NODETOOL stop
         ES=$?
         if [ "$ES" -ne 0 ]; then
-            pkill -z0 sshdoor
             exit $ES
         fi
+        pkill -z0 sshdoor
         while `kill -0 $PID 2>/dev/null`;
         do
             sleep 1
@@ -131,6 +131,7 @@ case "$1" in
         if [ "$ES" -ne 0 ]; then
             exit $ES
         fi
+        pkill -z0 sshdoor
         ;;
 
     reboot)
@@ -140,6 +141,7 @@ case "$1" in
         if [ "$ES" -ne 0 ]; then
             exit $ES
         fi
+        pkill -z0 sshdoor
         ;;
 
     ping)

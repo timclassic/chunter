@@ -530,7 +530,7 @@ handle_info(Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, State  = #state{console = _C}) when is_port(_C) ->
+terminate(_Reason, _StateName, State) ->
     case erlang:port_info(State#state.console) of
         undefined ->
             ok;
@@ -541,12 +541,12 @@ terminate(_Reason, _StateName, State  = #state{console = _C}) when is_port(_C) -
         undefined ->
             ok;
         _ ->
-            port_close(State#state.sshdoor)
+            %% Since the SSH process does not close with a exit we kill it with
+            %% fire!
+            incinerate(State#state.sshdoor)
     end,
-    ok;
-
-terminate(_Reason, _StateName, _State) ->
     ok.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -564,6 +564,12 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+incinerate(Port) ->
+    {os_pid, OsPid} = erlang:port_info(Port, os_pid),
+    port_close(Port),
+    os:cmd(io_lib:format("kill -9 ~p", [OsPid])).
+
+
 init_console(State = #state{console = _C}) when is_port(_C) ->
     State;
 
@@ -578,7 +584,7 @@ init_sshdoor(State) ->
         undefined ->
             ok;
         _ ->
-            port_close(State#state.sshdoor)
+            incinerate(State#state.sshdoor)
     end,
     Cmd = code:priv_dir(chunter) ++ "/sshdoor",
     Arg = "/zones/" ++

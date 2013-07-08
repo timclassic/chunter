@@ -477,7 +477,7 @@ handle_info({D, {data, {eol, Data}}}, StateName,
                     port_command(D, [0])
             end;
         _ ->
-            lager:info("[sshdoor:~s] can't parse auth request.", [UUID]),
+            lager:info("[sshdoor:~s] can't parse auth request: ~s.", [UUID, Data]),
             ok
     end,
     {next_state, StateName, State};

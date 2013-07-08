@@ -115,6 +115,7 @@ case "$1" in
         $NODETOOL stop
         ES=$?
         if [ "$ES" -ne 0 ]; then
+            pkill -z0 sshdoor
             exit $ES
         fi
         while `kill -0 $PID 2>/dev/null`;

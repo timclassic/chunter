@@ -14,6 +14,7 @@
 
 %% API
 -export([start_link/0,
+         host_info/0,
          provision_memory/1,
          unprovision_memory/1,
          connect/0,
@@ -309,7 +310,7 @@ list_vms() ->
 
 
 host_info() ->
-    Host = case application:get_env(hostname) of
+    Host = case application:get_env(chunter, hostname) of
                undefined ->
                    [H|_] = re:split(os:cmd("uname -n"), "\n"),
                    H;
@@ -318,7 +319,7 @@ host_info() ->
                {ok, H} when is_list(H) ->
                    list_to_binary(H)
            end,
-    {A,B,C,D} = case application:get_env(ip) of
+    {A,B,C,D} = case application:get_env(chunter, ip) of
                     undefined ->
                         {ok, R} = inet:getaddr(binary_to_list(Host), inet),
                         R;

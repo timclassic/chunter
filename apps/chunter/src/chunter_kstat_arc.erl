@@ -59,7 +59,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     timer:send_interval(1000, tick),
-    [Host|_] = re:split(os:cmd("uname -n"), "\n"),
+    {Host, _} = chunter_server:host_info(),
     {ok, H} = ekstat:open(),
     {ok, #state{host = Host,
                 kstat = H}}.

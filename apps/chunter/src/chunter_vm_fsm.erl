@@ -151,7 +151,7 @@ start_link(UUID) ->
 %% @end
 %%--------------------------------------------------------------------
 init([UUID]) ->
-    [Hypervisor|_] = re:split(os:cmd("uname -n"), "\n"),
+    {Hypervisor, _} = chunter_server:host_info(),
     libsniffle:vm_register(UUID, Hypervisor),
     timer:send_interval(900000, update_snapshots), % This is every 15 minutes
     snapshot_sizes(UUID),

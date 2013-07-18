@@ -24,7 +24,6 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    [_Name|_] = re:split(os:cmd("uname -n"), "\n"),
     {ok, {{one_for_one, 5, 10},
           [
            ?CHILD(chunter_vm_sup, supervisor),

@@ -54,7 +54,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    {Name, _} = chunter_server:host_info(),
     lager:info("chunter:zonemon - initializing: ~s", [Name]),
     Zonemon = code:priv_dir(chunter) ++ "/zonemon.sh",
     timer:send_interval(1000, zonecheck),

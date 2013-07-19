@@ -16,7 +16,7 @@
          info/1,
          reboot/1,
          force_reboot/1,
-         delete/2,
+         delete/1,
          create/1,
          update/2
         ]).
@@ -54,9 +54,9 @@ start(UUID, Image) ->
     lager:debug("[vmadm] ~s", [R]),
     R.
 
--spec delete(UUID::fifo:uuid(), Mem::number()) -> ok.
+-spec delete(UUID::fifo:uuid()) -> ok.
 
-delete(UUID, Mem) ->
+delete(UUID) ->
     lager:info([{fifi_component, chunter}],
                "vmadm:delete - UUID: ~s.", [UUID]),
     Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
@@ -65,7 +65,8 @@ delete(UUID, Mem) ->
     os:cmd(binary_to_list(Cmd)),
     R = os:cmd(binary_to_list(Cmd)),
     lager:debug("[vmadm] ~s", [R]),
-    chunter_server:unprovision_memory(Mem),
+
+    chunter_server:update_mem(),
     chunter_vm_fsm:remove(UUID).
 
 -spec info(UUID::fifo:uuid()) -> fifo:config_list().
@@ -151,8 +152,7 @@ create(Data) ->
     Cmd = "/usr/sbin/vmadm create",
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    {ok, Mem} = jsxd:get(<<"max_physical_memory">>, Data),
-    chunter_server:provision_memory(Mem*1024*1024),
+    chunter_server:update_mem(),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
     port_command(Port, jsx:to_json(Data)),
 
@@ -160,7 +160,7 @@ create(Data) ->
               ok ->
                   chunter_vm_fsm:load(UUID);
               {error, E} ->
-                  delete(UUID, Mem*1024*1024),
+                  delete(UUID),
                   lager:error([{fifi_component, chunter}],
                               "vmad:create - Failed: ~p.", [E]),
                   E

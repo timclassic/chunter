@@ -376,7 +376,6 @@ handle_event(delete, StateName, State) ->
             {next_state, StateName, State}
     end;
 
-
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
     port_command(C, Data),
     {next_state, StateName, State};

@@ -56,7 +56,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     timer:send_interval(1000, tick),
-    {Host, _} = jchunter_server:host_info(),
+    {Host, _} = chunter_server:host_info(),
     {ok, #state{host = Host}}.
 
 %%--------------------------------------------------------------------

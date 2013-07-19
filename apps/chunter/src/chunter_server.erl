@@ -15,8 +15,6 @@
 %% API
 -export([start_link/0,
          host_info/0,
-         provision_memory/1,
-         unprovision_memory/1,
          connect/0,
          update_mem/0,
          disconnect/0]).
@@ -54,12 +52,6 @@
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-provision_memory(M) ->
-    gen_server:cast(?SERVER, {prov_mem, M}).
-
-unprovision_memory(M) ->
-    gen_server:cast(?SERVER, {unprov_mem, M}).
 
 connect() ->
     gen_server:cast(?SERVER, connect).
@@ -158,7 +150,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast(update_mem, #state{name = Host}) ->
+handle_cast(update_mem, State = #state{name = Host}) ->
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
                               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
@@ -170,12 +162,15 @@ handle_cast(update_mem, #state{name = Host}) ->
     libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ProvMem},
                                      {<<"resources.provisioned-memory">>, ProvMem},
                                      {<<"resources.total-memory">>, TotalMem}]),
-    {noreply};
+    {noreply, State#state{
+                total_memory = TotalMem,
+                provisioned_memory = ProvMem
+               }};
 
 handle_cast(connect, #state{name = Host,
                             capabilities = Caps} = State) ->
     %%    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
-    %%    application:set_env(statsderl, hostname, Host),
+    %%    application:set_env(s59tatsderl, hostname, Host),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     Networks = re:split(os:cmd("cat /usbkey/config  | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
     Networks1 = lists:delete(<<>>, Networks),
@@ -216,40 +211,6 @@ handle_cast(connect, #state{name = Host,
 
 handle_cast(disconnect,  State) ->
     {noreply, State#state{connected = false}};
-
-handle_cast({prov_mem, M}, State = #state{name = Name,
-                                          provisioned_memory = P,
-                                          total_memory = T}) ->
-    MinMB = round(M / (1024*1024)),
-    Provisioned = round(MinMB + P),
-    Free = T - Provisioned,
-    libsniffle:hypervisor_set(Name, [{<<"resources.free-memory">>, Free},
-                                     {<<"resources.provisioned-memory">>, Provisioned}]),
-    libhowl:send(Name, [{<<"event">>, <<"memorychange">>},
-                        {<<"data">>, [{<<"free">>, Free},
-                                      {<<"provisioned">>, Provisioned}]}]),
-                                                %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
-    lager:info([{fifi_component, chunter}],
-               "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: +~p.", [Provisioned, M, T, MinMB]),
-    {noreply, State#state{provisioned_memory = Provisioned}};
-
-handle_cast({unprov_mem, M}, State = #state{name = Name,
-                                            provisioned_memory = P,
-                                            total_memory = T}) ->
-    MinMB = round(M / (1024*1024)),
-    Provisioned = round(P - MinMB),
-    Free = T - Provisioned,
-    libsniffle:hypervisor_set(Name, [{<<"resources.free-memory">>, Free},
-                                     {<<"resources.provisioned-memory">>, Provisioned}]),
-
-    libhowl:send(Name, [{<<"event">>, <<"memorychange">>},
-                        {<<"data">>, [{<<"free">>, Free},
-                                      {<<"provisioned">>, Provisioned}]}]),
-
-                                                %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
-    lager:info([{fifi_component, chunter}],
-               "memory:unprovision - Unprivisioned: ~p(~p) , Total: ~p, Change: -~p.", [Provisioned, M, T, MinMB]),
-    {noreply, State#state{provisioned_memory = Provisioned}};
 
 
 handle_cast(_Msg, #state{name = _Name} = State) ->

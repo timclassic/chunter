@@ -370,13 +370,7 @@ handle_event(delete, StateName, State) ->
     case load_vm(State#state.uuid) of
         {error, not_found} ->
             {stop, not_found, State};
-        VM ->
-            %%   case libsnarl:group_get(system, <<"vm_", UUID/binary, "_owner">>) of
-            %%       {ok, GUUID} ->
-            %%           libsnarl:group_delete(system, GUUID);
-            %%       _ ->
-            %%           ok
-            %%   end,
+        _VM ->
             spawn(chunter_vmadm, delete, [State#state.uuid]),
             libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),
             {next_state, StateName, State}

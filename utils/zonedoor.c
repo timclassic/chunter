@@ -2,11 +2,12 @@
  * This utility provides a SSH door for SmartOS VM's
  * it is based on MerlinDMC's code for a always open
  * SSH door but instead of always allowing access it
- * prints the information to stdout and then read a
- * 1 char response 1 (not "1") if the key should be
- * allowed 0 (not "0") if it should not.
- *
- * usage: ./sshdoor /zones/<uuid>/root/var/tmp/._joyent_sshd_key_is_authorized
+ * prints the information to stdout and then reads
+ * the response from STDIN (one line).
+
+ * usage: ./zonedoor <uuid> <service>
+ * i.e.: ./zonedoor <uuid> _joyent_sshd_key_is_authorized
+ * gets: /zones/<uuid>/root/var/tmp/._joyent_sshd_key_is_authorized
  */
 
 #pragma ident "%Z%%M% %I% %E% SMI"
@@ -34,26 +35,17 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
   fflush(stderr);
 #endif
   result = malloc(sizeof(zdoor_result_t));
-  result->zdr_size = 3;
-  result->zdr_data = malloc(result->zdr_size);
-  result->zdr_data[1] = 13;
-  result->zdr_data[2] = 0;
-  if (getc(stdin) == 49) {
+  result->zdr_data = NULL;
+  result->zdr_size = 0;
+  if (getline(&(result->zdr_data), &(result->zdr_size), stdin) != -1) {
 #ifdef DEBUG
-    fprintf(stderr, "Allowing access.\r\n");
+    fprintf(stderr, "> ~s\r\n", result->zdr_data);
+    fprintf(stderr, "> %p, %p, %d\r\n", result, result->zdr_data, result->zdr_size);
 #endif
-    result->zdr_data[0] = 49;
+    return result;
   } else {
-#ifdef DEBUG
-    fprintf(stderr, "Forbidding access.\r\n");
-#endif
-    result->zdr_data[0] = 48;
+    exit(0);
   }
-
-#ifdef DEBUG
-  fprintf(stderr, "> %p, %p, %d\r\n", result, result->zdr_data, result->zdr_size);
-#endif
-  return result;
 }
 
 int
@@ -61,7 +53,7 @@ main(int argc, char *argv[])
 {
   struct stat buf;
 
-	zdoor_handle_t zdid = zdoor_handle_init();
+  zdoor_handle_t zdid = zdoor_handle_init();
 
 #ifdef DEBUG
   fprintf(stderr, "opening door in zone %s and service %s.\r\n", argv[1], argv[2]);
@@ -73,6 +65,6 @@ main(int argc, char *argv[])
   }
 
   //while (getc(stdin) != EOF);
- 	pause(); 
+  pause();
   zdoor_handle_destroy(zdid);
 }

@@ -31,19 +31,22 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
   fprintf(stdout, "%s\n", argp);
   fflush(stdout);
 #ifdef DEBUG
-  fprintf(stderr, "< %s\r\n", argp);
+  fprintf(stderr, "[zonedoor] < %s\r\n", argp);
   fflush(stderr);
 #endif
   result = malloc(sizeof(zdoor_result_t));
   result->zdr_data = NULL;
   result->zdr_size = 0;
-  if (getline(&(result->zdr_data), &(result->zdr_size), stdin) != -1) {
+  if (getline(&(result->zdr_data), &(result->zdr_size), stdin) != EOF) {
 #ifdef DEBUG
-    fprintf(stderr, "> ~s\r\n", result->zdr_data);
-    fprintf(stderr, "> %p, %p, %d\r\n", result, result->zdr_data, result->zdr_size);
+    fprintf(stderr, "[zonedoor] > ~s\r\n", result->zdr_data);
+    fprintf(stderr, "[zonedoor] > %p, %p, %d\r\n", result, result->zdr_data, result->zdr_size);
 #endif
     return result;
   } else {
+#ifdef DEBUG
+    fprintf(stderr, "[zonedoor] Exiting with EOF.");
+#endif
     exit(0);
   }
 }
@@ -56,7 +59,7 @@ main(int argc, char *argv[])
   zdoor_handle_t zdid = zdoor_handle_init();
 
 #ifdef DEBUG
-  fprintf(stderr, "opening door in zone %s and service %s.\r\n", argv[1], argv[2]);
+  fprintf(stderr, "[zonedoor] opening door in zone %s and service %s.\r\n", argv[1], argv[2]);
   fflush(stderr);
 #endif
 

@@ -67,5 +67,6 @@ main(int argc, char *argv[])
     exit(2);
   }
 
-  (void) pause();
+  while (feof(stdin))
+    sleep (1);
 }

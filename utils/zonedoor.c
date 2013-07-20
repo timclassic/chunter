@@ -39,7 +39,7 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
   result->zdr_size = 0;
   if (getline(&(result->zdr_data), &(result->zdr_size), stdin) != EOF) {
 #ifdef DEBUG
-    fprintf(stderr, "[zonedoor] > ~s\r\n", result->zdr_data);
+    fprintf(stderr, "[zonedoor] > %s\r\n", result->zdr_data);
     fprintf(stderr, "[zonedoor] > %p, %p, %d\r\n", result, result->zdr_data, result->zdr_size);
 #endif
     return result;
@@ -54,8 +54,8 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
 int
 main(int argc, char *argv[])
 {
-  struct stat buf;
-
+  //setvbuf(stdout,NULL,_IONBF,0);
+  //setvbuf(stdin,NULL,_IONBF,0);
   zdoor_handle_t zdid = zdoor_handle_init();
 
 #ifdef DEBUG
@@ -64,6 +64,7 @@ main(int argc, char *argv[])
 #endif
 
   if (zdoor_open(zdid, argv[1], argv[2], "nomnom", server) < 0){
+    fprintf(stderr, "[zonedoor] opening door in zone %s and service %s.\r\n", argv[1], argv[2]);
     exit(1);
   }
 

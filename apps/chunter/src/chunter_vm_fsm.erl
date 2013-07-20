@@ -466,7 +466,7 @@ io:format("~s~n", [Data]),
                     end;
                 _ ->
                     lager:warning("[zonedoor:~s] denied.", [UUID]),
-                    port_command(D, [0])
+                    port_command(D, "0\n")
             end;
         _ ->
             lager:warning("[zonedoor:~s] can't parse auth request: ~s.", [UUID, Data]),

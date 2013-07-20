@@ -12,7 +12,7 @@
 #pragma ident "%Z%%M% %I% %E% SMI"
 
 #include <alloca.h>
-#include <door.h>
+#include <zdoor.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>
@@ -24,48 +24,55 @@
 #include <string.h>
 #include <unistd.h>
 
-void
-server(void *cookie, char *argp, size_t arg_size, door_desc_t *dp,
-       uint_t n_desc)
+zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
 {
+  zdoor_result_t *result;
   fprintf(stdout, "%s\n", argp);
   fflush(stdout);
-  if (getc(stdin) == 1)
-    door_return("1", 256, NULL, 0); // allow all logins - yay!
-  else
-    door_return("0", 256, NULL, 0); // allow all logins - yay!
-  /* NOTREACHED */
+#ifdef DEBUG
+  fprintf(stderr, "< %s\r\n", argp);
+  fflush(stderr);
+#endif
+  result = malloc(sizeof(zdoor_result_t));
+  result->zdr_size = 3;
+  result->zdr_data = malloc(result->zdr_size);
+  result->zdr_data[1] = 13;
+  result->zdr_data[2] = 0;
+  if (getc(stdin) == 49) {
+#ifdef DEBUG
+    fprintf(stderr, "Allowing access.\r\n");
+#endif
+    result->zdr_data[0] = 49;
+  } else {
+#ifdef DEBUG
+    fprintf(stderr, "Forbidding access.\r\n");
+#endif
+    result->zdr_data[0] = 48;
+  }
+
+#ifdef DEBUG
+  fprintf(stderr, "> %p, %p, %d\r\n", result, result->zdr_data, result->zdr_size);
+#endif
+  return result;
 }
 
 int
 main(int argc, char *argv[])
 {
-  int did;
   struct stat buf;
 
-  if ((did = door_create(server, 0, 0)) < 0) {
-    perror("door_create");
+	zdoor_handle_t zdid = zdoor_handle_init();
+
+#ifdef DEBUG
+  fprintf(stderr, "opening door in zone %s and service %s.\r\n", argv[1], argv[2]);
+  fflush(stderr);
+#endif
+
+  if (zdoor_open(zdid, argv[1], argv[2], "nomnom", server) < 0){
     exit(1);
   }
 
-  /* make sure file system location exists */
-  if (stat(argv[1], &buf) < 0) {
-    int newfd;
-    if ((newfd = creat(argv[1], 0444)) < 0) {
-      perror("creat");
-      exit(1);
-    }
-    (void) close(newfd);
-  }
-
-  /* make sure nothing else is attached */
-  (void) fdetach(argv[1]);
-
-  /* attach to file system */
-  if (fattach(did, argv[1]) < 0) {
-    perror("fattach");
-    exit(2);
-  }
-
-  (void) pause();
+  //while (getc(stdin) != EOF);
+ 	pause(); 
+  zdoor_handle_destroy(zdid);
 }

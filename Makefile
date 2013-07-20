@@ -5,7 +5,7 @@ REBAR = $(shell pwd)/rebar
 all: deps compile
 
 apps/chunter/priv/sshdoor: utils/sshdoor.c
-	gcc utils/sshdoor.c -o apps/chunter/priv/sshdoor
+	gcc -lzdoor utils/sshdoor.c -o apps/chunter/priv/sshdoor
 sshdoor: apps/chunter/priv/sshdoor
 
 version:

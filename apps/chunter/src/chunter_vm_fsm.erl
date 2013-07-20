@@ -447,10 +447,10 @@ handle_info({D, {data, {eol, Data}}}, StateName,
                        sshdoor = D,
                        uuid = UUID
                       }) ->
-
+io:format("~s~n", [Data]),
     case re:split(Data, " ") of
         [User, _, KeyID] ->
-            lager:info("[sshdoor:~s] User ~s trying to connect with key ~s",
+            lager:warning("[sshdoor:~s] User ~s trying to connect with key ~s",
                        [UUID, User, KeyID]),
             KeyBin = libsnarl:keystr_to_id(KeyID),
             case libsnarl:user_key_find(KeyBin) of
@@ -458,18 +458,18 @@ handle_info({D, {data, {eol, Data}}}, StateName,
                     case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) orelse
                         libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"ssh">>, User]) of
                         true ->
-                            lager:info("[sshdoor:~s] granted.", [UUID]),
-                            port_command(D, [1]);
+                            lager:warning("[sshdoor:~s] granted.", [UUID]),
+                            port_command(D, "1");
                         _ ->
-                            lager:info("[sshdoor:~s] denied.", [UUID]),
-                            port_command(D, [0])
+                            lager:warning("[sshdoor:~s] denied.", [UUID]),
+                            port_command(D, "0")
                     end;
                 _ ->
-                    lager:info("[sshdoor:~s] denied.", [UUID]),
+                    lager:warning("[sshdoor:~s] denied.", [UUID]),
                     port_command(D, [0])
             end;
         _ ->
-            lager:info("[sshdoor:~s] can't parse auth request: ~s.", [UUID, Data]),
+            lager:warning("[sshdoor:~s] can't parse auth request: ~s.", [UUID, Data]),
             ok
     end,
     {next_state, StateName, State};
@@ -578,19 +578,16 @@ init_console(State) ->
 init_sshdoor(State) ->
     case erlang:port_info(State#state.sshdoor) of
         undefined ->
-            ok;
+            Cmd = code:priv_dir(chunter) ++ "/sshdoor",
+            Args = [binary_to_list(State#state.uuid), "_joyent_sshd_key_is_authorized"],
+            lager:warning("[sshdoor] Starting with cmd: ~s ~s ~s~n", [Cmd | Args]),
+            DoorPort = open_port({spawn_executable, Cmd},
+                                 [{args, Args}, use_stdio, binary, {line, 1024}, exit_status]),
+            State#state{sshdoor = DoorPort};
         _ ->
-            incinerate(State#state.sshdoor)
-    end,
-    Cmd = code:priv_dir(chunter) ++ "/sshdoor",
-    Arg = "/zones/" ++
-        binary_to_list(State#state.uuid) ++
-        "/root/var/tmp/._joyent_sshd_key_is_authorized",
-    lager:info("[sshdoor] Starting with cmd: ~s~n", [Cmd]),
-    DoorPort = open_port({spawn_executable, Cmd},
-                         [{args, [Arg]}, use_stdio, binary, {line, 1024},
-                          stderr_to_stdout, exit_status]),
-    State#state{sshdoor = DoorPort}.
+            %incinerate(State#state.sshdoor)
+            State
+    end.
 
 -spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
 

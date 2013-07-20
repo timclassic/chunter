@@ -53,7 +53,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, type, uuid, console, sshdoor, listeners = []}).
+-record(state, {hypervisor, type, uuid, console, zonedoor, listeners = []}).
 
 %%%===================================================================
 %%% API
@@ -444,13 +444,13 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
 
 handle_info({D, {data, {eol, Data}}}, StateName,
             State = #state{
-                       sshdoor = D,
+                       zonedoor = D,
                        uuid = UUID
                       }) ->
 io:format("~s~n", [Data]),
     case re:split(Data, " ") of
         [User, _, KeyID] ->
-            lager:warning("[sshdoor:~s] User ~s trying to connect with key ~s",
+            lager:warning("[zonedoor:~s] User ~s trying to connect with key ~s",
                        [UUID, User, KeyID]),
             KeyBin = libsnarl:keystr_to_id(KeyID),
             case libsnarl:user_key_find(KeyBin) of
@@ -458,18 +458,18 @@ io:format("~s~n", [Data]),
                     case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) orelse
                         libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"ssh">>, User]) of
                         true ->
-                            lager:warning("[sshdoor:~s] granted.", [UUID]),
-                            port_command(D, "1");
+                            lager:warning("[zonedoor:~s] granted.", [UUID]),
+                            port_command(D, "1\n");
                         _ ->
-                            lager:warning("[sshdoor:~s] denied.", [UUID]),
-                            port_command(D, "0")
+                            lager:warning("[zonedoor:~s] denied.", [UUID]),
+                            port_command(D, "0\n")
                     end;
                 _ ->
-                    lager:warning("[sshdoor:~s] denied.", [UUID]),
-                    port_command(D, [0])
+                    lager:warning("[zonedoor:~s] denied.", [UUID]),
+                    port_command(D, "0\n")
             end;
         _ ->
-            lager:warning("[sshdoor:~s] can't parse auth request: ~s.", [UUID, Data]),
+            lager:warning("[zonedoor:~s] can't parse auth request: ~s.", [UUID, Data]),
             ok
     end,
     {next_state, StateName, State};
@@ -484,10 +484,10 @@ handle_info({_C,{exit_status,1}}, StateName,
 
 handle_info({_D,{exit_status,1}}, StateName,
             State = #state{
-                       sshdoor = _D,
+                       zonedoor = _D,
                        type = zone
                       }) ->
-    timer:send_after(1000, init_sshdoor),
+    timer:send_after(1000, init_zonedoor),
     {next_state, StateName, State};
 
 handle_info(update_snapshots, StateName, State) ->
@@ -497,15 +497,15 @@ handle_info(update_snapshots, StateName, State) ->
 handle_info(get_info, StateName, State) ->
     Info = chunter_vmadm:info(State#state.uuid),
     State1 = init_console(State),
-    State2 = init_sshdoor(State1),
+    State2 = init_zonedoor(State1),
     libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
     {next_state, StateName, State2};
 
 handle_info(init_console, StateName, State) ->
     {next_state, StateName, init_console(State)};
 
-handle_info(init_sshdoor, StateName, State) ->
-    {next_state, StateName, init_sshdoor(State)};
+handle_info(init_zonedoor, StateName, State) ->
+    {next_state, StateName, init_zonedoor(State)};
 
 handle_info(Info, StateName, State) ->
     lager:warning("unknown data: ~p", [Info]),
@@ -531,14 +531,14 @@ terminate(_Reason, _StateName, State) ->
         _ ->
             port_close(State#state.console)
     end,
-    case erlang:port_info(State#state.sshdoor) of
+    case erlang:port_info(State#state.zonedoor) of
         undefined ->
             lager:warning("ssh door not running"),
             ok;
         _ ->
             %% Since the SSH process does not close with a exit we kill it with
             %% fire!
-            incinerate(State#state.sshdoor)
+            incinerate(State#state.zonedoor)
     end,
     ok.
 
@@ -575,17 +575,17 @@ init_console(State) ->
     ConsolePort = open_port({spawn, Console}, [binary]),
     State#state{console = ConsolePort}.
 
-init_sshdoor(State) ->
-    case erlang:port_info(State#state.sshdoor) of
+init_zonedoor(State) ->
+    case erlang:port_info(State#state.zonedoor) of
         undefined ->
-            Cmd = code:priv_dir(chunter) ++ "/sshdoor",
+            Cmd = code:priv_dir(chunter) ++ "/zonedoor",
             Args = [binary_to_list(State#state.uuid), "_joyent_sshd_key_is_authorized"],
-            lager:warning("[sshdoor] Starting with cmd: ~s ~s ~s~n", [Cmd | Args]),
+            lager:warning("[zonedoor] Starting with cmd: ~s ~s ~s~n", [Cmd | Args]),
             DoorPort = open_port({spawn_executable, Cmd},
                                  [{args, Args}, use_stdio, binary, {line, 1024}, exit_status]),
-            State#state{sshdoor = DoorPort};
+            State#state{zonedoor = DoorPort};
         _ ->
-            %incinerate(State#state.sshdoor)
+            %incinerate(State#state.zonedoor)
             State
     end.
 

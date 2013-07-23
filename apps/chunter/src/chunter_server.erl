@@ -151,14 +151,19 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 handle_cast(update_mem, State = #state{name = Host}) ->
+    VMS = list_vms(),
+    lager:debug("[~p] Updating Memory for VMs: ~p", [Host, VMS]),
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
                               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
                               chunter_vm_fsm:load(UUID),
                               {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
                               Mem + M
-                      end, 0, list_vms()) / (1024*1024)),
+                      end, 0, VMS) / (1024*1024)),
+
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    lager:debug("[~p] Counting ~p MB used out of ~p MB in total.",
+                [Host, ProvMem, TotalMem]),
     libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ProvMem},
                                      {<<"resources.provisioned-memory">>, ProvMem},
                                      {<<"resources.total-memory">>, TotalMem}]),

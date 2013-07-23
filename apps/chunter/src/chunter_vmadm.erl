@@ -154,8 +154,13 @@ create(Data) ->
                 "vmadm:cmd - ~s.", [Cmd]),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
     port_command(Port, jsx:to_json(Data)),
-    Res = case wait_for_tex(Port) of
+    lager:info([{fifi_component, chunter}],
+               "vmadm:create - handed to vmadm, waiting ...", []),
+    timer:apply_after(5000, chunter_server, update_mem, []),
+    Res = case wait_for_text(Port) of
               ok ->
+                  lager:info([{fifi_component, chunter}],
+                             "vmadm:create - vmadm returned sucessfully.", []),
                   chunter_vm_fsm:load(UUID);
               {error, E} ->
                   delete(UUID),
@@ -163,6 +168,8 @@ create(Data) ->
                               "vmad:create - Failed: ~p.", [E]),
                   E
           end,
+    lager:info([{fifi_component, chunter}],
+               "vmadm:create - updating memory.", []),
     chunter_server:update_mem(),
     Res.
 
@@ -192,12 +199,12 @@ update(UUID, Data) ->
     end.
 
 %% This function reads the process's input untill it knows that the vm was created or failed.
--spec wait_for_tex(Port::any()) ->
+-spec wait_for_text(Port::any()) ->
                           {ok, UUID::fifo:uuid()} |
                           {error, Text::binary() |
                                         timeout |
                                         unknown}.
-wait_for_tex(Port) ->
+wait_for_text(Port) ->
     receive
         {Port, {data, {eol, Data}}} ->
             lager:debug("[vmadm] ~s", [Data]);

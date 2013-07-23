@@ -152,10 +152,8 @@ create(Data) ->
     Cmd = "/usr/sbin/vmadm create",
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    chunter_server:update_mem(),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
     port_command(Port, jsx:to_json(Data)),
-
     Res = case wait_for_tex(Port) of
               ok ->
                   chunter_vm_fsm:load(UUID);
@@ -165,6 +163,7 @@ create(Data) ->
                               "vmad:create - Failed: ~p.", [E]),
                   E
           end,
+    chunter_server:update_mem(),
     Res.
 
 update(UUID, Data) ->
@@ -184,9 +183,11 @@ update(UUID, Data) ->
         {Port, {data, Data}} ->
             lager:debug("vmadm output: ~s", [Data]);
         {Port, {exit_status, _}} ->
+            chunter_server:update_mem(),
             chunter_vm_fsm:load(UUID)
     after
         60000 ->
+            chunter_server:update_mem(),
             chunter_vm_fsm:load(UUID)
     end.
 

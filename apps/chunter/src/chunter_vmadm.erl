@@ -156,6 +156,7 @@ create(Data) ->
     port_command(Port, jsx:to_json(Data)),
     lager:info([{fifi_component, chunter}],
                "vmadm:create - handed to vmadm, waiting ...", []),
+    timer:apply_after(5000, chunter_server, update_mem, []),
     Res = case wait_for_text(Port) of
               ok ->
                   lager:info([{fifi_component, chunter}],

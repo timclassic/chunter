@@ -57,6 +57,7 @@ connect() ->
     gen_server:cast(?SERVER, connect).
 
 update_mem() ->
+    lager:debug("[*] Updating Memory call", []),
     gen_server:cast(?SERVER, update_mem).
 
 disconnect() ->
@@ -151,16 +152,14 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 handle_cast(update_mem, State = #state{name = Host}) ->
+    lager:debug("[~p] Updating Memory entry", [Host]),
     VMS = list_vms(),
     lager:debug("[~p] Updating Memory for VMs: ~p", [Host, VMS]),
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
-                              {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
-                              chunter_vm_fsm:load(UUID),
                               {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
                               Mem + M
                       end, 0, VMS) / (1024*1024)),
-
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     lager:debug("[~p] Counting ~p MB used out of ~p MB in total.",
                 [Host, ProvMem, TotalMem]),

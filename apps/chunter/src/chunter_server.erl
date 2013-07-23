@@ -217,7 +217,8 @@ handle_cast(disconnect,  State) ->
     {noreply, State#state{connected = false}};
 
 
-handle_cast(_Msg, #state{name = _Name} = State) ->
+handle_cast(Msg, #state{name = Name} = State) ->
+    lager:warning("[~p] unknown message: ~p.", [Name, Msg]),
     {noreply, State}.
 
 

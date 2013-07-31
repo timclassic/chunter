@@ -55,7 +55,7 @@ handle_info({_OK, Socket, BinData}, State = #state{
             {ok, Handle} = erltrace:open(),
             ok = erltrace:compile(Handle, Script),
             ok = erltrace:go(Handle),
-            lager:debug("DTrace running."),
+            lager:info("DTrace running."),
             {noreply, State#state{state = Handle,
                                   type = dtrace}};
         {console, UUID} ->

@@ -14,10 +14,10 @@
 
 %% API
 -export([start_link/0,
-         provision_memory/1,
-         unprovision_memory/1,
+         host_info/0,
          connect/0,
          update_mem/0,
+         reserve_mem/1,
          disconnect/0]).
 
 
@@ -54,17 +54,14 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-provision_memory(M) ->
-    gen_server:cast(?SERVER, {prov_mem, M}).
-
-unprovision_memory(M) ->
-    gen_server:cast(?SERVER, {unprov_mem, M}).
-
 connect() ->
     gen_server:cast(?SERVER, connect).
 
 update_mem() ->
     gen_server:cast(?SERVER, update_mem).
+
+reserve_mem(N) ->
+    gen_server:cast(?SERVER, {reserve_mem, N}).
 
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
@@ -157,24 +154,45 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast(update_mem, #state{name = Host}) ->
+handle_cast(update_mem, State = #state{name = Host}) ->
+    VMS = list_vms(),
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
-                              {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
-                              chunter_vm_fsm:load(UUID),
                               {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
                               Mem + M
-                      end, 0, list_vms()) / (1024*1024)),
-    {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+                      end, 0, VMS) / (1024*1024)),
+    {TotalMem, _} =
+        string:to_integer(
+          os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
+                [Host, ProvMem, TotalMem]),
     libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ProvMem},
                                      {<<"resources.provisioned-memory">>, ProvMem},
                                      {<<"resources.total-memory">>, TotalMem}]),
-    {noreply};
+    {noreply, State#state{
+                total_memory = TotalMem,
+                provisioned_memory = ProvMem
+               }};
+
+handle_cast({reserve_mem, N}, State =
+                #state{
+                   name = Host,
+                   total_memory = TotalMem,
+                   provisioned_memory = ProvMem
+                  }) ->
+    ProvMem1 = ProvMem + N,
+    Free = TotalMem - ProvMem1,
+    libsniffle:hypervisor_set(Host,
+                              [{<<"resources.free-memory">>, Free},
+                               {<<"resources.provisioned-memory">>, ProvMem1}]),
+    {noreply, State#state{
+                provisioned_memory = ProvMem1
+               }};
 
 handle_cast(connect, #state{name = Host,
                             capabilities = Caps} = State) ->
     %%    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
-    %%    application:set_env(statsderl, hostname, Host),
+    %%    application:set_env(s59tatsderl, hostname, Host),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     Networks = re:split(os:cmd("cat /usbkey/config  | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
     Networks1 = lists:delete(<<>>, Networks),
@@ -216,42 +234,9 @@ handle_cast(connect, #state{name = Host,
 handle_cast(disconnect,  State) ->
     {noreply, State#state{connected = false}};
 
-handle_cast({prov_mem, M}, State = #state{name = Name,
-                                          provisioned_memory = P,
-                                          total_memory = T}) ->
-    MinMB = round(M / (1024*1024)),
-    Provisioned = round(MinMB + P),
-    Free = T - Provisioned,
-    libsniffle:hypervisor_set(Name, [{<<"resources.free-memory">>, Free},
-                                     {<<"resources.provisioned-memory">>, Provisioned}]),
-    libhowl:send(Name, [{<<"event">>, <<"memorychange">>},
-                        {<<"data">>, [{<<"free">>, Free},
-                                      {<<"provisioned">>, Provisioned}]}]),
-                                                %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
-    lager:info([{fifi_component, chunter}],
-               "memory:provision - Privisioned: ~p(~p), Total: ~p, Change: +~p.", [Provisioned, M, T, MinMB]),
-    {noreply, State#state{provisioned_memory = Provisioned}};
 
-handle_cast({unprov_mem, M}, State = #state{name = Name,
-                                            provisioned_memory = P,
-                                            total_memory = T}) ->
-    MinMB = round(M / (1024*1024)),
-    Provisioned = round(P - MinMB),
-    Free = T - Provisioned,
-    libsniffle:hypervisor_set(Name, [{<<"resources.free-memory">>, Free},
-                                     {<<"resources.provisioned-memory">>, Provisioned}]),
-
-    libhowl:send(Name, [{<<"event">>, <<"memorychange">>},
-                        {<<"data">>, [{<<"free">>, Free},
-                                      {<<"provisioned">>, Provisioned}]}]),
-
-                                                %    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], Res, 1),
-    lager:info([{fifi_component, chunter}],
-               "memory:unprovision - Unprivisioned: ~p(~p) , Total: ~p, Change: -~p.", [Provisioned, M, T, MinMB]),
-    {noreply, State#state{provisioned_memory = Provisioned}};
-
-
-handle_cast(_Msg, #state{name = _Name} = State) ->
+handle_cast(Msg, #state{name = Name} = State) ->
+    lager:warning("[~p] unknown message: ~p.", [Name, Msg]),
     {noreply, State}.
 
 
@@ -309,7 +294,7 @@ list_vms() ->
 
 
 host_info() ->
-    Host = case application:get_env(hostname) of
+    Host = case application:get_env(chunter, hostname) of
                undefined ->
                    [H|_] = re:split(os:cmd("uname -n"), "\n"),
                    H;
@@ -318,7 +303,7 @@ host_info() ->
                {ok, H} when is_list(H) ->
                    list_to_binary(H)
            end,
-    {A,B,C,D} = case application:get_env(ip) of
+    {A,B,C,D} = case application:get_env(chunter, ip) of
                     undefined ->
                         {ok, R} = inet:getaddr(binary_to_list(Host), inet),
                         R;

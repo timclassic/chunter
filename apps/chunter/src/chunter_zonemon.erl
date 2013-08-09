@@ -15,14 +15,14 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3]).
+         terminate/2, code_change/3]).
 
 -ignore_xref([start_link/0]).
 
 -define(SERVER, ?MODULE).
 
 -record(state, {name,
-		port}).
+                port}).
 
 %%%===================================================================
 %%% API
@@ -54,7 +54,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    [Name|_] = re:split(os:cmd("uname -n"), "\n"),
+    {Name, _} = chunter_server:host_info(),
     lager:info("chunter:zonemon - initializing: ~s", [Name]),
     Zonemon = code:priv_dir(chunter) ++ "/zonemon.sh",
     timer:send_interval(1000, zonecheck),
@@ -62,9 +62,9 @@ init([]) ->
     ZonePort = erlang:open_port({spawn, Zonemon}, PortOpts),
     lager:info("chunter:zonemon - stats watchdog started.", []),
     {ok, #state{
-       name=Name,
-       port=ZonePort
-      }}.
+            name=Name,
+            port=ZonePort
+           }}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -110,24 +110,24 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
     [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-	[ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
-	    [ re:split(Line, ":")
-	      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-	ID =/= <<"0">>],
+        [ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
+            [ re:split(Line, ":")
+              || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
+        ID =/= <<"0">>],
     {noreply, State};
 
 
 handle_info({_Port, {data, {eol, Data}}}, #state{name=_Name, port=_Port} = State) ->
     case parse_data(Data) of
-	{error, unknown} ->
-%	    statsderl:increment([Name, ".vm.zonewatchdog_error"], 1, 1),
-	    lager:error("watchdog:zone - unknwon message: ~p", [Data]);
-	{UUID, <<"crate">>} ->
-%	    statsderl:increment([Name, ".vm.create"], 1, 1),
-	    chunter_vm_sup:start_child(UUID);
-	{UUID, Action} ->
-%	    statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
-	    chunter_vm_fsm:transition(UUID, simplifie_state(Action))
+        {error, unknown} ->
+            %%       statsderl:increment([Name, ".vm.zonewatchdog_error"], 1, 1),
+            lager:error("watchdog:zone - unknwon message: ~p", [Data]);
+        {UUID, <<"crate">>} ->
+            %%       statsderl:increment([Name, ".vm.create"], 1, 1),
+            chunter_vm_sup:start_child(UUID);
+        {UUID, Action} ->
+            %%       statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
+            chunter_vm_fsm:transition(UUID, simplifie_state(Action))
     end,
     {noreply, State};
 

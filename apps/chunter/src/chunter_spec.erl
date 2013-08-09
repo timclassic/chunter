@@ -117,6 +117,8 @@ generate_spec(Package, Dataset, OwnerData) ->
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>]},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
                          {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
+                         {set, <<"owner_uuid">>,
+                          jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>,  OwnerData)},
                          {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare, Package)},
                          {set, [<<"internal_metadata">>, <<"package">>],
                           jsxd:get(<<"uuid">>, <<"-">>, Package)},
@@ -136,8 +138,14 @@ generate_spec(Package, Dataset, OwnerData) ->
                                           {set, <<"brand">>, <<"kvm">>},
                                           {set, <<"max_physical_memory">>, Ram + 1024},
                                           {set, [<<"disks">>, 0, <<"boot">>], true},
+                                          %% Hack for dataset bug that image size is handled a string
                                           {set, [<<"disks">>, 0, <<"image_size">>],
-                                           jsxd:get(<<"image_size">>, 0, Dataset)},
+                                           case jsxd:get(<<"image_size">>, 0, Dataset) of
+                                               I when is_integer(I) ->
+                                                   I;
+                                               S when is_binary(S) ->
+                                                   list_to_integer(binary_to_list(S))
+                                           end},
                                           {set, [<<"disks">>, 0, <<"image_uuid">>],
                                            jsxd:get(<<"dataset">>, <<"">>, Dataset)}],
                                          Base01),

@@ -2,7 +2,8 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z\|joyent_20121018T224723Z\|joyent_20130222T000747Z\|joyent_20130405T010449Z\|joyent_20130530T224720Z\|joyent_20130419T073558Z\|joyent_20130627T201726Z
+TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z\|joyent_20121018T224723Z\|joyent_20130222T000747Z\|joyent_20130405T010449Z\|joyent_20130530T224720Z\|joyent_20130419T073558Z\|joyent_20130629T040542Z
+BAD_VERSIONS=joyent_20130627T201726Z
 
 DST=/opt
 
@@ -15,6 +16,13 @@ then
     DIR=`pwd`
 fi
 BASE=`basename $0`;
+
+
+if uname -a | egrep $BAD_VERSIONS
+then
+    echo "Sorry this SmartOS version is known to be incompatible or faulty."
+    exit 1
+fi
 
 if uname -a | egrep $TESTED_VERSIONS
 then

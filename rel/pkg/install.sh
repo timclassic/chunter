@@ -49,21 +49,21 @@ fi
 (cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
 mkdir -p /var/log/chunter
 
-if [ ! -f /opt/chunter/etc/app.config ]
+if [ ! -f $DST/chunter/etc/app.config ]
 then
-    cp /opt/chunter/etc/app.config.example /opt/chunter/etc/app.config
+    cp $DST/chunter/etc/app.config.example $DST/chunter/etc/app.config
 fi
 
-if [ ! -f /opt/chunter/etc/vm.args ]
+if [ ! -f $DST/chunter/etc/vm.args ]
 then
-    cp /opt/chunter/etc/vm.args.example /opt/chunter/etc/vm.args
+    cp $DST/chunter/etc/vm.args.example $DST/chunter/etc/vm.args
 fi
 
-mkdir -p /opt/custom/smf
-cp /opt/chunter/share/epmd.xml /opt/chunter/share/chunter.xml /opt/custom/smf
+mkdir -p $DST/custom/smf
+cp $DST/chunter/share/epmd.xml $DST/chunter/share/chunter.xml $DST/custom/smf
 
-svccfg import /opt/custom/smf/epmd.xml
-svccfg import /opt/custom/smf/chunter.xml
+svccfg import $DST/custom/smf/epmd.xml
+svccfg import $DST/custom/smf/chunter.xml
 
 cat <<EOF
 

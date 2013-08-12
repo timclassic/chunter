@@ -5,7 +5,10 @@
 TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z\|joyent_20121018T224723Z\|joyent_20130222T000747Z\|joyent_20130405T010449Z\|joyent_20130530T224720Z\|joyent_20130419T073558Z\|joyent_20130629T040542Z\|joyent_20130808T195337Z
 BAD_VERSIONS=joyent_20130627T201726Z
 
-DST=/opt
+if [ -z $DST ]
+then
+    DST=/opt
+fi
 
 #IFACE=`dladm show-phys -m | grep $admin_nic | awk '{print $1}'`
 #IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`

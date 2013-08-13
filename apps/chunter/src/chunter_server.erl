@@ -194,7 +194,7 @@ handle_cast(connect, #state{name = Host,
     %%    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
     %%    application:set_env(s59tatsderl, hostname, Host),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    Networks = re:split(os:cmd("cat /usbkey/config  | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
+    Networks = re:split(os:cmd("cat /usbkey/config  | grep -v '^#' | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
     Networks1 = lists:delete(<<>>, Networks),
     Etherstub = re:split(
                   os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),

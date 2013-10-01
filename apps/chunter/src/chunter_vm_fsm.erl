@@ -653,12 +653,14 @@ write_image(Port, UUID, [], _) ->
     %% Need to set the correct type
     Manifest1 = case jsxd:get([<<"type">>], DS) of
                     {ok, <<"zone">>} ->
-                        jsxd:set([<<"manifest">>, <<"type">>], <<"zone-dataset">>, Manifest);
+                        jsxd:set([<<"manifest">>, <<"type">>],
+                                 <<"zone-dataset">>, Manifest);
                     _ ->
                         Manifest
                 end,
     %% and write it to zoneamd's new destination folder ...
-    file:write_file("/var/imgadm/images/zones-" ++ UUIDL ++ ".json", jsx:encode(Manifest1)),
+    file:write_file("/var/imgadm/images/zones-" ++ UUIDL ++ ".json",
+                    jsx:encode(Manifest1)),
     Cmd = "zfs list -Hp -t all -r  zones/" ++ UUIDL,
 
     wait_image(0, Cmd).
@@ -680,7 +682,9 @@ wait_image(_, _) ->
 
 zoneadm(ZUUID) ->
     Zones = [ re:split(Line, ":")
-              || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
+              || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++
+                                             binary_to_list(ZUUID) ++
+                                             " list -p"), "\n")],
     [{ID, Name, VMState, Path, UUID, Type} ||
         [ID, Name, VMState, Path, UUID, Type, _IP, _SomeNumber] <- Zones].
 
@@ -731,7 +735,8 @@ do_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Creating snapshot: ~s", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
+                                    stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
 do_delete_snapshot(Path, SnapID) ->
@@ -740,7 +745,8 @@ do_delete_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Deleting snapshot: ~s", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
+                                    stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
 do_rollback_snapshot(Path, SnapID) ->
@@ -749,7 +755,8 @@ do_rollback_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Rolling back snapshot: ~s", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
+                                    stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
 wait_for_port(Port, Reply) ->
@@ -792,17 +799,20 @@ snapshot_action(VM, UUID, Action) ->
                                               _ ->
                                                   {error, missing}
                                           end
-                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
+                                  end, {ok, Reply},
+                                  jsxd:get(<<"disks">>, [], Spec)),
                             case R of
                                 {ok, Res} ->
-                                    libsniffle:vm_log(VM, <<"Snapshot done ", Res/binary>>),
+                                    libsniffle:vm_log(VM,<<"Snapshot done ", Res/binary>>),
                                     ok;
                                 {error, _} ->
                                     error
                             end;
                         {error, Code, Reply} ->
-                            lager:error("Failed snapshot VM ~s ~p: ~s.", [VM, Code, Reply]),
-                            libsniffle:vm_log(VM, <<"Failed to snapshot: ", Reply/binary>>),
+                            lager:error("Failed snapshot VM ~s ~p: ~s.",
+                                        [VM, Code, Reply]),
+                            libsniffle:vm_log(VM, <<"Failed to snapshot: ",
+                                                    Reply/binary>>),
                             error
                     end;
                 _ ->
@@ -821,11 +831,13 @@ snapshot_sizes(VM) ->
             {ok, V} = libsniffle:vm_get(VM),
             case jsxd:get([<<"snapshots">>], V) of
                 {ok, S} ->
-                    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/" ++ binary_to_list(VM)),
+                    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/"
+                                  ++ binary_to_list(VM)),
                     Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
                                                   L =/= <<>>],
                     Known = [ ID || {ID, _} <- S],
-                    Snaps = [{lists:last(re:split(Name, "@")), list_to_integer(binary_to_list(Size))}
+                    Snaps = [{lists:last(re:split(Name, "@")),
+                              list_to_integer(binary_to_list(Size))}
                              || [Name, Size, _, _, _] <- Lines],
                     Snaps1 =lists:filter(fun ({Name, _}) ->
                                                  lists:member(Name, Known)

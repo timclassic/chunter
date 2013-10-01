@@ -31,6 +31,8 @@
 
 -define(SERVER, ?MODULE).
 
+-define(HOST_ID_FILE, "host_id").
+
 -record(state, {name,
                 port,
                 sysinfo,
@@ -133,7 +135,7 @@ init([]) ->
 %%--------------------------------------------------------------------
 
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
-                                                %    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
+    %%    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
                "unsupported call - ~p", [Call]),
     Reply = {error, {unsupported, Call}},
@@ -294,6 +296,7 @@ list_vms() ->
 
 
 host_info() ->
+    Path = [code:root_dir(), "/etc/" ?HOST_ID_FILE],
     Host = case application:get_env(chunter, hostname) of
                undefined ->
                    [H|_] = re:split(os:cmd("uname -n"), "\n"),
@@ -311,4 +314,13 @@ host_info() ->
                         R
                 end,
     IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
-    {Host, IPStr}.
+    HostID = case filelib:is_file([code:root_dir(), "/etc/host_id"]) of
+                 true ->
+                     list_to_binary(os:cmd(["cat ", Path]));
+                 _ ->
+                     UUID = uuid:uuid4s(),
+                     file:write_file(Path, UUID),
+                     UUID
+             end,
+
+    {HostID, IPStr}.

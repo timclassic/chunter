@@ -89,7 +89,15 @@ init([]) ->
     {Host, IPStr} = host_info(),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
-    libsniffle:hypervisor_register(Host, IPStr, 4200),
+    [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
+    case libsniffle:hypervisor_get(Host) of
+        not_found ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_set(Host, [{<<"alias">>, Alias}]);
+        _ ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            ok
+    end,
     lager:info([{fifi_component, chunter}],
                "chunter:init - Host: ~s", [Host]),
     lists:foldl(
@@ -113,10 +121,10 @@ init([]) ->
                                      {<<"virtualisation">>, Capabilities}]),
 
     {ok, #state{
-       sysinfo = SysInfo,
-       name = Host,
-       capabilities = Capabilities
-      }}.
+            sysinfo = SysInfo,
+            name = Host,
+            capabilities = Capabilities
+           }}.
 
 
 %%--------------------------------------------------------------------
@@ -167,7 +175,7 @@ handle_cast(update_mem, State = #state{name = Host}) ->
         string:to_integer(
           os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
-                [Host, ProvMem, TotalMem]),
+               [Host, ProvMem, TotalMem]),
     libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ProvMem},
                                      {<<"resources.provisioned-memory">>, ProvMem},
                                      {<<"resources.total-memory">>, TotalMem}]),
@@ -218,15 +226,25 @@ handle_cast(connect, #state{name = Host,
     %%    libsniffle:join_client_channel(),
 
     {Host, IPStr} = host_info(),
-    libsniffle:hypervisor_register(Host, IPStr, 4200),
-    libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, State#state.sysinfo},
-                                     {<<"version">>, ?VERSION},
-                                     {<<"networks">>, Networks1},
-                                     {<<"resources.free-memory">>, TotalMem - ProvMem},
-                                     {<<"etherstubs">>, Etherstub1},
-                                     {<<"resources.provisioned-memory">>, ProvMem},
-                                     {<<"resources.total-memory">>, TotalMem},
-                                     {<<"virtualisation">>, Caps}]),
+    [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
+    case libsniffle:hypervisor_get(Host) of
+        not_found ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_set(Host, [{<<"alias">>, Alias}]);
+        _ ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            ok
+    end,
+    libsniffle:hypervisor_set(
+      Host,
+      [{<<"sysinfo">>, State#state.sysinfo},
+       {<<"version">>, ?VERSION},
+       {<<"networks">>, Networks1},
+       {<<"resources.free-memory">>, TotalMem - ProvMem},
+       {<<"etherstubs">>, Etherstub1},
+       {<<"resources.provisioned-memory">>, ProvMem},
+       {<<"resources.total-memory">>, TotalMem},
+       {<<"virtualisation">>, Caps}]),
     {noreply, State#state{
                 total_memory = TotalMem,
                 provisioned_memory = ProvMem,

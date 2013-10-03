@@ -86,20 +86,9 @@ disconnect() ->
 init([]) ->
     lager:info([{fifi_component, chunter}],
                "chunter:init.", []),
-    {Host, IPStr} = host_info(),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
-    [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
-    case libsniffle:hypervisor_get(Host) of
-        not_found ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
-            libsniffle:hypervisor_set(Host, [{<<"alias">>, Alias}]);
-        _ ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
-            ok
-    end,
-    lager:info([{fifi_component, chunter}],
-               "chunter:init - Host: ~s", [Host]),
+    register_hypervisor(),
     lists:foldl(
       fun (VM, _) ->
               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
@@ -115,7 +104,7 @@ init([]) ->
                        _ ->
                            [<<"zone">>]
                    end,
-
+    {Host, _IPStr} = host_info(),
     libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, SysInfo},
                                      {<<"version">>, ?VERSION},
                                      {<<"virtualisation">>, Capabilities}]),
@@ -225,16 +214,7 @@ handle_cast(connect, #state{name = Host,
     %%    statsderl:increment([Name, ".net.join"], 1, 1.0),
     %%    libsniffle:join_client_channel(),
 
-    {Host, IPStr} = host_info(),
-    [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
-    case libsniffle:hypervisor_get(Host) of
-        not_found ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
-            libsniffle:hypervisor_set(Host, [{<<"alias">>, Alias}]);
-        _ ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
-            ok
-    end,
+    register_hypervisor(),
     libsniffle:hypervisor_set(
       Host,
       [{<<"sysinfo">>, State#state.sysinfo},
@@ -342,3 +322,26 @@ host_info() ->
              end,
 
     {HostID, IPStr}.
+
+
+register_hypervisor() ->
+    {Host, IPStr} = host_info(),
+    lager:info([{fifi_component, chunter}],
+               "chunter:init - Host: ~s(~s)", [Host, IPStr]),
+    [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
+    case libsniffle:hypervisor_get(Host) of
+        not_found ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
+        {ok, H} ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            case jsxd:get(<<"alias">>, H) of
+                undefined ->
+                    libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
+                _ ->
+                    ok
+            end;
+        _ ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            ok
+    end.

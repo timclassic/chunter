@@ -16,7 +16,7 @@ Copied form riak empd script and modified to fit fifo
     <method_context>
       <method_credential group='nobody' user='nobody'/>
     </method_context>
-    <exec_method name='start' type='method' exec='/opt/chunter/erts-5.9.1/bin/epmd -daemon' timeout_seconds='60'/>
+    <exec_method name='start' type='method' exec='/opt/chunter/erts-5.10.1/bin/epmd -daemon' timeout_seconds='60'/>
     <exec_method name='stop' type='method' exec=':kill' timeout_seconds='60'/>
     <property_group name='startd' type='framework'>
       <propval name='duration' type='astring' value='contract'/>

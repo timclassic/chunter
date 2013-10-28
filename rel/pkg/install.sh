@@ -60,10 +60,10 @@ then
 fi
 
 mkdir -p $DST/custom/smf
-#cp $DST/chunter/share/epmd.xml $DST/chunter/share/chunter.xml $DST/custom/smf
+#cp $DST/chunter/share/epmd.xml $DST/custom/smf
 cp $DST/chunter/share/chunter.xml $DST/custom/smf
 
-svccfg import $DST/custom/smf/epmd.xml
+#svccfg import $DST/custom/smf/epmd.xml
 svccfg import $DST/custom/smf/chunter.xml
 
 cat <<EOF

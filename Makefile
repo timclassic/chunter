@@ -37,6 +37,7 @@ test: all
 	$(REBAR) skip_deps=true eunit
 
 rel: all
+	-rm -r ./rel/chunter/share
 	$(REBAR) generate
 
 ###

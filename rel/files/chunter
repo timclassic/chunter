@@ -12,7 +12,7 @@ PIPE_DIR=/tmp/chunter
 RUNNER_USER=
 
 #We need this to make the compiled erlang run on the GZ
-export LD_LIBRARY_PATH="/usr/gnu/lib/amd64"
+export LD_LIBRARY_PATH="/opt/chunter/share/lib:/usr/gnu/lib/amd64"
 
 # Make sure this script is running as the appropriate user
 if [ ! -z "$RUNNER_USER" ] && [ `whoami` != "$RUNNER_USER" ]; then

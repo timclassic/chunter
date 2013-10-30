@@ -34,13 +34,6 @@
       <service_fmri value='svc:/system/filesystem/local'/>
     </dependency>
 
-    <!--dependency
-	name='epmd'
-	grouping='require_all'
-	restart_on='none' type='service'>
-      <service_fmri value='svc:/network/epmd:default'/>
-    </dependency-->
-
     <exec_method
       type='method'
       name='start'
@@ -50,6 +43,7 @@
 	<method_environment>
 	  <envvar name='PATH' value='/opt/local/gnu/bin:/opt/local/bin:/opt/local/sbin:/usr/bin:/usr/sbin'/>
 	  <envvar name='HOME' value='/opt/chunter'/>
+	  <envvar name='LD_LIBRARY_PATH' value='/opt/chunter/share/lib'/>
 	</method_environment>
       </method_context>
     </exec_method>

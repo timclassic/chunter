@@ -3,7 +3,6 @@
 . /usbkey/config
 
 TESTED_VERSIONS=joyent_20130530T224720Z\|joyent_20130419T073558Z\|joyent_20130629T040542Z\|joyent_20130808T195337Z
-BAD_VERSIONS=joyent_20130627T201726Z
 
 if [ -z $DST ]
 then
@@ -21,11 +20,17 @@ fi
 BASE=`basename $0`;
 
 
-if uname -a | egrep $BAD_VERSIONS
+if uname -a | egrep 20130627T201726Z
 then
     echo "Sorry this SmartOS version is known to be incompatible or faulty."
     exit 1
+elif uname -a | egrep 20131031T235904Z
+then
+    echo "Sorry this SmartOS version is known to be incompatible or faulty."
+    echo " 20131031T235904Z: missing mdata-get ( http://bit.ly/Hyzb1e )"
+    exit 1
 fi
+
 
 if uname -a | egrep $TESTED_VERSIONS
 then

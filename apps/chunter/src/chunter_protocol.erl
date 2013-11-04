@@ -231,7 +231,7 @@ llquantize(Data) ->
 
 write_snapshot(UUID, SnapId, Img) ->
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
-    lager:debug("Running ZFS command: ~p", [Cmd]),
+    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapId]),
     Port = open_port({spawn_executable, Cmd},
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
@@ -239,6 +239,7 @@ write_snapshot(UUID, SnapId, Img) ->
     write_snapshot(Port, Img, <<>>, 0).
 
 write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx) ->
+    lager:debug("<IMG> ~s[~p]", [Img, Idx]),
     libsniffle:img_create(Img, Idx, binary:copy(MB)),
     write_snapshot(Port, Img, Acc, Idx+1);
 
@@ -251,6 +252,7 @@ write_snapshot(Port, Img, Acc, Idx) ->
                 <<>> ->
                     ok;
                 _ ->
+                    lager:debug("<IMG> ~s[~p]", [Img, Idx]),
                     libsniffle:img_create(Img, Idx, binary:copy(Acc))
             end,
             lager:info("Writing image ~s finished with ~p parts.", [Img, Idx]),

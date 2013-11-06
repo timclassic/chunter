@@ -28,6 +28,8 @@
                 kstat = undefined,
                 skipped = 0}).
 
+-define(INTERVAL,30*1000).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -58,7 +60,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    timer:send_interval(1000, tick),
+    timer:send_interval(dflt_env(arc_interval, ?INTERVAL), tick),
     {Host, _} = chunter_server:host_info(),
     {ok, H} = ekstat:open(),
     {ok, #state{host = Host,
@@ -178,3 +180,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+dflt_env(N, D) ->
+    case application:get_env(N) of
+        undefined ->
+            D;
+        {ok, V} ->
+            V
+    end.

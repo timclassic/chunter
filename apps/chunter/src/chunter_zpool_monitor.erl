@@ -57,7 +57,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    timer:send_interval(?INTERVAL, tick),
+    timer:send_interval(dflt_env(zpool_interval, ?INTERVAL), tick),
     {Host, _} = chunter_server:host_info(),
     {ok, #state{host = Host}}.
 
@@ -163,3 +163,11 @@ bin_to_int(B) ->
 
 bin_to_gb(B) ->
     round(bin_to_int(B)/(1024*1024)).
+
+dflt_env(N, D) ->
+    case application:get_env(N) of
+        undefined ->
+            D;
+        {ok, V} ->
+            V
+    end.

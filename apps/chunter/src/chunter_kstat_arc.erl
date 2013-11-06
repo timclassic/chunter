@@ -60,7 +60,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    timer:send_interval(?INTERVAL, tick),
+    timer:send_interval(dflt_env(arc_interval, ?INTERVAL), tick),
     {Host, _} = chunter_server:host_info(),
     {ok, H} = ekstat:open(),
     {ok, #state{host = Host,
@@ -180,3 +180,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+dflt_env(N, D) ->
+    case application:get_env(N) of
+        undefined ->
+            D;
+        {ok, V} ->
+            V
+    end.

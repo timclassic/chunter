@@ -25,6 +25,8 @@
 -record(state, {host, last,
                 skipped = 0}).
 
+-define(INTERVAL, 30*1000).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -55,7 +57,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    timer:send_interval(1000, tick),
+    timer:send_interval(?INTERVAL, tick),
     {Host, _} = chunter_server:host_info(),
     {ok, #state{host = Host}}.
 

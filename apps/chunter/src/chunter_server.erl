@@ -314,7 +314,9 @@ host_info() ->
     IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
     HostID = case filelib:is_file([code:root_dir(), "/etc/host_id"]) of
                  true ->
-                     list_to_binary(os:cmd(["cat ", Path]));
+                     F = os:cmd(["cat ", Path]),
+                     [HostIDi | _] = re:split(F, "\n"),
+                     HostIDi
                  _ ->
                      UUID = uuid:uuid4s(),
                      file:write_file(Path, UUID),

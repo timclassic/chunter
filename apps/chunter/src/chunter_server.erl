@@ -316,7 +316,7 @@ host_info() ->
                  true ->
                      F = os:cmd(["cat ", Path]),
                      [HostIDi | _] = re:split(F, "\n"),
-                     HostIDi
+                     HostIDi;
                  _ ->
                      UUID = uuid:uuid4s(),
                      file:write_file(Path, UUID),

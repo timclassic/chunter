@@ -71,9 +71,4 @@ cp $DST/chunter/share/chunter.xml $DST/custom/smf
 #svccfg import $DST/custom/smf/epmd.xml
 svccfg import $DST/custom/smf/chunter.xml
 
-[ -f $DST/chunter/etc/host_id ] || uuid > $DST/chunter/etc/host_id 
-cat <<EOF
-
-EOF
-
 exit 0;

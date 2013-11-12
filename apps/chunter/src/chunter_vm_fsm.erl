@@ -307,15 +307,11 @@ handle_event({force_state, NextState}, StateName, State) ->
           when NextState =:= State#state.public_state ->
             {next_state, StateName, State};
         StateName ->
-            change_state(State#state.uuid, NextState, false),
-            {next_state, StateName, State};
+            {next_state, StateName, State#state{public_state = change_state(State#state.uuid, NextState, false)};
         running = N ->
-            timer:send_after(500, get_info),
-            change_state(State#state.uuid, NextState, StateName =:= N),
-            {next_state, running, State};
+            {next_state, running,State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= N)}};
         Other ->
-            change_state(State#state.uuid, NextState, StateName =:= Other),
-            {next_state, Other, State}
+            {next_state, Other, State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= Other)}}
     end;
 
 handle_event(register, StateName, State = #state{uuid = UUID}) ->

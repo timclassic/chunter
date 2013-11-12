@@ -217,7 +217,7 @@ creating({transition, NextState}, State) ->
                      {next_state, atom(), State::term()}.
 
 loading({transition, NextState}, State) ->
-    libsniffle:vm_set(State#state.uuid, <<"state">>, NextState),
+    change_state(State#state.uuid, NextState, false),
     {next_state, binary_to_atom(NextState), State}.
 
 -spec stopped({transition, NextState::fifo:vm_state()}, State::term()) ->
@@ -709,13 +709,25 @@ change_state(UUID, State) ->
 -spec change_state(UUID::binary(), State::fifo:vm_state(), true | false) -> ok.
 
 change_state(UUID, State, true) ->
-    libsniffle:vm_log(UUID, <<"Transitioning ", State/binary>>),
-    libsniffle:vm_set(UUID, <<"state">>, State),
-    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]);
+    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/var/svc/provisioning">>) of
+                 true ->
+                     <<"provisioning (", State/binary, ")">>;
+                 false ->
+                     State
+    end,
+    libsniffle:vm_log(UUID, <<"Transitioning ", State1/binary>>),
+    libsniffle:vm_set(UUID, <<"state">>, State1),
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]);
 
 change_state(UUID, State, false) ->
-    libsniffle:vm_set(UUID, <<"state">>, State),
-    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
+    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/var/svc/provisioning">>) of
+                 true ->
+                     <<"provisioning (", State/binary, ")">>;
+                 false ->
+                     State
+    end,
+    libsniffle:vm_set(UUID, <<"state">>, State1),
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]).
 
 
 -spec binary_to_atom(B::binary()) -> A::atom().

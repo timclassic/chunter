@@ -709,7 +709,7 @@ change_state(UUID, State) ->
 -spec change_state(UUID::binary(), State::fifo:vm_state(), true | false) -> ok.
 
 change_state(UUID, State, true) ->
-    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/var/svc/provisioning">>) of
+    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
                  true ->
                      <<"provisioning (", State/binary, ")">>;
                  false ->
@@ -720,7 +720,7 @@ change_state(UUID, State, true) ->
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]);
 
 change_state(UUID, State, false) ->
-    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/var/svc/provisioning">>) of
+    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
                  true ->
                      <<"provisioning (", State/binary, ")">>;
                  false ->

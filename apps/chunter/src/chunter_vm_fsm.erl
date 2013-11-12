@@ -311,6 +311,7 @@ shutting_down(_, State) ->
 handle_event({force_state, NextState}, StateName, State) ->
     case binary_to_atom(NextState) of
         StateName ->
+            change_state(State#state.uuid, NextState, false),
             {next_state, StateName, State};
         running = N ->
             timer:send_after(500, get_info),
@@ -334,8 +335,8 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                 {<<"data">>,
                                  [{<<"config">>, SniffleData}]}]),
-            libsniffle:vm_set(UUID, [{<<"state">>, atom_to_binary(StateName)},
-                                     {<<"config">>, SniffleData}]),
+            libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
+            change_state(State#state.uuid, atom_to_binary(StateName), false),
             {next_state, StateName, State}
     end;
 

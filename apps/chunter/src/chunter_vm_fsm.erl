@@ -307,7 +307,7 @@ handle_event({force_state, NextState}, StateName, State) ->
           when NextState =:= State#state.public_state ->
             {next_state, StateName, State};
         StateName ->
-            {next_state, StateName, State#state{public_state = change_state(State#state.uuid, NextState, false)};
+            {next_state, StateName, State#state{public_state = change_state(State#state.uuid, NextState, false)}};
         running = N ->
             {next_state, running,State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= N)}};
         Other ->

@@ -1,5 +1,5 @@
 #!/bin/sh
-if zfs list zones/$1-disk0 > /dev/null
+if [ -a /dev/zvol/rdsk/zones/$1-disk0 ]
 then
     zfs send zones/$1-disk0@$2 | gzip
 else

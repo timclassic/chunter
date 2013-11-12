@@ -53,7 +53,8 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, type, uuid, console, zonedoor, listeners = []}).
+-record(state, {hypervisor, type, uuid, console, zonedoor, listeners = [],
+                public_state}).
 
 %%%===================================================================
 %%% API
@@ -200,8 +201,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
-    change_state(UUID, <<"creating">>),
-    {next_state, creating, State};
+    {next_state, creating, State#state{public_state = change_state(UUID, <<"creating">>)}};
 
 initialized(_, State) ->
     {next_state, initialized, State}.
@@ -210,22 +210,19 @@ initialized(_, State) ->
                       {next_state, atom(), State::term()}.
 
 creating({transition, NextState}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State}.
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}}.
 
 -spec loading({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.
 
 loading({transition, NextState}, State) ->
-    change_state(State#state.uuid, NextState, false),
-    {next_state, binary_to_atom(NextState), State}.
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState, false)}}.
 
 -spec stopped({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.
 
 stopped({transition, NextState = <<"booting">>}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 stopped(start, State) ->
     chunter_vmadm:start(State#state.uuid),
@@ -238,13 +235,11 @@ stopped(_, State) ->
                      {next_state, atom(), State::term()}.
 
 booting({transition, NextState = <<"shutting_down">>}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 booting({transition, NextState = <<"running">>}, State) ->
-    change_state(State#state.uuid, NextState),
     timer:send_after(500, get_info),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 booting(_, State) ->
     {next_state, booting, State}.
@@ -253,8 +248,7 @@ booting(_, State) ->
                      {next_state, atom(), State::term()}.
 
 running({transition, NextState = <<"shutting_down">>}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 running(_, State) ->
     {next_state, running, State}.
@@ -263,8 +257,7 @@ running(_, State) ->
                            {next_state, atom(), State::term()}.
 
 shutting_down({transition, NextState = <<"stopped">>}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 shutting_down(_, State) ->
     {next_state, shutting_down, State}.
@@ -310,6 +303,9 @@ shutting_down(_, State) ->
 
 handle_event({force_state, NextState}, StateName, State) ->
     case binary_to_atom(NextState) of
+        StateName
+          when NextState =:= State#state.public_state ->
+            {next_state, StateName, State};
         StateName ->
             change_state(State#state.uuid, NextState, false),
             {next_state, StateName, State};
@@ -718,7 +714,8 @@ change_state(UUID, State, true) ->
     end,
     libsniffle:vm_log(UUID, <<"Transitioning ", State1/binary>>),
     libsniffle:vm_set(UUID, <<"state">>, State1),
-    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]);
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
+    State1;
 
 change_state(UUID, State, false) ->
     State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
@@ -728,7 +725,8 @@ change_state(UUID, State, false) ->
                      State
     end,
     libsniffle:vm_set(UUID, <<"state">>, State1),
-    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]).
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
+    State1.
 
 
 -spec binary_to_atom(B::binary()) -> A::atom().

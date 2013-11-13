@@ -21,8 +21,12 @@
 
 -define(SERVER, ?MODULE).
 
+-define(INTERVAL, 1000).
+
 -record(state, {name,
                 port}).
+
+
 
 %%%===================================================================
 %%% API
@@ -57,7 +61,7 @@ init([]) ->
     {Name, _} = chunter_server:host_info(),
     lager:info("chunter:zonemon - initializing: ~s", [Name]),
     Zonemon = code:priv_dir(chunter) ++ "/zonemon.sh",
-    timer:send_interval(1000, zonecheck),
+    timer:send_interval(dflt_env(zonemon_interval, ?INTERVAL), zonecheck),
     PortOpts = [exit_status, use_stdio, binary, {line, 1000}],
     ZonePort = erlang:open_port({spawn, Zonemon}, PortOpts),
     lager:info("chunter:zonemon - stats watchdog started.", []),
@@ -219,3 +223,11 @@ parse_data(<<"S12: ", UUID/binary>>) ->
     {UUID, <<"destroying">>};
 parse_data(_) ->
     {error, unknown}.
+
+dflt_env(N, D) ->
+    case application:get_env(N) of
+        undefined ->
+            D;
+        {ok, V} ->
+            V
+    end.

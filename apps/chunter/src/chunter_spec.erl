@@ -72,10 +72,6 @@ generate_sniffle(In, _Type) ->
                   (<<"customer_metadata">>, V, Obj) ->
                       jsxd:fold(fun (<<"root_authorized_keys">>, V1, Obj1) ->
                                         jsxd:set(<<"ssh_keys">>, V1, Obj1);
-                                    (<<"root_pw">>, V1, Obj1) ->
-                                        jsxd:set(<<"root_pw">>, V1, Obj1);
-                                    (<<"admin_pw">>, V1, Obj1) ->
-                                        jsxd:set(<<"admin_pw">>, V1, Obj1);
                                     (K, V1, Obj1) ->
                                         jsxd:set([<<"metadata">>, K], V1, Obj1)
                                 end, Obj, V);
@@ -170,13 +166,13 @@ generate_spec(Package, Dataset, OwnerData) ->
     Base2 = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                               jsxd:set([<<"customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
                           (<<"root_pw">>, V, Obj) ->
-                              jsxd:set([<<"customer_metadata">>, <<"root_pw">>], V, Obj);
+                              jsxd:set([<<"internal_metadata">>, <<"root_pw">>], V, Obj);
                           (<<"resolvers">>, V, Obj) ->
                               jsxd:set(<<"resolvers">>, V, Obj);
                           (<<"hostname">>, V, Obj) ->
                               jsxd:set(<<"hostname">>, V, Obj);
                           (<<"admin_pw">>, V, Obj) ->
-                              jsxd:set([<<"customer_metadata">>, <<"admin_pw">>], V, Obj);
+                              jsxd:set([<<"internal_metadata">>, <<"admin_pw">>], V, Obj);
                           (<<"metadata">>, V, Obj) ->
                               jsxd:update(<<"customer_metadata">>,
                                           fun(M) ->
@@ -211,9 +207,9 @@ create_update(_, [], Config) ->
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
                            (<<"root_pw">>, V, Obj) ->
-                               jsxd:set([<<"set_customer_metadata">>, <<"root_pw">>], V, Obj);
+                               jsxd:set([<<"set_internal_metadata">>, <<"root_pw">>], V, Obj);
                            (<<"admin_pw">>, V, Obj) ->
-                               jsxd:set([<<"set_customer_metadata">>, <<"admin_pw">>], V, Obj);
+                               jsxd:set([<<"set_internal_metadata">>, <<"admin_pw">>], V, Obj);
                            (<<"metadata">>, V, Obj) ->
                                jsxd:update(<<"set_customer_metadata">>,
                                            fun(M) ->

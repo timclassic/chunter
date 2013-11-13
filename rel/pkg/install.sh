@@ -2,10 +2,12 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=joyent_20120906T221231Z\|joyent_20121203T193049Z\|joyent_20120726T184637Z\|joyent_20121018T224723Z\|joyent_20130222T000747Z\|joyent_20130405T010449Z\|joyent_20130530T224720Z\|joyent_20130419T073558Z\|joyent_20130629T040542Z
-BAD_VERSIONS=joyent_20130627T201726Z
+TESTED_VERSIONS=20130530T224720Z\|20130419T073558Z\|20130629T040542Z\|20130808T195337Z\|20131003T221245Z
 
-DST=/opt
+if [ -z $DST ]
+then
+    DST=/opt
+fi
 
 #IFACE=`dladm show-phys -m | grep $admin_nic | awk '{print $1}'`
 #IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`
@@ -18,11 +20,17 @@ fi
 BASE=`basename $0`;
 
 
-if uname -a | egrep $BAD_VERSIONS
+if uname -a | egrep 20130627T201726Z
 then
     echo "Sorry this SmartOS version is known to be incompatible or faulty."
     exit 1
+elif uname -a | egrep 20131031T235904Z
+then
+    echo "Sorry this SmartOS version is known to be incompatible or faulty."
+    echo " 20131031T235904Z: missing mdata-get ( http://bit.ly/Hyzb1e )"
+    exit 1
 fi
+
 
 if uname -a | egrep $TESTED_VERSIONS
 then
@@ -46,24 +54,21 @@ fi
 (cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
 mkdir -p /var/log/chunter
 
-if [ ! -f /opt/chunter/etc/app.config ]
+if [ ! -f $DST/chunter/etc/app.config ]
 then
-    cp /opt/chunter/etc/app.config.example /opt/chunter/etc/app.config
+    cp $DST/chunter/etc/app.config.example $DST/chunter/etc/app.config
 fi
 
-if [ ! -f /opt/chunter/etc/vm.args ]
+if [ ! -f $DST/chunter/etc/vm.args ]
 then
-    cp /opt/chunter/etc/vm.args.example /opt/chunter/etc/vm.args
+    cp $DST/chunter/etc/vm.args.example $DST/chunter/etc/vm.args
 fi
 
-mkdir -p /opt/custom/smf
-cp /opt/chunter/share/epmd.xml /opt/chunter/share/chunter.xml /opt/custom/smf
+mkdir -p $DST/custom/smf
+cp $DST/chunter/share/epmd.xml $DST/custom/smf
+cp $DST/chunter/share/chunter.xml $DST/custom/smf
 
-svccfg import /opt/custom/smf/epmd.xml
-svccfg import /opt/custom/smf/chunter.xml
-
-cat <<EOF
-
-EOF
+svccfg import $DST/custom/smf/epmd.xml
+svccfg import $DST/custom/smf/chunter.xml
 
 exit 0;

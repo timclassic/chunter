@@ -53,7 +53,8 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, type, uuid, console, zonedoor, listeners = []}).
+-record(state, {hypervisor, type, uuid, console, zonedoor, listeners = [],
+                public_state}).
 
 %%%===================================================================
 %%% API
@@ -200,8 +201,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
-    change_state(UUID, <<"creating">>),
-    {next_state, creating, State};
+    {next_state, creating, State#state{public_state = change_state(UUID, <<"creating">>)}};
 
 initialized(_, State) ->
     {next_state, initialized, State}.
@@ -210,22 +210,19 @@ initialized(_, State) ->
                       {next_state, atom(), State::term()}.
 
 creating({transition, NextState}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State}.
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}}.
 
 -spec loading({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.
 
 loading({transition, NextState}, State) ->
-    libsniffle:vm_set(State#state.uuid, <<"state">>, NextState),
-    {next_state, binary_to_atom(NextState), State}.
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState, false)}}.
 
 -spec stopped({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.
 
 stopped({transition, NextState = <<"booting">>}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 stopped(start, State) ->
     chunter_vmadm:start(State#state.uuid),
@@ -238,13 +235,11 @@ stopped(_, State) ->
                      {next_state, atom(), State::term()}.
 
 booting({transition, NextState = <<"shutting_down">>}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 booting({transition, NextState = <<"running">>}, State) ->
-    change_state(State#state.uuid, NextState),
     timer:send_after(500, get_info),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 booting(_, State) ->
     {next_state, booting, State}.
@@ -253,8 +248,7 @@ booting(_, State) ->
                      {next_state, atom(), State::term()}.
 
 running({transition, NextState = <<"shutting_down">>}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 running(_, State) ->
     {next_state, running, State}.
@@ -263,8 +257,7 @@ running(_, State) ->
                            {next_state, atom(), State::term()}.
 
 shutting_down({transition, NextState = <<"stopped">>}, State) ->
-    change_state(State#state.uuid, NextState),
-    {next_state, binary_to_atom(NextState), State};
+    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 shutting_down(_, State) ->
     {next_state, shutting_down, State}.
@@ -310,15 +303,15 @@ shutting_down(_, State) ->
 
 handle_event({force_state, NextState}, StateName, State) ->
     case binary_to_atom(NextState) of
-        StateName ->
+        StateName
+          when NextState =:= State#state.public_state ->
             {next_state, StateName, State};
+        StateName ->
+            {next_state, StateName, State#state{public_state = change_state(State#state.uuid, NextState, false)}};
         running = N ->
-            timer:send_after(500, get_info),
-            change_state(State#state.uuid, NextState, StateName =:= N),
-            {next_state, running, State};
+            {next_state, running,State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= N)}};
         Other ->
-            change_state(State#state.uuid, NextState, StateName =:= Other),
-            {next_state, Other, State}
+            {next_state, Other, State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= Other)}}
     end;
 
 handle_event(register, StateName, State = #state{uuid = UUID}) ->
@@ -334,8 +327,8 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                 {<<"data">>,
                                  [{<<"config">>, SniffleData}]}]),
-            libsniffle:vm_set(UUID, [{<<"state">>, atom_to_binary(StateName)},
-                                     {<<"config">>, SniffleData}]),
+            libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
+            change_state(State#state.uuid, atom_to_binary(StateName), false),
             {next_state, StateName, State}
     end;
 
@@ -561,11 +554,10 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 
 incinerate(Port) ->
-    %{os_pid, OsPid} = erlang:port_info(Port, os_pid),
-    port_close(Port).%,
-    %lager:warning("Killing ~p with -9", [OsPid]),
-    %os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
-
+    {os_pid, OsPid} = erlang:port_info(Port, os_pid),
+    port_close(Port),
+    lager:warning("Killing ~p with -9", [OsPid]),
+    os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
 
 init_console(State = #state{console = _C}) when is_port(_C) ->
     State;
@@ -586,7 +578,7 @@ init_zonedoor(State) ->
                                  [{args, Args}, use_stdio, binary, {line, 1024}, exit_status]),
             State#state{zonedoor = DoorPort};
         _ ->
-            %incinerate(State#state.zonedoor)
+            %%incinerate(State#state.zonedoor),
             State
     end.
 
@@ -653,12 +645,14 @@ write_image(Port, UUID, [], _) ->
     %% Need to set the correct type
     Manifest1 = case jsxd:get([<<"type">>], DS) of
                     {ok, <<"zone">>} ->
-                        jsxd:set([<<"manifest">>, <<"type">>], <<"zone-dataset">>, Manifest);
+                        jsxd:set([<<"manifest">>, <<"type">>],
+                                 <<"zone-dataset">>, Manifest);
                     _ ->
                         Manifest
                 end,
     %% and write it to zoneamd's new destination folder ...
-    file:write_file("/var/imgadm/images/zones-" ++ UUIDL ++ ".json", jsx:encode(Manifest1)),
+    file:write_file("/var/imgadm/images/zones-" ++ UUIDL ++ ".json",
+                    jsx:encode(Manifest1)),
     Cmd = "zfs list -Hp -t all -r  zones/" ++ UUIDL,
 
     wait_image(0, Cmd).
@@ -680,7 +674,9 @@ wait_image(_, _) ->
 
 zoneadm(ZUUID) ->
     Zones = [ re:split(Line, ":")
-              || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++ binary_to_list(ZUUID) ++ " list -p"), "\n")],
+              || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++
+                                             binary_to_list(ZUUID) ++
+                                             " list -p"), "\n")],
     [{ID, Name, VMState, Path, UUID, Type} ||
         [ID, Name, VMState, Path, UUID, Type, _IP, _SomeNumber] <- Zones].
 
@@ -706,13 +702,27 @@ change_state(UUID, State) ->
 -spec change_state(UUID::binary(), State::fifo:vm_state(), true | false) -> ok.
 
 change_state(UUID, State, true) ->
-    libsniffle:vm_log(UUID, <<"Transitioning ", State/binary>>),
-    libsniffle:vm_set(UUID, <<"state">>, State),
-    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]);
+    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
+                 true ->
+                     <<"provisioning (", State/binary, ")">>;
+                 false ->
+                     State
+    end,
+    libsniffle:vm_log(UUID, <<"Transitioning ", State1/binary>>),
+    libsniffle:vm_set(UUID, <<"state">>, State1),
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
+    State1;
 
 change_state(UUID, State, false) ->
-    libsniffle:vm_set(UUID, <<"state">>, State),
-    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State}]).
+    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
+                 true ->
+                     <<"provisioning (", State/binary, ")">>;
+                 false ->
+                     State
+    end,
+    libsniffle:vm_set(UUID, <<"state">>, State1),
+    libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
+    State1.
 
 
 -spec binary_to_atom(B::binary()) -> A::atom().
@@ -731,7 +741,8 @@ do_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Creating snapshot: ~s", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
+                                    stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
 do_delete_snapshot(Path, SnapID) ->
@@ -740,7 +751,8 @@ do_delete_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Deleting snapshot: ~s", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
+                                    stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
 do_rollback_snapshot(Path, SnapID) ->
@@ -749,7 +761,8 @@ do_rollback_snapshot(Path, SnapID) ->
              P/binary, "@", SnapID/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Rolling back snapshot: ~s", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
+                                    stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
 wait_for_port(Port, Reply) ->
@@ -792,17 +805,20 @@ snapshot_action(VM, UUID, Action) ->
                                               _ ->
                                                   {error, missing}
                                           end
-                                  end, {ok, Reply}, jsxd:get(<<"disks">>, [], Spec)),
+                                  end, {ok, Reply},
+                                  jsxd:get(<<"disks">>, [], Spec)),
                             case R of
                                 {ok, Res} ->
-                                    libsniffle:vm_log(VM, <<"Snapshot done ", Res/binary>>),
+                                    libsniffle:vm_log(VM,<<"Snapshot done ", Res/binary>>),
                                     ok;
                                 {error, _} ->
                                     error
                             end;
                         {error, Code, Reply} ->
-                            lager:error("Failed snapshot VM ~s ~p: ~s.", [VM, Code, Reply]),
-                            libsniffle:vm_log(VM, <<"Failed to snapshot: ", Reply/binary>>),
+                            lager:error("Failed snapshot VM ~s ~p: ~s.",
+                                        [VM, Code, Reply]),
+                            libsniffle:vm_log(VM, <<"Failed to snapshot: ",
+                                                    Reply/binary>>),
                             error
                     end;
                 _ ->
@@ -821,11 +837,13 @@ snapshot_sizes(VM) ->
             {ok, V} = libsniffle:vm_get(VM),
             case jsxd:get([<<"snapshots">>], V) of
                 {ok, S} ->
-                    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/" ++ binary_to_list(VM)),
+                    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/"
+                                  ++ binary_to_list(VM)),
                     Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
                                                   L =/= <<>>],
                     Known = [ ID || {ID, _} <- S],
-                    Snaps = [{lists:last(re:split(Name, "@")), list_to_integer(binary_to_list(Size))}
+                    Snaps = [{lists:last(re:split(Name, "@")),
+                              list_to_integer(binary_to_list(Size))}
                              || [Name, Size, _, _, _] <- Lines],
                     Snaps1 =lists:filter(fun ({Name, _}) ->
                                                  lists:member(Name, Known)

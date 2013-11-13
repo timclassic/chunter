@@ -31,6 +31,8 @@
 
 -define(SERVER, ?MODULE).
 
+-define(HOST_ID_FILE, "host_id").
+
 -record(state, {name,
                 port,
                 sysinfo,
@@ -84,12 +86,9 @@ disconnect() ->
 init([]) ->
     lager:info([{fifi_component, chunter}],
                "chunter:init.", []),
-    {Host, IPStr} = host_info(),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
-    libsniffle:hypervisor_register(Host, IPStr, 4200),
-    lager:info([{fifi_component, chunter}],
-               "chunter:init - Host: ~s", [Host]),
+    register_hypervisor(),
     lists:foldl(
       fun (VM, _) ->
               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
@@ -105,16 +104,16 @@ init([]) ->
                        _ ->
                            [<<"zone">>]
                    end,
-
+    {Host, _IPStr} = host_info(),
     libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, SysInfo},
                                      {<<"version">>, ?VERSION},
                                      {<<"virtualisation">>, Capabilities}]),
 
     {ok, #state{
-       sysinfo = SysInfo,
-       name = Host,
-       capabilities = Capabilities
-      }}.
+            sysinfo = SysInfo,
+            name = Host,
+            capabilities = Capabilities
+           }}.
 
 
 %%--------------------------------------------------------------------
@@ -133,7 +132,7 @@ init([]) ->
 %%--------------------------------------------------------------------
 
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
-                                                %    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
+    %%    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
     lager:info([{fifi_component, chunter}],
                "unsupported call - ~p", [Call]),
     Reply = {error, {unsupported, Call}},
@@ -165,7 +164,7 @@ handle_cast(update_mem, State = #state{name = Host}) ->
         string:to_integer(
           os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
-                [Host, ProvMem, TotalMem]),
+               [Host, ProvMem, TotalMem]),
     libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ProvMem},
                                      {<<"resources.provisioned-memory">>, ProvMem},
                                      {<<"resources.total-memory">>, TotalMem}]),
@@ -194,7 +193,7 @@ handle_cast(connect, #state{name = Host,
     %%    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
     %%    application:set_env(s59tatsderl, hostname, Host),
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    Networks = re:split(os:cmd("cat /usbkey/config  | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
+    Networks = re:split(os:cmd("cat /usbkey/config  | grep -v '^#' | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
     Networks1 = lists:delete(<<>>, Networks),
     Etherstub = re:split(
                   os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
@@ -215,16 +214,17 @@ handle_cast(connect, #state{name = Host,
     %%    statsderl:increment([Name, ".net.join"], 1, 1.0),
     %%    libsniffle:join_client_channel(),
 
-    {Host, IPStr} = host_info(),
-    libsniffle:hypervisor_register(Host, IPStr, 4200),
-    libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, State#state.sysinfo},
-                                     {<<"version">>, ?VERSION},
-                                     {<<"networks">>, Networks1},
-                                     {<<"resources.free-memory">>, TotalMem - ProvMem},
-                                     {<<"etherstubs">>, Etherstub1},
-                                     {<<"resources.provisioned-memory">>, ProvMem},
-                                     {<<"resources.total-memory">>, TotalMem},
-                                     {<<"virtualisation">>, Caps}]),
+    register_hypervisor(),
+    libsniffle:hypervisor_set(
+      Host,
+      [{<<"sysinfo">>, State#state.sysinfo},
+       {<<"version">>, ?VERSION},
+       {<<"networks">>, Networks1},
+       {<<"resources.free-memory">>, TotalMem - ProvMem},
+       {<<"etherstubs">>, Etherstub1},
+       {<<"resources.provisioned-memory">>, ProvMem},
+       {<<"resources.total-memory">>, TotalMem},
+       {<<"virtualisation">>, Caps}]),
     {noreply, State#state{
                 total_memory = TotalMem,
                 provisioned_memory = ProvMem,
@@ -294,6 +294,7 @@ list_vms() ->
 
 
 host_info() ->
+    Path = [code:root_dir(), "/etc/" ?HOST_ID_FILE],
     Host = case application:get_env(chunter, hostname) of
                undefined ->
                    [H|_] = re:split(os:cmd("uname -n"), "\n"),
@@ -311,4 +312,38 @@ host_info() ->
                         R
                 end,
     IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
-    {Host, IPStr}.
+    HostID = case filelib:is_file([code:root_dir(), "/etc/host_id"]) of
+                 true ->
+                     F = os:cmd(["cat ", Path]),
+                     [HostIDi | _] = re:split(F, "\n"),
+                     HostIDi;
+                 _ ->
+                     UUID = uuid:uuid4s(),
+                     file:write_file(Path, UUID),
+                     UUID
+             end,
+
+    {HostID, IPStr}.
+
+
+register_hypervisor() ->
+    {Host, IPStr} = host_info(),
+    lager:info([{fifi_component, chunter}],
+               "chunter:init - Host: ~s(~s)", [Host, IPStr]),
+    [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
+    case libsniffle:hypervisor_get(Host) of
+        not_found ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
+        {ok, H} ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            case jsxd:get(<<"alias">>, H) of
+                undefined ->
+                    libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
+                _ ->
+                    ok
+            end;
+        _ ->
+            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            ok
+    end.

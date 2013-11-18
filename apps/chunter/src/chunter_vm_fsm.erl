@@ -441,11 +441,11 @@ handle_info({D, {data, {eol, Data}}}, StateName,
                        zonedoor = D,
                        uuid = UUID
                       }) ->
-io:format("~s~n", [Data]),
+    io:format("~s~n", [Data]),
     case re:split(Data, " ") of
         [User, _, KeyID] ->
             lager:warning("[zonedoor:~s] User ~s trying to connect with key ~s",
-                       [UUID, User, KeyID]),
+                          [UUID, User, KeyID]),
             KeyBin = libsnarl:keystr_to_id(KeyID),
             case libsnarl:user_key_find(KeyBin) of
                 {ok, UserID} ->
@@ -489,11 +489,16 @@ handle_info(update_snapshots, StateName, State) ->
     {next_state, StateName, State};
 
 handle_info(get_info, StateName, State) ->
-    Info = chunter_vmadm:info(State#state.uuid),
-    State1 = init_console(State),
-    State2 = init_zonedoor(State1),
-    libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
-    {next_state, StateName, State2};
+    case chunter_vmadm:info(State#state.uuid) of
+        {error, no_info} ->
+            timer:send_after(1000, get_info),
+            {next_state, StateName, State};
+        {ok, Info} ->
+            State1 = init_console(State),
+            State2 = init_zonedoor(State1),
+            libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
+            {next_state, StateName, State2}
+    end;
 
 handle_info(init_console, StateName, State) ->
     {next_state, StateName, init_console(State)};
@@ -707,7 +712,7 @@ change_state(UUID, State, true) ->
                      <<"provisioning (", State/binary, ")">>;
                  false ->
                      State
-    end,
+             end,
     libsniffle:vm_log(UUID, <<"Transitioning ", State1/binary>>),
     libsniffle:vm_set(UUID, <<"state">>, State1),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
@@ -719,7 +724,7 @@ change_state(UUID, State, false) ->
                      <<"provisioning (", State/binary, ")">>;
                  false ->
                      State
-    end,
+             end,
     libsniffle:vm_set(UUID, <<"state">>, State1),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1.

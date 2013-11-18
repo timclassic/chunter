@@ -79,13 +79,13 @@ info(UUID) ->
                 "vmadm:cmd - ~s.", [Cmd]),
     case os:cmd(binary_to_list(Cmd)) of
         "Unable" ++ _ ->
-            [];
+            {error, no_info};
         JSON ->
             case jsx:to_term(list_to_binary(JSON)) of
                 {incomplete, _} ->
-                    [];
+                    {error, no_info};
                 R ->
-                    R
+                    {ok, R}
             end
     end.
 
@@ -200,10 +200,10 @@ update(UUID, Data) ->
 
 %% This function reads the process's input untill it knows that the vm was created or failed.
 -spec wait_for_text(Port::any()) ->
-                          {ok, UUID::fifo:uuid()} |
-                          {error, Text::binary() |
-                                        timeout |
-                                        unknown}.
+                           {ok, UUID::fifo:uuid()} |
+                           {error, Text::binary() |
+                                         timeout |
+                                         unknown}.
 wait_for_text(Port) ->
     receive
         {Port, {data, {eol, Data}}} ->

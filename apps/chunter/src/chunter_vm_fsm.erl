@@ -203,10 +203,16 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
                         {<<"data">>,
                          [{<<"hypervisor">>, Hypervisor},
                           {<<"config">>, SniffleData1}]}]),
+    Type = case jsxd:get(<<"type">>, SniffleData1) of
+               <<"kvm">> -> kvm;
+               _ -> zone
+           end,
     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
     install_image(DatasetUUID),
     spawn(chunter_vmadm, create, [VMData]),
-    {next_state, creating, State#state{public_state = change_state(UUID, <<"creating">>)}};
+    {next_state, creating,
+     State#state{type = Type,
+                 public_state = change_state(UUID, <<"creating">>)}};
 
 initialized(_, State) ->
     {next_state, initialized, State}.
@@ -333,6 +339,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
                        <<"kvm">> -> kvm;
                        _ -> zone
                    end,
+            lager:info("[~s] Has type: ~p.", [UUID, Type]),
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                 {<<"data">>,
                                  [{<<"config">>, SniffleData}]}]),
@@ -478,6 +485,13 @@ handle_info({D, {data, {eol, Data}}}, StateName,
     end,
     {next_state, StateName, State};
 
+handle_info({_C,{exit_status,1}}, stopped,
+            State = #state{
+                       console = _C,
+                       type = zone
+                      }) ->
+    {next_state, stopped, State};
+
 handle_info({_C,{exit_status,1}}, StateName,
             State = #state{
                        console = _C,
@@ -485,6 +499,13 @@ handle_info({_C,{exit_status,1}}, StateName,
                       }) ->
     timer:send_after(1000, init_console),
     {next_state, StateName, State};
+
+handle_info({_D,{exit_status,1}}, stopped,
+            State = #state{
+                       zonedoor = _D,
+                       type = zone
+                      }) ->
+    {next_state, stopped, State};
 
 handle_info({_D,{exit_status,1}}, StateName,
             State = #state{
@@ -497,6 +518,9 @@ handle_info({_D,{exit_status,1}}, StateName,
 handle_info(update_snapshots, StateName, State) ->
     snapshot_sizes(State#state.uuid),
     {next_state, StateName, State};
+
+handle_info(get_info, stopped, State) ->
+    {next_state, stopped, State};
 
 handle_info(get_info, StateName, State=#state{type=zone}) ->
     State1 = init_console(State),

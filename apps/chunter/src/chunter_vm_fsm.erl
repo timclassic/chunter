@@ -53,7 +53,12 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {hypervisor, type, uuid, console, zonedoor, listeners = [],
+-record(state, {hypervisor,
+                type,
+                uuid,
+                console,
+                zonedoor,
+                listeners = [],
                 public_state}).
 
 %%%===================================================================
@@ -324,12 +329,17 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             snapshot_sizes(UUID),
             timer:send_after(500, get_info),
             SniffleData = chunter_spec:to_sniffle(VMData),
+            Type = case jsxd:get(<<"type">>, SniffleData) of
+                       <<"kvm">> -> kvm;
+                       _ -> zone
+                   end,
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                 {<<"data">>,
                                  [{<<"config">>, SniffleData}]}]),
             libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
-            change_state(State#state.uuid, atom_to_binary(StateName), false),
-            {next_state, StateName, State}
+            State1 = State#state{type = Type},
+            change_state(State1#state.uuid, atom_to_binary(StateName), false),
+            {next_state, StateName, State1}
     end;
 
 handle_event({update, Package, Config}, StateName,

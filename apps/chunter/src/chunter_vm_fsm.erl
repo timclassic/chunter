@@ -488,6 +488,9 @@ handle_info(update_snapshots, StateName, State) ->
     snapshot_sizes(State#state.uuid),
     {next_state, StateName, State};
 
+handle_info(get_info, StateName, State=#state{type=zone}) ->
+    {next_state, StateName, State};
+
 handle_info(get_info, StateName, State) ->
     case chunter_vmadm:info(State#state.uuid) of
         {error, no_info} ->
@@ -500,11 +503,17 @@ handle_info(get_info, StateName, State) ->
             {next_state, StateName, State2}
     end;
 
-handle_info(init_console, StateName, State) ->
+handle_info(init_console, StateName, State=#state{type=zone}) ->
     {next_state, StateName, init_console(State)};
 
-handle_info(init_zonedoor, StateName, State) ->
+handle_info(init_zonedoor, StateName, State=#state{type=zone}) ->
     {next_state, StateName, init_zonedoor(State)};
+
+handle_info(init_console, StateName, State) ->
+    {next_state, StateName, State};
+
+handle_info(init_zonedoor, StateName, State) ->
+    {next_state, StateName, State};
 
 handle_info(Info, StateName, State) ->
     lager:warning("unknown data: ~p", [Info]),

@@ -499,7 +499,9 @@ handle_info(update_snapshots, StateName, State) ->
     {next_state, StateName, State};
 
 handle_info(get_info, StateName, State=#state{type=zone}) ->
-    {next_state, StateName, State};
+    State1 = init_console(State),
+    State2 = init_zonedoor(State1),
+    {next_state, StateName, State2};
 
 handle_info(get_info, StateName, State) ->
     case chunter_vmadm:info(State#state.uuid) of
@@ -507,10 +509,8 @@ handle_info(get_info, StateName, State) ->
             timer:send_after(1000, get_info),
             {next_state, StateName, State};
         {ok, Info} ->
-            State1 = init_console(State),
-            State2 = init_zonedoor(State1),
             libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
-            {next_state, StateName, State2}
+            {next_state, StateName, State}
     end;
 
 handle_info(init_console, StateName, State=#state{type=zone}) ->

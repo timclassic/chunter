@@ -204,7 +204,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
                          [{<<"hypervisor">>, Hypervisor},
                           {<<"config">>, SniffleData1}]}]),
     Type = case jsxd:get(<<"type">>, SniffleData1) of
-               <<"kvm">> -> kvm;
+               {ok, <<"kvm">>} -> kvm;
                _ -> zone
            end,
     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
@@ -336,7 +336,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             timer:send_after(500, get_info),
             SniffleData = chunter_spec:to_sniffle(VMData),
             Type = case jsxd:get(<<"type">>, SniffleData) of
-                       <<"kvm">> -> kvm;
+                       {ok, <<"kvm">>} -> kvm;
                        _ -> zone
                    end,
             lager:info("[~s] Has type: ~p.", [UUID, Type]),

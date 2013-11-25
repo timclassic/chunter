@@ -950,12 +950,14 @@ snap_lines(Disk) ->
 %% @doc Sum up the sizes of the original snapshot and the size of disks for
 %% KVM machines.
 get_all_snapshots(VM, Spec) ->
+    Disks = jsxd:get(<<"disks">>, [], Spec),
+    Disks1 = [jsxd:get(<<"path">>, <<"">>, D) || D <- Disks],
     Lines = lists:foldl(
               fun(Disk, LAcc) ->
                       LAcc ++ snap_lines(Disk)
               end,
               snap_lines("zones/" ++ binary_to_list(VM)),
-              jsxd:get(<<"disks">>, [], Spec)),
+              Disks1),
     Snaps = [{lists:last(re:split(Name, "@")),
               list_to_integer(binary_to_list(Size))}
              || [Name, Size, _, _, _] <- Lines],

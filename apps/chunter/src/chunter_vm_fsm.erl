@@ -952,7 +952,7 @@ snap_lines(Disk) ->
 get_all_snapshots(VM, Spec) ->
     Disks = jsxd:get(<<"disks">>, [], Spec),
     Disks1 = [jsxd:get(<<"path">>, <<"">>, D) || D <- Disks],
-    Disks2 = [D || <<_:14/binary, D/binary>> <- Disks1],
+    Disks2 = [D || <<_:15/binary, D/binary>> <- Disks1],
     Lines = lists:foldl(
               fun(Disk, LAcc) ->
                       LAcc ++ snap_lines(Disk)

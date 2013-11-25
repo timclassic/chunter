@@ -916,8 +916,14 @@ snapshot_sizes(VM) ->
             {ok, V} = libsniffle:vm_get(VM),
             case jsxd:get([<<"snapshots">>], V) of
                 {ok, S} ->
-                    Snaps = get_all_snapshots(VM, V),
                     Known = [ ID || {ID, _} <- S],
+                    Snaps = case load_vm(VM) of
+                                {error, not_found} ->
+                                    [];
+                                VMData ->
+                                    Spec = chunter_spec:to_sniffle(VMData),
+                                    get_all_snapshots(VM, Spec)
+                            end,
                     Snaps1 =lists:filter(fun ({Name, _}) ->
                                                  lists:member(Name, Known)
                                          end, Snaps),

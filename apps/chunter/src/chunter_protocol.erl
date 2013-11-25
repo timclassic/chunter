@@ -149,20 +149,25 @@ handle_message({machines, start, UUID, Image}, State) when is_binary(UUID),
     chunter_vmadm:start(UUID, Image),
     {stop, State};
 
-handle_message({machines, snapshot, UUID, SnapId}, State) when is_binary(UUID),
-                                                               is_binary(SnapId) ->
-    {stop, chunter_vm_fsm:snapshot(UUID, SnapId), State};
+handle_message({machines, snapshot, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    chunter_vm_fsm:snapshot(UUID, SnapId),
+    {stop, State};
 
-handle_message({machines, snapshot, delete, UUID, SnapId}, State) when is_binary(UUID),
-                                                                       is_binary(SnapId) ->
+handle_message({machines, snapshot, delete, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
     {stop, chunter_vm_fsm:delete_snapshot(UUID, SnapId), State};
 
-handle_message({machines, snapshot, rollback, UUID, SnapId}, State) when is_binary(UUID),
-                                                                         is_binary(SnapId) ->
+handle_message({machines, snapshot, rollback, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
     {stop, chunter_vm_fsm:rollback_snapshot(UUID, SnapId), State};
 
-handle_message({machines, snapshot, store, UUID, SnapId, Img}, State) when is_binary(UUID),
-                                                                           is_binary(SnapId) ->
+handle_message({machines, snapshot, store, UUID, SnapId, Img}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
     spawn(fun() ->
                   write_snapshot(UUID, SnapId, Img)
           end),

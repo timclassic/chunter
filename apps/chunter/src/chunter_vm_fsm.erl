@@ -914,14 +914,8 @@ snapshot_sizes(VM) ->
             {ok, V} = libsniffle:vm_get(VM),
             case jsxd:get([<<"snapshots">>], V) of
                 {ok, S} ->
-                    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH zones/"
-                                  ++ binary_to_list(VM)),
-                    Lines = [re:split(L, "\t") || L <-re:split(Data, "\n"),
-                                                  L =/= <<>>],
+                    Snaps = get_all_snapshots(VM, V),
                     Known = [ ID || {ID, _} <- S],
-                    Snaps = [{lists:last(re:split(Name, "@")),
-                              list_to_integer(binary_to_list(Size))}
-                             || [Name, Size, _, _, _] <- Lines],
                     Snaps1 =lists:filter(fun ({Name, _}) ->
                                                  lists:member(Name, Known)
                                          end, Snaps),
@@ -933,3 +927,28 @@ snapshot_sizes(VM) ->
                     ok
             end
     end.
+
+snap_lines(Disk) when is_binary(Disk) ->
+    snap_lines(binary_to_list(Disk));
+snap_lines(Disk) ->
+    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH " ++ Disk),
+    [re:split(L, "\t") || L <-re:split(Data, "\n"),
+                          L =/= <<>>].
+
+%% @doc Sum up the sizes of the original snapshot and the size of disks for
+%% KVM machines.
+get_all_snapshots(VM, Spec) ->
+    Lines = lists:fold(
+              fun(Disk, LAcc) ->
+                      LAcc ++ snap_lines(Disk)
+              end,
+              snap_lines("zones/" ++ binary_to_list(VM)),
+              jsxd:get(<<"disks">>, [], Spec)),
+    Snaps = [{lists:last(re:split(Name, "@")),
+              list_to_integer(binary_to_list(Size))}
+             || [Name, Size, _, _, _] <- Lines],
+    lists:foldl(fun({ID, S}, [{ID, SA} | A]) ->
+                        [{ID, SA + S} | A];
+                   (S, A) ->
+                        [S | A]
+                end, [], lists:sort(Snaps)).

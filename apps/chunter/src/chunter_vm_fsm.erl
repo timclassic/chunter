@@ -907,11 +907,10 @@ snapshot_action(VM, UUID, Fun, Action) ->
     end.
 
 snapshot_sizes(VM) ->
-    lager:info("[~s] Updating Snapshots for.", [VM]),
+    lager:info("[~s] Updating Snapshots.", [VM]),
     case libsniffle:servers() of
         [] ->
             lager:warning("[~s] No Servers to update snapshotsto.", [VM]),
-
             ok;
         _ ->
             {ok, V} = libsniffle:vm_get(VM),
@@ -934,8 +933,11 @@ snapshot_sizes(VM) ->
 
 snap_lines(Disk) when is_binary(Disk) ->
     snap_lines(binary_to_list(Disk));
+
 snap_lines(Disk) ->
-    Data = os:cmd("/usr/sbin/zfs list -r -t snapshot -pH " ++ Disk),
+    Cmd = "/usr/sbin/zfs list -r -t snapshot -pH " ++ Disk,
+    lager:debug("Getting snapshots: ~s", [Cmd]),
+    Data = os:cmd(Cmd),
     [re:split(L, "\t") || L <-re:split(Data, "\n"),
                           L =/= <<>>].
 

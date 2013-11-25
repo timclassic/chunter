@@ -922,7 +922,7 @@ snapshot_sizes(VM) ->
                     Snaps1 =lists:filter(fun ({Name, _}) ->
                                                  lists:member(Name, Known)
                                          end, Snaps),
-                    lager:debut("[~s] Snapshots: ~p", [VM, Snaps1]),
+                    lager:debug("[~s] Snapshots: ~p", [VM, Snaps1]),
                     [libsniffle:vm_set(
                        VM,
                        [<<"snapshots">>, Name, <<"size">>],

@@ -869,15 +869,19 @@ snapshot_action(VM, UUID, Fun, Action) ->
                                 {ok, Res} ->
                                     case Action of
                                         create ->
+                                            SnapPath = [<<"snapshots">>, UUID, <<"state">>],
+                                            lager:debug("Setting ~p to ~s",
+                                                        [SnapPath, <<"completed">>]),
                                             libsniffle:vm_set(
-                                              VM,
-                                              [{[<<"snapshots">>, UUID, <<"state">>], <<"completed">>}]);
+                                              VM, SnapPath,
+                                              <<"completed">>);
                                         _ ->
                                             ok
                                     end,
                                     libsniffle:vm_log(VM,<<"Snapshot done ", Res/binary>>),
                                     ok;
-                                {error, _} ->
+                                {error, E} ->
+                                    lager:error("Snapshot failed with: ~p", E),
                                     error
                             end;
                         {error, Code, Reply} ->

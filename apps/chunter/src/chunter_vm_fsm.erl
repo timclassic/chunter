@@ -431,9 +431,9 @@ handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
     {reply, ok, StateName, State};
 
 handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
-    {reply,
-     snapshot_action(State#state.uuid, UUID, fun do_rollback_snapshot/2, rollback),
-     StateName, State};
+    spawn(?MODULE, snapshot_action,
+          [State#state.uuid, UUID, fun do_rollback_snapshot/2, rollback]),
+    {reply, ok, StateName, State};
 
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,

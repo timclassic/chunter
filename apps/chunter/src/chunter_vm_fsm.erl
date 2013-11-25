@@ -875,6 +875,11 @@ snapshot_action(VM, UUID, Fun, Action) ->
                                             libsniffle:vm_set(
                                               VM, SnapPath,
                                               <<"completed">>);
+                                        delete ->
+                                            SnapPath = [<<"snapshots">>, UUID],
+                                            lager:debug("Deleting ~p", [SnapPath]),
+                                            libsniffle:vm_set(
+                                              VM, SnapPath, delete);
                                         _ ->
                                             ok
                                     end,

@@ -49,7 +49,8 @@
          stopped/2,
          booting/2,
          running/2,
-         shutting_down/2]).
+         shutting_down/2,
+         snapshot_action/4]).
 
 -define(SERVER, ?MODULE).
 
@@ -420,14 +421,14 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
-    {reply,
-     snapshot_action(State#state.uuid, UUID, fun do_snapshot/2, create),
-     StateName, State};
+    spawn(?MODULE, snapshot_action,
+          [State#state.uuid, UUID, fun do_snapshot/2, create]),
+    {reply, ok, StateName, State};
 
 handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
-    {reply,
-     snapshot_action(State#state.uuid, UUID, fun do_delete_snapshot/2, delete),
-     StateName, State};
+    spawn(?MODULE, snapshot_action,
+          [State#state.uuid, UUID, fun do_delete_snapshot/2, delete]),
+    {reply, ok, StateName, State};
 
 handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
     {reply,

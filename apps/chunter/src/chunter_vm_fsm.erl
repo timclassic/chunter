@@ -907,8 +907,11 @@ snapshot_action(VM, UUID, Fun, Action) ->
     end.
 
 snapshot_sizes(VM) ->
+    lager:info("[~s] Updating Snapshots for.", [VM]),
     case libsniffle:servers() of
         [] ->
+            lager:warning("[~s] No Servers to update snapshotsto.", [VM]),
+
             ok;
         _ ->
             {ok, V} = libsniffle:vm_get(VM),
@@ -919,6 +922,7 @@ snapshot_sizes(VM) ->
                     Snaps1 =lists:filter(fun ({Name, _}) ->
                                                  lists:member(Name, Known)
                                          end, Snaps),
+                    lager:debut("[~s] Snapshots: ~p", [VM, Snaps1]),
                     [libsniffle:vm_set(
                        VM,
                        [<<"snapshots">>, Name, <<"size">>],

@@ -881,6 +881,8 @@ snapshot_action(VM, UUID, Fun, Action) ->
                                             lager:debug("Deleting ~p", [SnapPath]),
                                             libsniffle:vm_set(
                                               VM, SnapPath, delete);
+                                        rollback ->
+                                            libsniffle:vm_commit_snapshot_rollback(Vm, UUID);
                                         _ ->
                                             ok
                                     end,

@@ -420,13 +420,19 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
-    {reply, snapshot_action(State#state.uuid, UUID, fun do_snapshot/2), StateName, State};
+    {reply,
+     snapshot_action(State#state.uuid, UUID, fun do_snapshot/2, create),
+     StateName, State};
 
 handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
-    {reply, snapshot_action(State#state.uuid, UUID, fun do_delete_snapshot/2), StateName, State};
+    {reply,
+     snapshot_action(State#state.uuid, UUID, fun do_delete_snapshot/2, delete),
+     StateName, State};
 
 handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
-    {reply, snapshot_action(State#state.uuid, UUID, fun do_rollback_snapshot/2), StateName, State};
+    {reply,
+     snapshot_action(State#state.uuid, UUID, fun do_rollback_snapshot/2, rollback),
+     StateName, State};
 
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
@@ -825,8 +831,29 @@ wait_for_port(Port, Reply) ->
             {error, S, Reply}
     end.
 
+snapshp_action_on_disks(VM, UUID, Fun, LastReply, Disks) ->
+    lists:foldl(
+      fun (_, {error, E}) ->
+              {error, E};
+          (Disk, {S, Reply0}) ->
+              case jsxd:get(<<"path">>, Disk) of
+                  {ok, <<_:14/binary, P1/binary>>} ->
+                      case Fun(P1, UUID) of
+                          {ok, Res} ->
+                              {S, <<Reply0/binary, "\n", Res/binary>>};
+                          {error, Code, Res} ->
+                              lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
+                              libsniffle:vm_log(
+                                VM,
+                                <<"Failed snapshot disk ", P1/binary, ": ", Res/binary>>),
+                              {error, <<Reply0/binary, "\n", Res/binary>>}
+                      end;
+                  _ ->
+                      {error, missing}
+              end
+      end, LastReply, Disks).
 
-snapshot_action(VM, UUID, Action) ->
+snapshot_action(VM, UUID, Fun, Action) ->
     case load_vm(VM) of
         {error, not_found} ->
             ok;
@@ -834,29 +861,20 @@ snapshot_action(VM, UUID, Action) ->
             Spec = chunter_spec:to_sniffle(VMData),
             case jsxd:get(<<"zonepath">>, Spec) of
                 {ok, P} ->
-                    case Action(P, UUID) of
-                        {ok, Reply} ->
-                            R = lists:foldl(
-                                  fun (Disk, {S, Reply0}) ->
-                                          case jsxd:get(<<"path">>, Disk) of
-                                              {ok, <<_:14/binary, P1/binary>>} ->
-                                                  case Action(P1, UUID) of
-                                                      {ok, Res} ->
-                                                          {S, <<Reply0/binary, "\n", Res/binary>>};
-                                                      {error, Code, Res} ->
-                                                          lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
-                                                          libsniffle:vm_log(
-                                                            VM,
-                                                            <<"Failed snapshot disk ", P1/binary, ": ", Reply/binary>>),
-                                                          {error, <<Reply0/binary, "\n", Res/binary>>}
-                                                  end;
-                                              _ ->
-                                                  {error, missing}
-                                          end
-                                  end, {ok, Reply},
-                                  jsxd:get(<<"disks">>, [], Spec)),
+                    case Fun(P, UUID) of
+                        {ok, _} = R0 ->
+                            Disks = jsxd:get(<<"disks">>, [], Spec),
+                            R = snapshp_action_on_disks(VM, UUID, Fun, R0, Disks),
                             case R of
                                 {ok, Res} ->
+                                    case Action of
+                                        create ->
+                                            libsniffle:vm_set(
+                                              VM,
+                                              [{[<<"snapshots">>, UUID, <<"state">>], <<"completed">>}]);
+                                        _ ->
+                                            ok
+                                    end,
                                     libsniffle:vm_log(VM,<<"Snapshot done ", Res/binary>>),
                                     ok;
                                 {error, _} ->
@@ -875,7 +893,6 @@ snapshot_action(VM, UUID, Action) ->
                     error
             end
     end.
-
 
 snapshot_sizes(VM) ->
     case libsniffle:servers() of

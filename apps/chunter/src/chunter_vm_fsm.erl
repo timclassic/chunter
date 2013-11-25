@@ -938,7 +938,7 @@ snap_lines(Disk) ->
 %% @doc Sum up the sizes of the original snapshot and the size of disks for
 %% KVM machines.
 get_all_snapshots(VM, Spec) ->
-    Lines = lists:fold(
+    Lines = lists:foldl(
               fun(Disk, LAcc) ->
                       LAcc ++ snap_lines(Disk)
               end,

@@ -54,9 +54,9 @@ fi
 (cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
 mkdir -p /var/log/chunter
 
-if [ ! -f $DST/chunter/etc/chunter.config ]
+if [ ! -f $DST/chunter/etc/chunter.conf ]
 then
-    cp $DST/chunter/etc/chunter.config.example $DST/chunter/etc/chunter.config
+    cp $DST/chunter/etc/chunter.conf.example $DST/chunter/etc/chunter.conf
 fi
 
 mkdir -p $DST/custom/smf

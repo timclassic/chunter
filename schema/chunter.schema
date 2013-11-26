@@ -1,0 +1,65 @@
+%% -*- erlang -*-
+
+%% @doc The interval the zones are checked for their state, this means running
+%% `zoneadm list -ip` on the node. This is only required if a change is missed
+%% due to some hickup but it ensures that the state of zones is always up to
+%% date.
+%% Generally the more often this happen the less are the chances a state is
+%% misrepresented but the higher is the load on the system.
+%% This operation is fairly inexpensive.
+{mapping, "zonemon_interval", "chunter.zonemon_interval",
+ [{default, "1s"},
+  {datatype, {duration, ms}}]}.
+
+
+%% @doc The interval in which the zpool is checked for degrated disks. This
+%% is a more expensive opperation so should be executed not too frequently,
+%% generaly a interval of 15s means that worst case a degraded pool stays
+%% undetected for 15s.
+{mapping, "zpool_interval", "chunter.zpool_interval",
+ [{default, "15s"},
+  {datatype, {duration, ms}}]}.
+
+
+%% @doc The interval in which the systems ARC status is checked, this is
+%% purely informational and slowly changing a higher interval is usually
+%% not a issue.
+{mapping, "arc_interval", "chunter.arc_interval",
+ [{default, "30s"},
+  {datatype, {duration, ms}}]}.
+
+
+%% @doc The port And IP chunter does listen on, usually it will be
+%% auto detected as the first network iterface in the system, if it still
+%% needs to be changed it can be done here.
+{mapping, "ip", "chunter.endpoint",
+ [{commented, {"127.0.0.1", 4000}},
+  {datatype, ip}]}.
+
+{translation,
+ "chunter.ip",
+ fun(Conf) ->
+         {IP, _Port} = cuttlefish_util:conf_get_value("endpoint", Conf),
+         [A, B, C, D] = [list_to_integer(O) ||
+                            O <- re:split(IP, "\\.", [{return, list}])],
+         {A, B, C, D}
+ end
+}.
+
+{translation,
+ "chunter.port",
+ fun(Conf) ->
+         {_IP, Port} = cuttlefish_util:conf_get_value("endpoint", Conf),
+         Port
+ end
+}.
+
+{translation,
+ "mdns_client_lib.interface",
+ fun(Conf) ->
+         {IP, _Port} = cuttlefish_util:conf_get_value("endpoint", Conf),
+         [A, B, C, D] = [list_to_integer(O) ||
+                            O <- re:split(IP, "\\.", [{return, list}])],
+         {A, B, C, D}
+ end
+}.

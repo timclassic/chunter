@@ -39,28 +39,40 @@
 {translation,
  "chunter.ip",
  fun(Conf) ->
-         {IP, _Port} = cuttlefish_util:conf_get_value("ip", Conf),
-         [A, B, C, D] = [list_to_integer(O) ||
-                            O <- re:split(IP, "\\.", [{return, list}])],
-         {A, B, C, D}
+         case cuttlefish_util:conf_get_value("ip", Conf) of
+             {IP, _Port} ->
+                 [A, B, C, D] = [list_to_integer(O) ||
+                                    O <- re:split(IP, "\\.", [{return, list}])],
+                 {ok, {A, B, C, D}};
+             _ ->
+                 undefined
+         end
  end
 }.
 
 {translation,
  "chunter.port",
  fun(Conf) ->
-         {_IP, Port} = cuttlefish_util:conf_get_value("ip", Conf),
-         Port
+         case cuttlefish_util:conf_get_value("ip", Conf) of
+             {_IP, Port} ->
+                 {ok, Port};
+             _ ->
+                 undefined
+         end
  end
 }.
 
 {translation,
  "mdns_client_lib.interface",
  fun(Conf) ->
-         {IP, _Port} = cuttlefish_util:conf_get_value("ip", Conf),
-         [A, B, C, D] = [list_to_integer(O) ||
-                            O <- re:split(IP, "\\.", [{return, list}])],
-         {A, B, C, D}
+         case cuttlefish_util:conf_get_value("ip", Conf) of
+             {IP, _Port} ->
+                 [A, B, C, D] = [list_to_integer(O) ||
+                                    O <- re:split(IP, "\\.", [{return, list}])],
+                 {ok, {A, B, C, D}};
+             _ ->
+                 undefined
+         end
  end
 }.
 

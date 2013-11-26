@@ -39,7 +39,7 @@
 {translation,
  "chunter.ip",
  fun(Conf) ->
-         {IP, _Port} = cuttlefish_util:conf_get_value("endpoint", Conf),
+         {IP, _Port} = cuttlefish_util:conf_get_value("ip", Conf),
          [A, B, C, D] = [list_to_integer(O) ||
                             O <- re:split(IP, "\\.", [{return, list}])],
          {A, B, C, D}
@@ -49,7 +49,7 @@
 {translation,
  "chunter.port",
  fun(Conf) ->
-         {_IP, Port} = cuttlefish_util:conf_get_value("endpoint", Conf),
+         {_IP, Port} = cuttlefish_util:conf_get_value("ip", Conf),
          Port
  end
 }.
@@ -57,9 +57,12 @@
 {translation,
  "mdns_client_lib.interface",
  fun(Conf) ->
-         {IP, _Port} = cuttlefish_util:conf_get_value("endpoint", Conf),
+         {IP, _Port} = cuttlefish_util:conf_get_value("ip", Conf),
          [A, B, C, D] = [list_to_integer(O) ||
                             O <- re:split(IP, "\\.", [{return, list}])],
          {A, B, C, D}
  end
 }.
+
+{mapping, "dump_dir", "vm_args.-env ERL_CRASH_DUMP",
+ [{default, "{{log_path}}"}]}.

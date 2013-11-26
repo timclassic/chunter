@@ -875,13 +875,28 @@ snapshot_action(VM, UUID, Fun, Action) ->
                                                         [SnapPath, <<"completed">>]),
                                             libsniffle:vm_set(
                                               VM, SnapPath,
-                                              <<"completed">>);
+                                              <<"completed">>),
+                                            libhowl:send(VM,
+                                                         [{<<"event">>, <<"snapshot">>},
+                                                          {<<"data">>,
+                                                           [{<<"action">>, <<"completed">>},
+                                                            {<<"uuid">>, UUID}]}]);
                                         delete ->
                                             SnapPath = [<<"snapshots">>, UUID],
                                             lager:debug("Deleting ~p", [SnapPath]),
                                             libsniffle:vm_set(
-                                              VM, SnapPath, delete);
+                                              VM, SnapPath, delete),
+                                            libhowl:send(VM,
+                                                         [{<<"event">>, <<"snapshot">>},
+                                                          {<<"data">>,
+                                                           [{<<"action">>, <<"deleted">>},
+                                                            {<<"uuid">>, UUID}]}]);
                                         rollback ->
+                                            libhowl:send(VM,
+                                                         [{<<"event">>, <<"snapshot">>},
+                                                          {<<"data">>,
+                                                           [{<<"action">>, <<"rollback">>},
+                                                            {<<"uuid">>, UUID}]}]),
                                             libsniffle:vm_commit_snapshot_rollback(VM, UUID);
                                         _ ->
                                             ok
@@ -889,6 +904,12 @@ snapshot_action(VM, UUID, Fun, Action) ->
                                     libsniffle:vm_log(VM,<<"Snapshot done ", Res/binary>>),
                                     ok;
                                 {error, E} ->
+                                    libhowl:send(VM,
+                                                 [{<<"event">>, <<"snapshot">>},
+                                                  {<<"data">>,
+                                                   [{<<"action">>, <<"error">>},
+                                                    {<<"message">>, list_to_binary(E)},
+                                                    {<<"uuid">>, UUID}]}]),
                                     lager:error("Snapshot failed with: ~p", E),
                                     error
                             end;

@@ -33,7 +33,7 @@
 %% auto detected as the first network iterface in the system, if it still
 %% needs to be changed it can be done here.
 {mapping, "ip", "chunter.endpoint",
- [{commented, {"127.0.0.1", 4000}},
+ [{commented, {"127.0.0.1", 4200}},
   {datatype, ip}]}.
 
 {translation,

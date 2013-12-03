@@ -327,16 +327,17 @@ host_info() ->
 
 
 register_hypervisor() ->
+    Port = application:get_env(chunter, port, 4200),
     {Host, IPStr} = host_info(),
     lager:info([{fifi_component, chunter}],
                "chunter:init - Host: ~s(~s)", [Host, IPStr]),
     [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
     case libsniffle:hypervisor_get(Host) of
         not_found ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_register(Host, IPStr, Port),
             libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
         {ok, H} ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_register(Host, IPStr, Port),
             case jsxd:get(<<"alias">>, H) of
                 undefined ->
                     libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
@@ -344,6 +345,6 @@ register_hypervisor() ->
                     ok
             end;
         _ ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_register(Host, IPStr, Port),
             ok
     end.

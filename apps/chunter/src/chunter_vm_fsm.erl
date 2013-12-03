@@ -671,9 +671,10 @@ write_image(Port, UUID, [Idx|_], 2) ->
     {error, retries_exceeded};
 
 write_image(Port, UUID, [Idx|R], Retry) ->
-    lager:debug("<IMG> ~s[~p]", [UUID, Idx]),
+    lager:debug("<IMG> ~s[~p]: fetching", [UUID, Idx]),
     case libsniffle:img_get(UUID, Idx) of
         {ok, B} ->
+            lager:debug("<IMG> ~s[~p]: writing", [UUID, Idx]),
             port_command(Port, B),
             write_image(Port, UUID, R, 0);
         _ ->

@@ -111,6 +111,8 @@ generate_spec(Package, Dataset, OwnerData) ->
               end,
     RamShare = round(1024*RamPerc),
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>]},
+                         {set, <<"autoboot">>,
+                          jsxd:get(<<"autoboot">>, true,  OwnerData)},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
                          {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
                          {set, <<"owner_uuid">>,
@@ -203,7 +205,7 @@ generate_spec(Package, Dataset, OwnerData) ->
 
 create_update(_, [], Config) ->
     KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>,
-                <<"update_nics">>],
+                <<"update_nics">>, <<"autoboot">>],
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
                            (<<"root_pw">>, V, Obj) ->

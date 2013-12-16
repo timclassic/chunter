@@ -290,7 +290,7 @@ write_snapshot(Port, Img, Acc, Idx) ->
 
 upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket) ->
     Conf = fifo_s3:make_config(AKey, SKey, Host, Port),
-    Upload = fifo_s3:new_upload(Bucket, SnapID, Conf),
+    Upload = fifo_s3:new_upload(Bucket, binary_to_list(SnapID), Conf),
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
     lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapID]),
     Port = open_port({spawn_executable, Cmd},

@@ -165,6 +165,26 @@ handle_message({machines, snapshot, rollback, UUID, SnapId}, State)
        is_binary(SnapId) ->
     {stop, chunter_vm_fsm:rollback_snapshot(UUID, SnapId), State};
 
+handle_message({machines, snapshot, upload,
+                UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    spawn(fun() ->
+                  upload_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
+                                  SKey, Bucket)
+          end),
+    {stop, ok, State};
+
+handle_message({machines, snapshot, download,
+                UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    spawn(fun() ->
+                  download_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
+                                    SKey, Bucket)
+          end),
+    {stop, ok, State};
+
 handle_message({machines, snapshot, store, UUID, SnapId, Img}, State)
   when is_binary(UUID),
        is_binary(SnapId) ->
@@ -267,3 +287,42 @@ write_snapshot(Port, Img, Acc, Idx) ->
             lager:error("Writing image ~s failed after ~p parts with exit status ~p.", [Img, Idx, S]),
             ok
     end.
+
+upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket) ->
+    Conf = fifo_s3:make_config(AKey, SKey, Host, Port),
+    Upload = fifo_s3:new_upload(Bucket, SnapID, Conf),
+    Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
+    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapID]),
+    Port = open_port({spawn_executable, Cmd},
+                     [{args, [UUID, SnapID]}, use_stdio, binary,
+                      stderr_to_stdout, exit_status, stream]),
+    libsniffle:vm_set(
+      UUID, [<<"snapshots">>, SnapID, <<"state">>],
+      <<"uploading">>),
+    upload_snapshot(UUID, SnapID, Port, Upload).
+
+upload_snapshot(UUID, SnapID, Port, Upload) ->
+    receive
+        {Port, {data, Data}} ->
+            fifo_s3:put_upload(Data, Upload),
+            upload_snapshot(UUID, SnapID, Port, Upload);
+        {Port, {exit_status, 0}} ->
+            fifo_s3:complete_upload(Upload),
+            libsniffle:vm_set(
+              UUID, [<<"snapshots">>, SnapID, <<"state">>],
+              <<"uploaded">>),
+            libsniffle:vm_set(
+              UUID, [<<"snapshots">>, SnapID, <<"location">>],
+              <<"cloud">>),
+            ok;
+        {Port, {exit_status, S}} ->
+            lager:error("Upload error: ~p", [S]),
+            libsniffle:vm_set(
+              UUID, [<<"snapshots">>, SnapID, <<"state">>],
+              <<"upload failed">>),
+            ok
+    end.
+
+
+download_snapshot(_UUID, _SnapID, _Host, _Port, _Bucket, _AKey, _SKey, _Bucket) ->
+    ok.

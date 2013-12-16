@@ -50,7 +50,7 @@
          booting/2,
          running/2,
          shutting_down/2,
-         snapshot_action/4]).
+         snapshot_action/3]).
 
 -define(SERVER, ?MODULE).
 
@@ -422,17 +422,17 @@ handle_event(_Event, StateName, State) ->
 %%--------------------------------------------------------------------
 handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
     spawn(?MODULE, snapshot_action,
-          [State#state.uuid, UUID, fun do_snapshot/2, create]),
+          [State#state.uuid, UUID, fun do_snapshot/3]),
     {reply, ok, StateName, State};
 
 handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
     spawn(?MODULE, snapshot_action,
-          [State#state.uuid, UUID, fun do_delete_snapshot/2, delete]),
+          [State#state.uuid, UUID, fun do_delete_snapshot/3]),
     {reply, ok, StateName, State};
 
 handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
     spawn(?MODULE, snapshot_action,
-          [State#state.uuid, UUID, fun do_rollback_snapshot/2, rollback]),
+          [State#state.uuid, UUID, fun do_rollback_snapshot/3]),
     {reply, ok, StateName, State};
 
 handle_sync_event(_Event, _From, StateName, State) ->
@@ -792,7 +792,7 @@ atom_to_binary(B) when is_binary(B) ->
 atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
 
-do_snapshot(Path, SnapID) ->
+do_snapshot(Path, VM, SnapID) ->
     <<_:1/binary, P/binary>> = Path,
     CmdB = <<"/usr/sbin/zfs snapshot ",
              P/binary, "@", SnapID/binary>>,
@@ -800,9 +800,25 @@ do_snapshot(Path, SnapID) ->
     lager:info("Creating snapshot: ~s", [Cmd]),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
                                     stderr_to_stdout, exit_status]),
-    wait_for_port(Port, <<>>).
+    case wait_for_port(Port, <<>>) of
+        {ok, R} ->
+            libsniffle:vm_set(
+              VM, [<<"snapshots">>, SnapID, <<"state">>],
+              <<"completed">>),
+            libsniffle:vm_set(
+              VM, [<<"snapshots">>, SnapID, <<"location">>],
+              <<"hypervisor">>),
+            libhowl:send(VM,
+                         [{<<"event">>, <<"snapshot">>},
+                          {<<"data">>,
+                           [{<<"action">>, <<"completed">>},
+                            {<<"uuid">>, SnapID}]}]),
+            {ok, R};
+        E ->
+            E
+    end.
 
-do_delete_snapshot(Path, SnapID) ->
+do_delete_snapshot(Path, VM, SnapID) ->
     <<_:1/binary, P/binary>> = Path,
     CmdB = <<"/usr/sbin/zfs destroy ",
              P/binary, "@", SnapID/binary>>,
@@ -810,9 +826,23 @@ do_delete_snapshot(Path, SnapID) ->
     lager:info("Deleting snapshot: ~s", [Cmd]),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
                                     stderr_to_stdout, exit_status]),
-    wait_for_port(Port, <<>>).
+    case wait_for_port(Port, <<>>) of
+        {ok, R} ->
+            SnapPath = [<<"snapshots">>, SnapID],
+            lager:debug("Deleting ~p", [SnapPath]),
+            libsniffle:vm_set(
+              VM, SnapPath, delete),
+            libhowl:send(VM,
+                         [{<<"event">>, <<"snapshot">>},
+                          {<<"data">>,
+                           [{<<"action">>, <<"deleted">>},
+                            {<<"uuid">>, SnapID}]}]),
+            {ok, R};
+        E ->
+            E
+    end.
 
-do_rollback_snapshot(Path, SnapID) ->
+do_rollback_snapshot(Path, VM, SnapID) ->
     <<_:1/binary, P/binary>> = Path,
     CmdB = <<"/usr/sbin/zfs rollback -r ",
              P/binary, "@", SnapID/binary>>,
@@ -820,7 +850,18 @@ do_rollback_snapshot(Path, SnapID) ->
     lager:info("Rolling back snapshot: ~s", [Cmd]),
     Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
                                     stderr_to_stdout, exit_status]),
-    wait_for_port(Port, <<>>).
+    case wait_for_port(Port, <<>>) of
+        {ok, R} ->
+            libhowl:send(VM,
+                         [{<<"event">>, <<"snapshot">>},
+                          {<<"data">>,
+                           [{<<"action">>, <<"rollback">>},
+                            {<<"uuid">>, SnapID}]}]),
+            libsniffle:vm_commit_snapshot_rollback(VM, SnapID),
+            {ok, R};
+        E ->
+            E
+    end.
 
 wait_for_port(Port, Reply) ->
     receive
@@ -856,7 +897,7 @@ snapshp_action_on_disks(VM, UUID, Fun, LastReply, Disks) ->
               end
       end, LastReply, Disks).
 
-snapshot_action(VM, UUID, Fun, Action) ->
+snapshot_action(VM, UUID, Fun) ->
     case load_vm(VM) of
         {error, not_found} ->
             ok;
@@ -864,45 +905,11 @@ snapshot_action(VM, UUID, Fun, Action) ->
             Spec = chunter_spec:to_sniffle(VMData),
             case jsxd:get(<<"zonepath">>, Spec) of
                 {ok, P} ->
-                    case Fun(P, UUID) of
+                    case Fun(P, VM, UUID) of
                         {ok, _} = R0 ->
                             Disks = jsxd:get(<<"disks">>, [], Spec),
-                            R = snapshp_action_on_disks(VM, UUID, Fun, R0, Disks),
-                            case R of
+                            case snapshp_action_on_disks(VM, UUID, Fun, R0, Disks) of
                                 {ok, Res} ->
-                                    case Action of
-                                        create ->
-                                            SnapPath = [<<"snapshots">>, UUID, <<"state">>],
-                                            lager:debug("Setting ~p to ~s",
-                                                        [SnapPath, <<"completed">>]),
-                                            libsniffle:vm_set(
-                                              VM, SnapPath,
-                                              <<"completed">>),
-                                            libhowl:send(VM,
-                                                         [{<<"event">>, <<"snapshot">>},
-                                                          {<<"data">>,
-                                                           [{<<"action">>, <<"completed">>},
-                                                            {<<"uuid">>, UUID}]}]);
-                                        delete ->
-                                            SnapPath = [<<"snapshots">>, UUID],
-                                            lager:debug("Deleting ~p", [SnapPath]),
-                                            libsniffle:vm_set(
-                                              VM, SnapPath, delete),
-                                            libhowl:send(VM,
-                                                         [{<<"event">>, <<"snapshot">>},
-                                                          {<<"data">>,
-                                                           [{<<"action">>, <<"deleted">>},
-                                                            {<<"uuid">>, UUID}]}]);
-                                        rollback ->
-                                            libhowl:send(VM,
-                                                         [{<<"event">>, <<"snapshot">>},
-                                                          {<<"data">>,
-                                                           [{<<"action">>, <<"rollback">>},
-                                                            {<<"uuid">>, UUID}]}]),
-                                            libsniffle:vm_commit_snapshot_rollback(VM, UUID);
-                                        _ ->
-                                            ok
-                                    end,
                                     libsniffle:vm_log(VM,<<"Snapshot done ", Res/binary>>),
                                     ok;
                                 {error, E} ->

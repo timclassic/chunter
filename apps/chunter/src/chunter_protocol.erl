@@ -303,9 +303,17 @@ upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket) ->
 
 
 upload_snapshot(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>, Size) ->
-    lager:debug("Uploading part: ~p.", [Size]),
-    fifo_s3:put_upload(MB, Upload),
-    upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size);
+    case fifo_s3:put_upload(binary:copy(MB), Upload) of
+        {ok, Upload1} ->
+            lager:debug("Uploading part: ~p.", [Size]),
+            upload_snapshot(UUID, SnapID, Port, Upload1, Acc, Size);
+        {error, E} ->
+            lager:error("Upload error: ~p", [E]),
+            libsniffle:vm_set(
+              UUID, [<<"snapshots">>, SnapID, <<"state">>],
+              <<"upload failed">>),
+            ok
+    end;
 
 upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size) ->
     receive
@@ -314,20 +322,27 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size) ->
             upload_snapshot(UUID, SnapID, Port, Upload,
                             <<Acc/binary, Data/binary>>, Size1);
         {Port, {exit_status, 0}} ->
-            lager:debug("Upload complete: ~p.", [Size]),
-            fifo_s3:complete_upload(Upload),
-            libsniffle:vm_set(
-              UUID, [<<"snapshots">>, SnapID, <<"state">>],
-              <<"uploaded">>),
-            libsniffle:vm_set(
-              UUID, [<<"snapshots">>, SnapID, <<"location">>],
-              <<"cloud">>),
             case Acc of
                 <<>> ->
                     ok;
                 _ ->
-                    fifo_s3:put_upload(Acc, Upload),
-                    fifo_s3:complete_upload(Upload)
+                    case fifo_s3:put_upload(binary:copy(Acc), Upload) of
+                        {ok, Upload1} ->
+                            fifo_s3:complete_upload(Upload1),
+                            lager:debug("Upload complete: ~p.", [Size]),
+                            libsniffle:vm_set(
+                              UUID, [<<"snapshots">>, SnapID, <<"state">>],
+                              <<"uploaded">>),
+                            libsniffle:vm_set(
+                              UUID, [<<"snapshots">>, SnapID, <<"location">>],
+                              <<"cloud">>);
+                        {error, E} ->
+                            lager:error("Upload error: ~p", [E]),
+                            libsniffle:vm_set(
+                              UUID, [<<"snapshots">>, SnapID, <<"state">>],
+                              <<"upload failed">>),
+                            ok
+                    end
             end;
         {Port, {exit_status, S}} ->
             lager:error("Upload error: ~p", [S]),

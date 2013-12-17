@@ -304,9 +304,11 @@ upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket) ->
 upload_snapshot(UUID, SnapID, Port, Upload) ->
     receive
         {Port, {data, Data}} ->
+            lager:debug("Uploading part."),
             fifo_s3:put_upload(Data, Upload),
             upload_snapshot(UUID, SnapID, Port, Upload);
         {Port, {exit_status, 0}} ->
+            lager:debug("Uploadcomplete."),
             fifo_s3:complete_upload(Upload),
             libsniffle:vm_set(
               UUID, [<<"snapshots">>, SnapID, <<"state">>],

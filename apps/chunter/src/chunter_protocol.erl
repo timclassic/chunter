@@ -406,18 +406,20 @@ download_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, _Options
                      stderr_to_stdout, exit_status, stream]),
     libsniffle:vm_set(
       UUID, [<<"snapshots">>, SnapID, <<"state">>], <<"downloading">>),
-    download_snapshot(Prt, Download).
+    download_snapshot(Prt, Download, 0).
 
-download_snapshot(Prt, Download) ->
+download_snapshot(Prt, Download, I) ->
     case fifo_s3:get_stream(Download) of
         {ok, Data, Download1} ->
+            lager:debug("Download part: ~p.", [I]),
             port_command(Prt, Data),
-            download_snapshot(Prt, Download1);
+            download_snapshot(Prt, Download1, I+1);
         {error, E} ->
             port_close(Prt),
-            lager:error("Import error: ~p", [E]),
+            lager:error("Import error: ~p", [I, E]),
             ok;
         {ok, done} ->
+            lager:debug("Download complete: ~p.", [I]),
             port_close(Prt),
             ok
     end.

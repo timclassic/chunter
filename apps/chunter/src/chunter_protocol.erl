@@ -409,7 +409,7 @@ download_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, _Options
     download_snapshot(Prt, Download).
 
 download_snapshot(Prt, Download) ->
-    case fifo_s3:get_stream(Prt, Download) of
+    case fifo_s3:get_stream(Download) of
         {ok, Data, Download1} ->
             port_command(Prt, Data),
             download_snapshot(Prt, Download1);

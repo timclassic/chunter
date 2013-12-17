@@ -187,12 +187,23 @@ handle_message({machines, snapshot, upload,
     {stop, ok, State};
 
 handle_message({machines, snapshot, download,
+                UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket, Options},
+               State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    spawn(fun() ->
+                  download_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
+                                    SKey, Bucket, Options)
+          end),
+    {stop, ok, State};
+
+handle_message({machines, snapshot, download,
                 UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket}, State)
   when is_binary(UUID),
        is_binary(SnapId) ->
     spawn(fun() ->
                   download_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
-                                    SKey, Bucket)
+                                    SKey, Bucket, [])
           end),
     {stop, ok, State};
 
@@ -302,20 +313,22 @@ upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, Options) -
     Conf = fifo_s3:make_config(AKey, SKey, Host, Port),
     {ok, Upload} = fifo_s3:new_upload(Bucket, binary_to_list(SnapID), Conf),
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
-    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapID]),
     Prt = case proplists:get_value(parent, Options) of
               undefined ->
+                  lager:debug("Running ZFS command: ~p ~s ~s",
+                              [Cmd, UUID, SnapID]),
                   open_port({spawn_executable, Cmd},
                             [{args, [UUID, SnapID]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream]);
               Inc ->
                   libsniffle:vm_set(
                     UUID, [<<"snapshots">>, SnapID, <<"parent">>], Inc),
+                  lager:debug("Running ZFS command: ~p ~s ~s ~s",
+                              [Cmd, UUID, SnapID, Inc]),
                   open_port({spawn_executable, Cmd},
                             [{args, [UUID, SnapID, Inc]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream])
           end,
-
     libsniffle:vm_set(
       UUID, [<<"snapshots">>, SnapID, <<"state">>], <<"uploading">>),
     upload_snapshot(UUID, SnapID, Prt, Upload, <<>>, 0,
@@ -383,5 +396,28 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Delete) ->
     end.
 
 
-download_snapshot(_UUID, _SnapID, _Host, _Port, _Bucket, _AKey, _SKey, _Bucket) ->
-    ok.
+download_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, _Options) ->
+    Conf = fifo_s3:make_config(AKey, SKey, Host, Port),
+    {ok, Download} = fifo_s3:new_stream(Bucket, SnapID, Conf),
+    Cmd = code:priv_dir(chunter) ++ "/zfs_import.gzip.sh",
+    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapID]),
+    Prt = open_port({spawn_executable, Cmd},
+                    [{args, [UUID, SnapID]}, use_stdio, binary,
+                     stderr_to_stdout, exit_status, stream]),
+    libsniffle:vm_set(
+      UUID, [<<"snapshots">>, SnapID, <<"state">>], <<"downloading">>),
+    download_snapshot(Prt, Download).
+
+download_snapshot(Prt, Download) ->
+    case fifo_s3:get_stream(Prt, Download) of
+        {ok, Data, Download1} ->
+            port_command(Prt, Data),
+            download_snapshot(Prt, Download1);
+        {error, E} ->
+            port_close(Prt),
+            lager:error("Import error: ~p", [E]),
+            ok;
+        {ok, done} ->
+            port_close(Prt),
+            ok
+    end.

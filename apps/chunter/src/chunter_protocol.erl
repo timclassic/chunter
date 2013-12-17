@@ -293,13 +293,13 @@ upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket) ->
     Upload = fifo_s3:new_upload(Bucket, binary_to_list(SnapID), Conf),
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
     lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapID]),
-    Port = open_port({spawn_executable, Cmd},
-                     [{args, [UUID, SnapID]}, use_stdio, binary,
-                      stderr_to_stdout, exit_status, stream]),
+    Prt = open_port({spawn_executable, Cmd},
+                    [{args, [UUID, SnapID]}, use_stdio, binary,
+                     stderr_to_stdout, exit_status, stream]),
     libsniffle:vm_set(
       UUID, [<<"snapshots">>, SnapID, <<"state">>],
       <<"uploading">>),
-    upload_snapshot(UUID, SnapID, Port, Upload).
+    upload_snapshot(UUID, SnapID, Prt, Upload).
 
 upload_snapshot(UUID, SnapID, Port, Upload) ->
     receive

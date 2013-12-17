@@ -171,7 +171,18 @@ handle_message({machines, snapshot, upload,
        is_binary(SnapId) ->
     spawn(fun() ->
                   upload_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
-                                  SKey, Bucket)
+                                  SKey, Bucket, [])
+          end),
+    {stop, ok, State};
+
+handle_message({machines, snapshot, upload,
+                UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket, Options},
+               State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    spawn(fun() ->
+                  upload_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
+                                  SKey, Bucket, Options)
           end),
     {stop, ok, State};
 
@@ -210,10 +221,8 @@ handle_message({machines, reboot, force, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:force_reboot(UUID),
     {stop, State};
 
-handle_message({machines, create, UUID, PSpec, DSpec, Config}, State) when is_binary(UUID),
-                                                                           is_list(PSpec),
-                                                                           is_list(DSpec),
-                                                                           is_list(Config) ->
+handle_message({machines, create, UUID, PSpec, DSpec, Config}, State)
+  when is_binary(UUID), is_list(PSpec), is_list(DSpec), is_list(Config) ->
     chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
     {stop, State};
 
@@ -284,30 +293,43 @@ write_snapshot(Port, Img, Acc, Idx) ->
             libsniffle:dataset_set(Img, <<"imported">>, 1),
             ok;
         {Port,{exit_status, S}} ->
-            lager:error("Writing image ~s failed after ~p parts with exit status ~p.", [Img, Idx, S]),
+            lager:error("Writing image ~s failed after ~p parts with exit "
+                        "status ~p.", [Img, Idx, S]),
             ok
     end.
 
-upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket) ->
+upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, Options) ->
     Conf = fifo_s3:make_config(AKey, SKey, Host, Port),
     {ok, Upload} = fifo_s3:new_upload(Bucket, binary_to_list(SnapID), Conf),
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
     lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapID]),
-    Prt = open_port({spawn_executable, Cmd},
-                    [{args, [UUID, SnapID]}, use_stdio, binary,
-                     stderr_to_stdout, exit_status, stream]),
+    Prt = case proplists:get_value(parent, Options) of
+              undefined ->
+                  open_port({spawn_executable, Cmd},
+                            [{args, [UUID, SnapID]}, use_stdio, binary,
+                             stderr_to_stdout, exit_status, stream]);
+              Inc ->
+                  libsniffle:vm_set(
+                    UUID, [<<"snapshots">>, SnapID, <<"parent">>], Inc),
+                  open_port({spawn_executable, Cmd},
+                            [{args, [UUID, SnapID, Inc]}, use_stdio, binary,
+                             stderr_to_stdout, exit_status, stream])
+          end,
+
     libsniffle:vm_set(
-      UUID, [<<"snapshots">>, SnapID, <<"state">>],
-      <<"uploading">>),
-    upload_snapshot(UUID, SnapID, Prt, Upload, <<>>, 0).
+      UUID, [<<"snapshots">>, SnapID, <<"state">>], <<"uploading">>),
+    upload_snapshot(UUID, SnapID, Prt, Upload, <<>>, 0,
+                    proplists:is_defined(delete, Options)).
 
 
-upload_snapshot(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>, Size) ->
+upload_snapshot(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>,
+                Size, Delete) ->
     case fifo_s3:put_upload(binary:copy(MB), Upload) of
         {ok, Upload1} ->
             lager:debug("Uploading part: ~p.", [Size]),
-            upload_snapshot(UUID, SnapID, Port, Upload1, Acc, Size);
+            upload_snapshot(UUID, SnapID, Port, Upload1, Acc, Size, Delete);
         {error, E} ->
+            fifo_s3:abort_upload(Upload),
             lager:error("Upload error: ~p", [E]),
             libsniffle:vm_set(
               UUID, [<<"snapshots">>, SnapID, <<"state">>],
@@ -315,12 +337,12 @@ upload_snapshot(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>, S
             ok
     end;
 
-upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size) ->
+upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Delete) ->
     receive
         {Port, {data, Data}} ->
             Size1 = Size + byte_size(Data),
             upload_snapshot(UUID, SnapID, Port, Upload,
-                            <<Acc/binary, Data/binary>>, Size1);
+                            <<Acc/binary, Data/binary>>, Size1, Delete);
         {Port, {exit_status, 0}} ->
             case Acc of
                 <<>> ->
@@ -335,8 +357,15 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size) ->
                               <<"uploaded">>),
                             libsniffle:vm_set(
                               UUID, [<<"snapshots">>, SnapID, <<"location">>],
-                              <<"cloud">>);
+                              <<"cloud">>),
+                            case Delete of
+                                true ->
+                                    chunter_vm_fsm:delete_snapshot(UUID, SnapID);
+                                false ->
+                                    ok
+                            end;
                         {error, E} ->
+                            fifo_s3:abort_upload(Upload),
                             lager:error("Upload error: ~p", [E]),
                             libsniffle:vm_set(
                               UUID, [<<"snapshots">>, SnapID, <<"state">>],
@@ -345,6 +374,7 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size) ->
                     end
             end;
         {Port, {exit_status, S}} ->
+            fifo_s3:abort_upload(Upload),
             lager:error("Upload error: ~p", [S]),
             libsniffle:vm_set(
               UUID, [<<"snapshots">>, SnapID, <<"state">>],

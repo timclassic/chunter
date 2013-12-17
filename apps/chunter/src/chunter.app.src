@@ -15,6 +15,9 @@
                   libhowl,
                   fifo_spec,
                   eplugin,
+                  crypto,
+                  public_key,
+                  ssl,
                   ranch
                  ]},
   {mod, { chunter_app, []}},

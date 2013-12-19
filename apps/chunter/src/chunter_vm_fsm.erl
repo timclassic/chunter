@@ -1031,7 +1031,7 @@ finish_backup(VM, UUID, Opts, ok) ->
         true ->
             Conf = mk_s3_conf(Opts),
             Bucket = proplists:get_value(s3_bucket, Opts),
-            XMLFile = binary_to_list(<<"/etc/zones/", UUID/binary, ".xml">>),
+            XMLFile = binary_to_list(<<"/etc/zones/", VM/binary, ".xml">>),
             {ok, XML} = file:read_file(XMLFile),
             fifo_s3:upload(Bucket, <<UUID/binary, ".xml">>, XML, Conf),
             ok;

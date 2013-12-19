@@ -445,12 +445,22 @@ handle_sync_event({backup, Options}, _From, StateName, State) ->
                        end,
               snapshot_action(State#state.uuid, SnapID, fun do_backup/4,
                               fun finish_backup/3, Options),
-              case proplists:is_defined(delete, Options) of
+              case proplists:get_value(delete, Options) of
                   true ->
                       snapshot_action(State#state.uuid, SnapID,
                                       fun do_delete_snapshot/4,
                                       fun finish_delete_snapshot/3, Options);
-                  false ->
+                  parent ->
+                      case proplists:get_value(parent, Options) of
+                          undefined ->
+                              ok;
+                          Parent ->
+                              snapshot_action(State#state.uuid, Parent,
+                                              fun do_delete_snapshot/4,
+                                              fun finish_delete_snapshot/3,
+                                              Options)
+                      end;
+                  undefined ->
                       ok
               end
           end),

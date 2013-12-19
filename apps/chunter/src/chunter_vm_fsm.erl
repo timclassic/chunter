@@ -1063,7 +1063,7 @@ snapshp_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
                               {error, <<Reply0/binary, "\n", Res/binary>>}
                       end;
                   _ ->
-                      {error, missing}
+                      {error, <<"missing">>}
               end
       end, LastReply, Disks).
 
@@ -1080,7 +1080,9 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                             Disks = jsxd:get(<<"disks">>, [], Spec),
                             case snapshp_action_on_disks(VM, UUID, Fun, R0, Disks, Opts) of
                                 {ok, Res} ->
-                                    libsniffle:vm_log(VM,<<"Snapshot done ", Res/binary>>),
+                                    M = io_lib:format("Snapshot done: ~p",
+                                                      [Res]),
+                                    libsniffle:vm_log(VM, iolist_to_binary(M)),
                                     CompleteFun(VM, UUID, ok);
                                 {error, E} ->
                                     libhowl:send(VM,

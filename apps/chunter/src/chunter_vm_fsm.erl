@@ -118,7 +118,7 @@ backup(UUID, Options) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, Options}).
 
 snapshot(UUID, SnapID) ->
-    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapot, SnapID}).
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
 
 delete_snapshot(UUID, SnapID) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, delete, SnapID}).

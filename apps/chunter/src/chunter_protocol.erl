@@ -150,9 +150,10 @@ handle_message({machines, start, UUID, Image}, State) when is_binary(UUID),
     chunter_vmadm:start(UUID, Image),
     {stop, State};
 
-handle_message({machines, backup, UUID, Options}, State)
-  when is_binary(UUID) ->
-    chunter_vm_fsm:backup(UUID, Options),
+handle_message({machines, backup, UUID, SnapId, Options}, State)
+  when is_binary(UUID),
+       is_binary(SnapId)->
+    chunter_vm_fsm:backup(UUID, SnapId, Options),
     {stop, State};
 
 handle_message({machines, snapshot, UUID, SnapId}, State)

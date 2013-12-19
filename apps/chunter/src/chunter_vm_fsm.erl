@@ -27,7 +27,7 @@
          remove/1,
          transition/2,
          update/3,
-         backup/2,
+         backup/3,
          snapshot/2,
          delete_snapshot/2,
          rollback_snapshot/2,
@@ -114,8 +114,8 @@ force_state(UUID, State) ->
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
 
-backup(UUID, Options) ->
-    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, Options}).
+backup(UUID, SnapID, Options) ->
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, SnapID, Options}).
 
 snapshot(UUID, SnapID) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
@@ -430,27 +430,24 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_sync_event({backup, Options}, _From, StateName, State) ->
+handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     spawn(
       fun() ->
               lager:debug("Creating Backup with options: ~p", [Options]),
-              SnapID = case proplists:get_value(snapshot, Options) of
-                           undefined ->
-
-                               SnapIDx = uuid:uuid4s(),
-                               lager:debug("New UUID: ~p", [SnapIDx]),
-                               snapshot_action(State#state.uuid, SnapIDx,
-                                               fun do_snapshot/4,
-                                               fun finish_snapshot/3, Options),
-                               SnapIDx;
-                           SnapIDx ->
-                               SnapIDx
-                       end,
+              case proplists:is_defined(create, Options) of
+                  true ->
+                      lager:debug("New Snapshot: ~p", [SnapID]),
+                      snapshot_action(State#state.uuid, SnapID,
+                                      fun do_snapshot/4,
+                                      fun finish_snapshot/3, Options);
+                  _ ->
+                      ok
+              end,
               snapshot_action(State#state.uuid, SnapID, fun do_backup/4,
                               fun finish_backup/3, Options),
               case proplists:get_value(delete, Options) of
                   true ->
-                      lager:debug("Deleint snapshot: ~p", [SnapIDx]),
+                      lager:debug("Deleint snapshot: ~p", [SnapID]),
                       snapshot_action(State#state.uuid, SnapID,
                                       fun do_delete_snapshot/4,
                                       fun finish_delete_snapshot/3, Options);
@@ -469,7 +466,7 @@ handle_sync_event({backup, Options}, _From, StateName, State) ->
                   undefined ->
                       ok
               end
-          end),
+      end),
     {reply, ok, StateName, State};
 
 handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
@@ -1007,7 +1004,8 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
                 ok ->
                     lager:debug("Upload complete: ~p.", [Size]),
                     libsniffle:vm_set(
-                      UUID, [<<"backups">>, SnapID, <<"size">>], Size);
+                      UUID, [<<"backups">>, SnapID, <<"size">>], Size),
+                    {ok, Size};
                 {error, E} ->
                     fifo_s3:abort_upload(Upload),
                     libsniffle:vm_set(

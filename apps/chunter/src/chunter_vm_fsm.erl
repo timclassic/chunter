@@ -8,6 +8,10 @@
 %%%-------------------------------------------------------------------
 -module(chunter_vm_fsm).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -behaviour(gen_fsm).
 
 %% API
@@ -1184,3 +1188,45 @@ get_all_snapshots(VM, Spec) ->
                    (S, A) ->
                         [S | A]
                 end, [], lists:sort(Snaps)).
+
+
+restore_path(Target, Remote, Local) ->
+    restore_path(Target, Remote, Local, []).
+
+restore_path(Target, Remote, Local, Path) ->
+    case lists:member(Target, Local) of
+        true ->
+            {ok, [Target | Path]};
+        false ->
+            case jsxd:get(Target, Remote) of
+                {ok, Snap} ->
+                    case jsxd:get(<<"parent">>, Snap) of
+                        {ok, Parent} ->
+                            restore_path(Parent, Remote, Local, [Target | Path]);
+                        _ ->
+                            [Parent, Target | Path]
+                    end;
+                _ ->
+                    {error, nopath}
+            end
+    end.
+
+
+get_snapshots(UUID) ->
+    Cmd = "/usr/sbin/zfs list -rpH -t snapshot zones/" ++ binary_to_list(UUID),
+    Res = os:cmd(Cmd),
+    Ls = [L || L <- re:split(Res, "\n"), L =/= <<>>],
+    Ls1 = [re:run(L, ".*@(.*?)\t.*", [{capture, [1], binary}]) || L <- Ls],
+    [M || {match,[M]} <- Ls1].
+
+
+-ifdef(TEST).
+test_restore_path() ->
+    Local = [<<"a">>, <<"b">>, <<"c">>],
+    Remote = [],
+    Res0 = restore_path(<<"a">>, Remote, Local),
+    ?asserEqual([<<"a">>], Res0),
+    ok.
+
+
+-endif.

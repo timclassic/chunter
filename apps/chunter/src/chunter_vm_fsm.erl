@@ -433,24 +433,23 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     spawn(
       fun() ->
+              VM = State#state.uuid,
               lager:debug("Creating Backup with options: ~p", [Options]),
               case proplists:is_defined(create, Options) of
                   true ->
                       lager:debug("New Snapshot: ~p", [SnapID]),
-                      snapshot_action(State#state.uuid, SnapID,
-                                      fun do_snapshot/4,
-                                      fun finish_snapshot/3, Options);
+                      snapshot_action(VM, SnapID, fun do_snapshot/4,
+                                      fun finish_snapshot/4, Options);
                   _ ->
                       ok
               end,
-              snapshot_action(State#state.uuid, SnapID, fun do_backup/4,
-                              fun finish_backup/3, Options),
+              snapshot_action(VM, SnapID, fun do_backup/4,
+                              fun finish_backup/4, Options),
               case proplists:get_value(delete, Options) of
                   true ->
                       lager:debug("Deleint snapshot: ~p", [SnapID]),
-                      snapshot_action(State#state.uuid, SnapID,
-                                      fun do_delete_snapshot/4,
-                                      fun finish_delete_snapshot/3, Options);
+                      snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
+                                      fun finish_delete_snapshot/4, Options);
                   parent ->
                       case proplists:get_value(parent, Options) of
                           undefined ->
@@ -458,9 +457,9 @@ handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
                               ok;
                           Parent ->
                               lager:debug("Deleting parent: ~p", [Parent]),
-                              snapshot_action(State#state.uuid, Parent,
+                              snapshot_action(VM, Parent,
                                               fun do_delete_snapshot/4,
-                                              fun finish_delete_snapshot/3,
+                                              fun finish_delete_snapshot/4,
                                               Options)
                       end;
                   undefined ->
@@ -472,19 +471,19 @@ handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
 handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
     spawn(?MODULE, snapshot_action,
           [State#state.uuid, UUID, fun do_snapshot/4,
-           fun finish_snapshot/3, []]),
+           fun finish_snapshot/4, []]),
     {reply, ok, StateName, State};
 
 handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
     spawn(?MODULE, snapshot_action,
           [State#state.uuid, UUID, fun do_delete_snapshot/4,
-           fun finish_delete_snapshot/3, []]),
+           fun finish_delete_snapshot/4, []]),
     {reply, ok, StateName, State};
 
 handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
     spawn(?MODULE, snapshot_action,
           [State#state.uuid, UUID, fun do_rollback_snapshot/4,
-           fun finish_rollback_snapshot/3, []]),
+           fun finish_rollback_snapshot/4, []]),
     {reply, ok, StateName, State};
 
 handle_sync_event(_Event, _From, StateName, State) ->
@@ -854,7 +853,7 @@ do_snapshot(Path, _VM, SnapID, _) ->
                                     stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
-finish_snapshot(VM, SnapID, ok) ->
+finish_snapshot(VM, SnapID, _, ok) ->
     libsniffle:vm_set(
       VM, [<<"snapshots">>, SnapID, <<"state">>],
       <<"completed">>),
@@ -868,7 +867,7 @@ finish_snapshot(VM, SnapID, ok) ->
                     {<<"uuid">>, SnapID}]}]),
     ok;
 
-finish_snapshot(_VM, _SnapID, error) ->
+finish_snapshot(_VM, _SnapID, _, error) ->
     error.
 
 do_delete_snapshot(Path, _VM, SnapID, _) ->
@@ -881,7 +880,7 @@ do_delete_snapshot(Path, _VM, SnapID, _) ->
                                     stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
-finish_delete_snapshot(VM, SnapID, ok) ->
+finish_delete_snapshot(VM, SnapID, _, ok) ->
     SnapPath = [<<"snapshots">>, SnapID],
     lager:debug("Deleting ~p", [SnapPath]),
     libsniffle:vm_set(
@@ -893,7 +892,7 @@ finish_delete_snapshot(VM, SnapID, ok) ->
                     {<<"uuid">>, SnapID}]}]),
     ok;
 
-finish_delete_snapshot(_VM, _SnapID, error) ->
+finish_delete_snapshot(_VM, _SnapID, _, error) ->
     error.
 
 do_rollback_snapshot(Path, _VM, SnapID, _) ->
@@ -906,7 +905,7 @@ do_rollback_snapshot(Path, _VM, SnapID, _) ->
                                     stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
-finish_rollback_snapshot(VM, SnapID, ok) ->
+finish_rollback_snapshot(VM, SnapID, _, ok) ->
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -914,8 +913,17 @@ finish_rollback_snapshot(VM, SnapID, ok) ->
                     {<<"uuid">>, SnapID}]}]),
     libsniffle:vm_commit_snapshot_rollback(VM, SnapID);
 
-finish_rollback_snapshot(_VM, _SnapID, error) ->
+finish_rollback_snapshot(_VM, _SnapID, _, error) ->
     error.
+
+
+mk_s3_conf(Options) ->
+    AKey = proplists:get_value(access_key, Options),
+    SKey = proplists:get_value(secret_key, Options),
+    S3Host = proplists:get_value(s3_host, Options),
+    S3Port = proplists:get_value(s3_port, Options),
+    fifo_s3:make_config(AKey, SKey, S3Host, S3Port).
+
 
 do_backup(Path, VM, SnapID, Options) ->
     <<_:1/binary, P/binary>> = Path,
@@ -925,13 +933,9 @@ do_backup(Path, VM, SnapID, Options) ->
                _ ->
                    <<>>
            end,
-    AKey = proplists:get_value(access_key, Options),
-    SKey = proplists:get_value(secret_key, Options),
-    S3Host = proplists:get_value(s3_host, Options),
-    S3Port = proplists:get_value(s3_port, Options),
+    Conf = mk_s3_conf(Options),
     Bucket = proplists:get_value(s3_bucket, Options),
     Target = <<SnapID/binary, Disk/binary>>,
-    Conf = fifo_s3:make_config(AKey, SKey, S3Host, S3Port),
     {ok, Upload} = fifo_s3:new_upload(Bucket, Target, Conf),
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
     Prt = case proplists:get_value(parent, Options) of
@@ -1022,13 +1026,24 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
             {error, S, "upload failed"}
     end.
 
-finish_backup(VM, UUID, ok) ->
+finish_backup(VM, UUID, Opts, ok) ->
+    case proplists:is_defined(xml, Opts) of
+        true ->
+            Conf = mk_s3_conf(Opts),
+            Bucket = proplists:get_value(s3_bucket, Opts),
+            XMLFile = binary_to_list(<<"/etc/zones/", UUID/binary, ".xml">>),
+            {ok, XML} = file:read_file(XMLFile),
+            fifo_s3:upload(Bucket, <<UUID/binary, ".xml">>, XML, Conf),
+            ok;
+        false ->
+            ok
+    end,
     libsniffle:vm_set(
       VM, [<<"backups">>, UUID, <<"state">>],
       <<"done">>),
     ok;
 
-finish_backup(_VM, _UUID, error) ->
+finish_backup(_VM, _UUID, _, error) ->
     error.
 
 
@@ -1083,7 +1098,7 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                                     M = io_lib:format("Snapshot done: ~p",
                                                       [Res]),
                                     libsniffle:vm_log(VM, iolist_to_binary(M)),
-                                    CompleteFun(VM, UUID, ok);
+                                    CompleteFun(VM, UUID, Opts, ok);
                                 {error, E} ->
                                     libhowl:send(VM,
                                                  [{<<"event">>, <<"snapshot">>},
@@ -1092,14 +1107,14 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                                                     {<<"message">>, list_to_binary(E)},
                                                     {<<"uuid">>, UUID}]}]),
                                     lager:error("Snapshot failed with: ~p", E),
-                                    CompleteFun(VM, UUID, error)
+                                    CompleteFun(VM, UUID, Opts, error)
                             end;
                         {error, Code, Reply} ->
                             lager:error("Failed snapshot VM ~s ~p: ~s.",
                                         [VM, Code, Reply]),
                             libsniffle:vm_log(VM, <<"Failed to snapshot: ",
                                                     Reply/binary>>),
-                            CompleteFun(VM, UUID, error)
+                            CompleteFun(VM, UUID, Opts, error)
                     end;
                 _ ->
                     lager:error("Failed to snapshot VM ~s.", [VM]),

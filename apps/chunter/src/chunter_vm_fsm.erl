@@ -433,11 +433,14 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event({backup, Options}, _From, StateName, State) ->
     spawn(
       fun() ->
+              lager:debug("Creating Backup with options: ~p", [Options]),
               SnapID = case proplists:get_value(snapshot, Options) of
                            undefined ->
+
                                SnapIDx = uuid:uuid4s(),
+                               lager:debug("New UUID: ~p", [SnapIDx]),
                                snapshot_action(State#state.uuid, SnapIDx,
-                                               fun do_backup/4,
+                                               fun do_snapshot/4,
                                                fun finish_snapshot/3, Options),
                                SnapIDx;
                            SnapIDx ->
@@ -447,14 +450,17 @@ handle_sync_event({backup, Options}, _From, StateName, State) ->
                               fun finish_backup/3, Options),
               case proplists:get_value(delete, Options) of
                   true ->
+                      lager:debug("Deleint snapshot: ~p", [SnapIDx]),
                       snapshot_action(State#state.uuid, SnapID,
                                       fun do_delete_snapshot/4,
                                       fun finish_delete_snapshot/3, Options);
                   parent ->
                       case proplists:get_value(parent, Options) of
                           undefined ->
+                              lager:debug("Deleting parent but not defined."),
                               ok;
                           Parent ->
+                              lager:debug("Deleting parent: ~p", [Parent]),
                               snapshot_action(State#state.uuid, Parent,
                                               fun do_delete_snapshot/4,
                                               fun finish_delete_snapshot/3,

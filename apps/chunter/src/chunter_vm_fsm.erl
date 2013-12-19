@@ -32,6 +32,7 @@
          transition/2,
          update/3,
          backup/3,
+         restore_backup/3,
          snapshot/2,
          delete_snapshot/2,
          rollback_snapshot/2,
@@ -117,6 +118,10 @@ force_state(UUID, State) ->
 
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
+
+restore_backup(UUID, SnapID, Options) ->
+    gen_fsm:sync_send_all_state_event(
+      {global, {vm, UUID}}, {backup, restore, SnapID, Options}).
 
 backup(UUID, SnapID, Options) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, SnapID, Options}).
@@ -433,6 +438,18 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
+handle_sync_event({backup, restore, SnapID, _Options}, _From, StateName, State) ->
+    VM = State#state.uuid,
+    {ok, VMObj} = libsniffle:vm_get(VM),
+    {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
+    Local = get_snapshots(VM),
+    case restore_path(SnapID, Remote, Local) of
+        {ok, _Path} ->
+            {reply, ok, StateName, State};
+        E ->
+            {reply, E, StateName, State}
+    end;
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     spawn(
@@ -1196,15 +1213,16 @@ restore_path(Target, Remote, Local) ->
 restore_path(Target, Remote, Local, Path) ->
     case lists:member(Target, Local) of
         true ->
-            {ok, [Target | Path]};
+            {ok, Path};
         false ->
             case jsxd:get(Target, Remote) of
                 {ok, Snap} ->
                     case jsxd:get(<<"parent">>, Snap) of
                         {ok, Parent} ->
-                            restore_path(Parent, Remote, Local, [Target | Path]);
+                            restore_path(Parent, Remote, Local,
+                                         [{incr, Target} | Path]);
                         _ ->
-                            [Parent, Target | Path]
+                            {ok, [{full, Target} | Path]}
                     end;
                 _ ->
                     {error, nopath}
@@ -1221,11 +1239,24 @@ get_snapshots(UUID) ->
 
 
 -ifdef(TEST).
-test_restore_path() ->
-    Local = [<<"a">>, <<"b">>, <<"c">>],
-    Remote = [],
-    Res0 = restore_path(<<"a">>, Remote, Local),
-    ?asserEqual([<<"a">>], Res0),
+restore_path_test() ->
+    Local = [<<"b">>, <<"c">>],
+    Remote = [
+              {<<"a">>, [{<<"parent">>, <<"c">>}]},
+              {<<"d">>, [{<<"parent">>, <<"e">>}]},
+              {<<"e">>, [{<<"parent">>, <<"f">>}]},
+              {<<"f">>, []},
+              {<<"g">>, [{<<"parent">>, <<"h">>}]}
+             ],
+    {ok, ResA} = restore_path(<<"a">>, Remote, Local),
+    {ok, ResB} = restore_path(<<"b">>, Remote, Local),
+    {ok, ResD} = restore_path(<<"d">>, Remote, Local),
+    ResG = restore_path(<<"g">>, Remote, Local),
+
+    ?assertEqual([], ResB),
+    ?assertEqual([{incr, <<"a">>}], ResA),
+    ?assertEqual([{full, <<"f">>}, {incr, <<"e">>}, {incr, <<"d">>}], ResD),
+    ?assertEqual({error, nopath}, ResG),
     ok.
 
 

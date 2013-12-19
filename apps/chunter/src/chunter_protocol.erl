@@ -313,20 +313,26 @@ upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, Options) -
     Conf = fifo_s3:make_config(AKey, SKey, Host, Port),
     {ok, Upload} = fifo_s3:new_upload(Bucket, binary_to_list(SnapID), Conf),
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
+    SnapID1 = case proplists:is_defined(create, Options) of
+                  true ->
+                      uuide:uuid4s();
+                  false ->
+                      SnapID
+              end,
     Prt = case proplists:get_value(parent, Options) of
               undefined ->
                   lager:debug("Running ZFS command: ~p ~s ~s",
-                              [Cmd, UUID, SnapID]),
+                              [Cmd, UUID, SnapID1]),
                   open_port({spawn_executable, Cmd},
-                            [{args, [UUID, SnapID]}, use_stdio, binary,
+                            [{args, [UUID, SnapID1]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream]);
               Inc ->
                   libsniffle:vm_set(
-                    UUID, [<<"snapshots">>, SnapID, <<"parent">>], Inc),
+                    UUID, [<<"snapshots">>, SnapID1, <<"parent">>], Inc),
                   lager:debug("Running ZFS command: ~p ~s ~s ~s",
-                              [Cmd, UUID, SnapID, Inc]),
+                              [Cmd, UUID, SnapID1, Inc]),
                   open_port({spawn_executable, Cmd},
-                            [{args, [UUID, SnapID, Inc]}, use_stdio, binary,
+                            [{args, [UUID, SnapID1, Inc]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream])
           end,
     libsniffle:vm_set(

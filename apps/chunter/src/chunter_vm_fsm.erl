@@ -27,6 +27,7 @@
          remove/1,
          transition/2,
          update/3,
+         backup/2,
          snapshot/2,
          delete_snapshot/2,
          rollback_snapshot/2,
@@ -113,8 +114,11 @@ force_state(UUID, State) ->
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
 
+backup(UUID, Options) ->
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, Options}).
+
 snapshot(UUID, SnapID) ->
-    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapot, SnapID}).
 
 delete_snapshot(UUID, SnapID) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, delete, SnapID}).
@@ -425,6 +429,33 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
+handle_sync_event({backup, Options}, _From, StateName, State) ->
+    spawn(
+      fun() ->
+              SnapID = case proplists:get_value(snapshot, Options) of
+                           undefined ->
+                               SnapIDx = uuid:uuid4s(),
+                               snapshot_action(State#state.uuid, SnapIDx,
+                                               fun do_backup/4,
+                                               fun finish_snapshot/3, Options),
+                               SnapIDx;
+                           SnapIDx ->
+                               SnapIDx
+                       end,
+              snapshot_action(State#state.uuid, SnapID, fun do_backup/4,
+                              fun finish_backup/3, Options),
+              case proplists:is_defined(delete, Options) of
+                  true ->
+                      snapshot_action(State#state.uuid, SnapID,
+                                      fun do_delete_snapshot/4,
+                                      fun finish_delete_snapshot/3, Options);
+                  false ->
+                      ok
+              end
+          end),
+    {reply, ok, StateName, State};
+
 handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
     spawn(?MODULE, snapshot_action,
           [State#state.uuid, UUID, fun do_snapshot/4,
@@ -820,8 +851,8 @@ finish_snapshot(VM, SnapID, ok) ->
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
-                           [{<<"action">>, <<"completed">>},
-                            {<<"uuid">>, SnapID}]}]),
+                   [{<<"action">>, <<"completed">>},
+                    {<<"uuid">>, SnapID}]}]),
     ok;
 
 finish_snapshot(_VM, _SnapID, error) ->
@@ -872,6 +903,121 @@ finish_rollback_snapshot(VM, SnapID, ok) ->
 
 finish_rollback_snapshot(_VM, _SnapID, error) ->
     error.
+
+do_backup(Path, VM, SnapID, Options) ->
+    <<_:1/binary, P/binary>> = Path,
+    Disk = case P of
+               <<_:36/binary, "-", Dx/binary>> ->
+                   <<"-", Dx/binary>>;
+               _ ->
+                   <<>>
+           end,
+    AKey = proplists:get_value(access_key, Options),
+    SKey = proplists:get_value(secret_key, Options),
+    S3Host = proplists:get_value(s3_host, Options),
+    S3Port = proplists:get_value(s3_port, Options),
+    Bucket = proplists:get_value(s3_bucket, Options),
+    Target = <<SnapID/binary, "-", Disk/binary>>,
+    Conf = fifo_s3:make_config(AKey, SKey, S3Host, S3Port),
+    {ok, Upload} = fifo_s3:new_upload(Bucket, Target, Conf),
+    Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
+    Prt = case proplists:get_value(parent, Options) of
+              undefined ->
+                  lager:debug("Running ZFS command: ~p ~s ~s",
+                              [Cmd, VM, SnapID]),
+                  open_port({spawn_executable, Cmd},
+                            [{args, [VM, SnapID]}, use_stdio, binary,
+                             stderr_to_stdout, exit_status, stream]);
+              Inc ->
+                  libsniffle:vm_set(
+                    VM, [<<"backups">>, SnapID, <<"parent">>], Inc),
+                  lager:debug("Running ZFS command: ~p ~s ~s ~s",
+                              [Cmd, VM, SnapID, Inc]),
+                  open_port({spawn_executable, Cmd},
+                            [{args, [VM, SnapID, Inc]}, use_stdio, binary,
+                             stderr_to_stdout, exit_status, stream])
+          end,
+    libsniffle:vm_set(
+      VM, [<<"backups">>, SnapID, <<"state">>], <<"uploading">>),
+    {ok, VMObj} = libsniffle:vm_get(VM),
+    Size = jsxd:get([<<"backups">>, SnapID, <<"size">>], 0, VMObj),
+    Parts = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
+    libsniffle:vm_set(
+      VM, [<<"backups">>, SnapID, <<"size">>], Size),
+    libsniffle:vm_set(
+      VM, [<<"backups">>, SnapID, <<"files">>], [ Target | Parts]),
+    upload_snapshot(VM, SnapID, Prt, Upload, <<>>, Size, Options).
+
+
+upload_snapshot(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>,
+                Size, Options) ->
+    case fifo_s3:put_upload(binary:copy(MB), Upload) of
+        {ok, Upload1} ->
+            lager:debug("Uploading part: ~p.", [Size]),
+            libsniffle:vm_set(
+              UUID, [<<"backups">>, SnapID, <<"size">>],
+              Size),
+            upload_snapshot(UUID, SnapID, Port, Upload1, Acc, Size, Options);
+        {error, E} ->
+            fifo_s3:abort_upload(Upload),
+            lager:error("Upload error: ~p", [E]),
+            libsniffle:vm_set(
+              UUID, [<<"snapshots">>, SnapID, <<"state">>],
+              <<"upload failed">>),
+            {error, 3, E}
+    end;
+
+upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
+    receive
+        {Port, {data, Data}} ->
+            Size1 = Size + byte_size(Data),
+            upload_snapshot(UUID, SnapID, Port, Upload,
+                            <<Acc/binary, Data/binary>>, Size1, Options);
+        {Port, {exit_status, 0}} ->
+            R = case Acc of
+                    <<>> ->
+                        fifo_s3:complete_upload(Upload),
+                        ok;
+                    _ ->
+                        case fifo_s3:put_upload(binary:copy(Acc), Upload) of
+                            {ok, Upload1} ->
+                                fifo_s3:complete_upload(Upload1);
+                            {error, Err} ->
+                                lager:error("Upload error: ~p", [Err]),
+                                {error, 1, Err}
+                        end
+                end,
+            case R of
+                ok ->
+                    lager:debug("Upload complete: ~p.", [Size]),
+                    libsniffle:vm_set(
+                      UUID, [<<"backups">>, SnapID, <<"size">>], Size);
+                {error, E} ->
+                    fifo_s3:abort_upload(Upload),
+                    libsniffle:vm_set(
+                      UUID, [<<"backups">>, SnapID, <<"state">>],
+                      <<"upload failed">>),
+                    {error, 2, E}
+            end;
+        {Port, {exit_status, S}} ->
+            fifo_s3:abort_upload(Upload),
+            lager:error("Upload error: ~p", [S]),
+            libsniffle:vm_set(
+              UUID, [<<"backups">>, SnapID, <<"state">>],
+              <<"upload failed">>),
+            {error, S, "upload failed"}
+    end.
+
+finish_backup(VM, UUID, ok) ->
+    libsniffle:vm_set(
+      VM, [<<"backups">>, UUID, <<"state">>],
+      <<"done">>),
+    ok;
+
+finish_backup(_VM, _UUID, error) ->
+    error.
+
+
 
 wait_for_port(Port, Reply) ->
     receive

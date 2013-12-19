@@ -930,7 +930,7 @@ do_backup(Path, VM, SnapID, Options) ->
     S3Host = proplists:get_value(s3_host, Options),
     S3Port = proplists:get_value(s3_port, Options),
     Bucket = proplists:get_value(s3_bucket, Options),
-    Target = <<SnapID/binary, "-", Disk/binary>>,
+    Target = <<SnapID/binary, Disk/binary>>,
     Conf = fifo_s3:make_config(AKey, SKey, S3Host, S3Port),
     {ok, Upload} = fifo_s3:new_upload(Bucket, Target, Conf),
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",

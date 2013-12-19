@@ -315,7 +315,7 @@ upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, Options) -
     Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
     SnapID1 = case proplists:is_defined(create, Options) of
                   true ->
-                      uuide:uuid4s();
+                      uuid:uuid4s();
                   false ->
                       SnapID
               end,

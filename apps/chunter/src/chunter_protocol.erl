@@ -64,7 +64,7 @@ handle_info({_OK, Socket, BinData}, State = #state{
             {noreply, State#state{state = UUID,
                                   type = console}};
         ping ->
-            lager:info("Ping."),
+            lager:debug("Ping."),
             Transport:send(Socket, term_to_binary(pong)),
             ok = Transport:close(Socket),
             {stop, normal, State};

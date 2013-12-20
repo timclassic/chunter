@@ -445,7 +445,8 @@ handle_sync_event({backup, restore, SnapID, _Options}, _From, StateName, State) 
     {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
     Local = get_snapshots(VM),
     case restore_path(SnapID, Remote, Local) of
-        {ok, _Path} ->
+        {ok, Path} ->
+            describe_restore(Path),
             {reply, ok, StateName, State};
         E ->
             {reply, E, StateName, State}
@@ -1213,7 +1214,7 @@ restore_path(Target, Remote, Local) ->
 restore_path(Target, Remote, Local, Path) ->
     case lists:member(Target, Local) of
         true ->
-            {ok, Path};
+            {ok, [{local, Target} | Path]};
         false ->
             case jsxd:get(Target, Remote) of
                 {ok, Snap} ->
@@ -1238,6 +1239,18 @@ get_snapshots(UUID) ->
     [M || {match,[M]} <- Ls1].
 
 
+describe_restore([{local, U} | R]) ->
+    lager:debug("[restore] Using local snapshot ~s", [U]),
+    describe_restore(R);
+describe_restore([{full, U} | R]) ->
+    lager:debug("[restore] Using full backup ~s", [U]),
+    describe_restore(R);
+describe_restore([{incr, U} | R]) ->
+    lager:debug("[restore] incremental update to ~s", [U]),
+    describe_restore(R);
+describe_restore([]) ->
+    ok.
+
 -ifdef(TEST).
 restore_path_test() ->
     Local = [<<"b">>, <<"c">>],
@@ -1253,8 +1266,8 @@ restore_path_test() ->
     {ok, ResD} = restore_path(<<"d">>, Remote, Local),
     ResG = restore_path(<<"g">>, Remote, Local),
 
-    ?assertEqual([], ResB),
-    ?assertEqual([{incr, <<"a">>}], ResA),
+    ?assertEqual([{local, <<"b">>}], ResB),
+    ?assertEqual([{local, <<"c">>}, {incr, <<"a">>}], ResA),
     ?assertEqual([{full, <<"f">>}, {incr, <<"e">>}, {incr, <<"d">>}], ResD),
     ?assertEqual({error, nopath}, ResG),
     ok.

@@ -439,7 +439,7 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_sync_event({backup, restore, SnapID, _Options}, _From, StateName, State) ->
+handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,
     {ok, VMObj} = libsniffle:vm_get(VM),
     {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
@@ -447,6 +447,12 @@ handle_sync_event({backup, restore, SnapID, _Options}, _From, StateName, State) 
     case restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
             describe_restore(Path),
+            spawn(
+              fun() ->
+                      [snapshot_action(VM, Snap, fun do_restore/4,
+                                       fun dummy/4, Options)
+                       || Snap <- Path]
+              end),
             {reply, ok, StateName, State};
         E ->
             {reply, E, StateName, State}
@@ -1249,6 +1255,68 @@ describe_restore([{incr, U} | R]) ->
     lager:debug("[restore] incremental update to ~s", [U]),
     describe_restore(R);
 describe_restore([]) ->
+    ok.
+
+
+
+
+do_restore(Path, VM, {local, SnapId}, Opts) ->
+    do_rollback_snapshot(Path, VM, SnapId, Opts);
+do_restore(Path, VM, {full, SnapId}, Opts) ->
+    do_destroy(Path, VM, SnapId, Opts),
+    download_snapshot(Path, SnapId, Opts),
+    do_rollback_snapshot(Path, VM, SnapId, Opts);
+do_restore(Path, VM, {incr, SnapId}, Opts) ->
+    download_snapshot(Path, SnapId, Opts),
+    do_rollback_snapshot(Path, VM, SnapId, Opts).
+
+
+download_snapshot(Path, SnapID, Options) ->
+    <<_:1/binary, P/binary>> = Path,
+    Disk = case P of
+               <<_:36/binary, "-", Dx/binary>> ->
+                   <<"-", Dx/binary>>;
+               _ ->
+                   <<>>
+           end,
+    Conf = mk_s3_conf(Options),
+    Bucket = proplists:get_value(s3_bucket, Options),
+    Target = <<SnapID/binary, Disk/binary>>,
+    {ok, Download} = fifo_s3:new_stream(Bucket, Target, Conf,
+                                        [{chunk_size, 10485760}]),
+    Cmd = code:priv_dir(chunter) ++ "/zfs_import.gzip.sh",
+    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, Path, SnapID]),
+    Prt = open_port({spawn_executable, Cmd},
+                    [{args, [Path, SnapID]}, use_stdio, binary,
+                     stderr_to_stdout, exit_status, stream]),
+    download_snapshot_loop(Prt, Download, 0).
+
+download_snapshot_loop(Prt, Download, I) ->
+    case fifo_s3:get_stream(Download) of
+        {ok, Data, Download1} ->
+            lager:debug("Download part: ~p.", [I]),
+            port_command(Prt, Data),
+            download_snapshot_loop(Prt, Download1, I+1);
+        {error, E} ->
+            port_close(Prt),
+            lager:error("Import error: ~p", [I, E]),
+            {error, 0, E};
+        {ok, done} ->
+            lager:debug("Download complete: ~p.", [I]),
+            port_close(Prt),
+            {ok, done}
+    end.
+
+do_destroy(Path, _VM, _SnapID, _) ->
+    <<_:1/binary, P/binary>> = Path,
+    CmdB = <<"/usr/sbin/zfs destroy -fr ", P/binary>>,
+    Cmd = binary_to_list(CmdB),
+    lager:info("Destroying volume snapshot: ~s", [Cmd]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
+                                    stderr_to_stdout, exit_status]),
+    wait_for_port(Port, <<>>).
+
+dummy(_, _, _, _) ->
     ok.
 
 -ifdef(TEST).

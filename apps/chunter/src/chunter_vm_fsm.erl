@@ -1271,8 +1271,7 @@ do_restore(Path, VM, {incr, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts).
 
 
-download_snapshot(Path, SnapID, Options) ->
-    <<_:1/binary, P/binary>> = Path,
+download_snapshot(<<_:1/binary, P/binary>>, SnapID, Options) ->
     Disk = case P of
                <<_:36/binary, "-", Dx/binary>> ->
                    <<"-", Dx/binary>>;
@@ -1287,7 +1286,7 @@ download_snapshot(Path, SnapID, Options) ->
     Cmd = code:priv_dir(chunter) ++ "/zfs_import.gzip.sh",
     lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, P, SnapID]),
     Prt = open_port({spawn_executable, Cmd},
-                    [{args, [Path, SnapID]}, use_stdio, binary,
+                    [{args, [P, SnapID]}, use_stdio, binary,
                      stderr_to_stdout, exit_status, stream]),
     download_snapshot_loop(Prt, Download, 0).
 
@@ -1307,8 +1306,7 @@ download_snapshot_loop(Prt, Download, I) ->
             {ok, done}
     end.
 
-do_destroy(Path, _VM, _SnapID, _) ->
-    <<_:1/binary, P/binary>> = Path,
+do_destroy(<<_:1/binary, P/binary>>, _VM, _SnapID, _) ->
     CmdB = <<"/usr/sbin/zfs destroy -fr ", P/binary>>,
     Cmd = binary_to_list(CmdB),
     lager:info("Destroying volume snapshot: ~s", [Cmd]),

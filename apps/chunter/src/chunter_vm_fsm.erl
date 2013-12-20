@@ -1285,7 +1285,7 @@ download_snapshot(Path, SnapID, Options) ->
     {ok, Download} = fifo_s3:new_stream(Bucket, Target, Conf,
                                         [{chunk_size, 10485760}]),
     Cmd = code:priv_dir(chunter) ++ "/zfs_import.gzip.sh",
-    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, Path, SnapID]),
+    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, P, SnapID]),
     Prt = open_port({spawn_executable, Cmd},
                     [{args, [Path, SnapID]}, use_stdio, binary,
                      stderr_to_stdout, exit_status, stream]),

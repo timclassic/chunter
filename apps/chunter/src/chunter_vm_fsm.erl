@@ -1265,11 +1265,16 @@ do_restore(Path, VM, {local, SnapId}, Opts) ->
 do_restore(Path, VM, {full, SnapId}, Opts) ->
     do_destroy(Path, VM, SnapId, Opts),
     download_snapshot(Path, SnapId, Opts),
+    wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts);
 do_restore(Path, VM, {incr, SnapId}, Opts) ->
     download_snapshot(Path, SnapId, Opts),
+    wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts).
 
+wait_import(<<_:1/binary, P/binary>>) ->
+    Cmd = "zfs list -Hp -t all -r " ++ binary_to_list(P),
+    wait_image(0, Cmd).
 
 download_snapshot(<<_:1/binary, P/binary>>, SnapID, Options) ->
     Disk = case P of

@@ -447,10 +447,13 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
     case restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
             describe_restore(Path),
+            Keep =
+                [S || {_, S} <- Path,
+                jsxd:get([<<"backups">>, S, <<"local">>], f, VMObj) =:= true],
             spawn(
               fun() ->
                       [snapshot_action(VM, Snap, fun do_restore/4,
-                                       fun dummy/4, Options)
+                                       fun dummy/4, [{keep, Keep} | Options])
                        || Snap <- Path]
               end),
             {reply, ok, StateName, State};
@@ -467,7 +470,7 @@ handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
                   true ->
                       lager:debug("New Snapshot: ~p", [SnapID]),
                       snapshot_action(VM, SnapID, fun do_snapshot/4,
-                                      fun finish_snapshot/4, Options);
+                                      fun finish_snapshot/4, [backup]);
                   _ ->
                       ok
               end,
@@ -477,8 +480,13 @@ handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
                   true ->
                       lager:debug("Deleint snapshot: ~p", [SnapID]),
                       snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
-                                      fun finish_delete_snapshot/4, Options);
+                                      fun finish_delete_snapshot/4, Options),
+                      libsniffle:vm_set(
+                        VM, [<<"backups">>, SnapID, <<"local">>], false);
                   parent ->
+                      libsniffle:vm_set(
+                        VM, [<<"backups">>, SnapID, <<"local">>], true),
+
                       case proplists:get_value(parent, Options) of
                           undefined ->
                               lager:debug("Deleting parent but not defined."),
@@ -488,10 +496,13 @@ handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
                               snapshot_action(VM, Parent,
                                               fun do_delete_snapshot/4,
                                               fun finish_delete_snapshot/4,
-                                              Options)
+                                              Options),
+                              libsniffle:vm_set(
+                                VM, [<<"backups">>, Parent, <<"local">>], true)
                       end;
                   undefined ->
-                      ok
+                      libsniffle:vm_set(
+                        VM, [<<"backups">>, SnapID, <<"local">>], true)
               end
       end),
     {reply, ok, StateName, State};
@@ -881,6 +892,8 @@ do_snapshot(Path, _VM, SnapID, _) ->
                                     stderr_to_stdout, exit_status]),
     wait_for_port(Port, <<>>).
 
+finish_snapshot(_VM, _SnapID, [backup], ok) ->
+    ok;
 finish_snapshot(VM, SnapID, _, ok) ->
     libsniffle:vm_set(
       VM, [<<"snapshots">>, SnapID, <<"state">>],
@@ -1159,18 +1172,32 @@ snapshot_sizes(VM) ->
             ok;
         _ ->
             {ok, V} = libsniffle:vm_get(VM),
+            Snaps = case load_vm(VM) of
+                        {error, not_found} ->
+                            [];
+                        VMData ->
+                            Spec = chunter_spec:to_sniffle(VMData),
+                            get_all_snapshots(VM, Spec)
+                    end,
+            case jsxd:get([<<"backups">>], V) of
+                {ok, Bs} ->
+                    KnownB = [ ID || {ID, _} <- Bs],
+                    Backups1 =lists:filter(fun ({Name, _}) ->
+                                                   lists:member(Name, KnownB)
+                                           end, Snaps),
+                    lager:debug("[~s] Backups: ~p", [VM, Backups1]),
+                    [libsniffle:vm_set(
+                       VM,
+                       [<<"backups">>, Name, <<"local_size">>],
+                       Size) || {Name, Size} <- Backups1];
+                _ ->
+                    ok
+            end,
             case jsxd:get([<<"snapshots">>], V) of
-                {ok, S} ->
-                    Known = [ ID || {ID, _} <- S],
-                    Snaps = case load_vm(VM) of
-                                {error, not_found} ->
-                                    [];
-                                VMData ->
-                                    Spec = chunter_spec:to_sniffle(VMData),
-                                    get_all_snapshots(VM, Spec)
-                            end,
+                {ok, Ss} ->
+                    KnownS = [ ID || {ID, _} <- Ss],
                     Snaps1 =lists:filter(fun ({Name, _}) ->
-                                                 lists:member(Name, Known)
+                                                 lists:member(Name, KnownS)
                                          end, Snaps),
                     lager:debug("[~s] Snapshots: ~p", [VM, Snaps1]),
                     [libsniffle:vm_set(
@@ -1266,11 +1293,23 @@ do_restore(Path, VM, {full, SnapId}, Opts) ->
     do_destroy(Path, VM, SnapId, Opts),
     download_snapshot(Path, SnapId, Opts),
     wait_import(Path),
-    do_rollback_snapshot(Path, VM, SnapId, Opts);
+    case lists:member(SnapId, proplists:get_value(keep, Opts)) of
+        false ->
+            do_rollback_snapshot(Path, VM, SnapId, Opts),
+            do_delete_snapshot(Path, VM, SnapId, Opts);
+        _ ->
+            do_rollback_snapshot(Path, VM, SnapId, Opts)
+    end;
 do_restore(Path, VM, {incr, SnapId}, Opts) ->
     download_snapshot(Path, SnapId, Opts),
     wait_import(Path),
-    do_rollback_snapshot(Path, VM, SnapId, Opts).
+    case lists:member(SnapId, proplists:get_value(keep, Opts)) of
+        false ->
+            do_rollback_snapshot(Path, VM, SnapId, Opts),
+            do_delete_snapshot(Path, VM, SnapId, Opts);
+        _ ->
+            do_rollback_snapshot(Path, VM, SnapId, Opts)
+    end.
 
 wait_import(<<_:1/binary, P/binary>>) ->
     Cmd = "zfs list -Hp -t all -r " ++ binary_to_list(P),

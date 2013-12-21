@@ -447,14 +447,18 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
     case restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
             describe_restore(Path),
-            Keep =
+            Toss =
                 [S || {_, S} <- Path,
-                jsxd:get([<<"backups">>, S, <<"local">>], f, VMObj) =:= true],
+                      jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
+                          =:= false],
             spawn(
               fun() ->
                       [snapshot_action(VM, Snap, fun do_restore/4,
-                                       fun dummy/4, [{keep, Keep} | Options])
-                       || Snap <- Path]
+                                       fun dummy/4, Options)
+                       || Snap <- Path],
+                      [snapshot_action(VM, Snap, fun do_delete_snapshot/4,
+                                       fun finish_delete_snapshot/4, Options)
+                       || Snap <- Toss]
               end),
             {reply, ok, StateName, State};
         E ->
@@ -1293,23 +1297,11 @@ do_restore(Path, VM, {full, SnapId}, Opts) ->
     do_destroy(Path, VM, SnapId, Opts),
     download_snapshot(Path, SnapId, Opts),
     wait_import(Path),
-    case lists:member(SnapId, proplists:get_value(keep, Opts)) of
-        false ->
-            do_rollback_snapshot(Path, VM, SnapId, Opts),
-            do_delete_snapshot(Path, VM, SnapId, Opts);
-        _ ->
-            do_rollback_snapshot(Path, VM, SnapId, Opts)
-    end;
+    do_rollback_snapshot(Path, VM, SnapId, Opts);
 do_restore(Path, VM, {incr, SnapId}, Opts) ->
     download_snapshot(Path, SnapId, Opts),
     wait_import(Path),
-    case lists:member(SnapId, proplists:get_value(keep, Opts)) of
-        false ->
-            do_rollback_snapshot(Path, VM, SnapId, Opts),
-            do_delete_snapshot(Path, VM, SnapId, Opts);
-        _ ->
-            do_rollback_snapshot(Path, VM, SnapId, Opts)
-    end.
+    do_rollback_snapshot(Path, VM, SnapId, Opts).
 
 wait_import(<<_:1/binary, P/binary>>) ->
     Cmd = "zfs list -Hp -t all -r " ++ binary_to_list(P),

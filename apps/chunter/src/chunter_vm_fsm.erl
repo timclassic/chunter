@@ -1201,7 +1201,7 @@ snapshot_sizes(VM) ->
                             [{[<<"backups">>, Name, <<"local_size">>], 0}
                              || Name <- NonLocal];
                     _ ->
-                        ok
+                        []
                 end,
             R1 = case jsxd:get([<<"snapshots">>], V) of
                      {ok, Ss} ->
@@ -1213,7 +1213,7 @@ snapshot_sizes(VM) ->
                          [{[<<"snapshots">>, Name, <<"size">>], Size}
                           || {Name, Size} <- Snaps1];
                      _ ->
-                         ok
+                         []
                  end,
             libsniffle:vm_set(VM, R1 ++ R)
     end.

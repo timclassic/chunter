@@ -902,9 +902,6 @@ finish_snapshot(VM, SnapID, _, ok) ->
     libsniffle:vm_set(
       VM, [<<"snapshots">>, SnapID, <<"state">>],
       <<"completed">>),
-    libsniffle:vm_set(
-      VM, [<<"snapshots">>, SnapID, <<"location">>],
-      <<"hypervisor">>),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -1005,9 +1002,9 @@ do_backup(Path, VM, SnapID, Options) ->
     Size = jsxd:get([<<"backups">>, SnapID, <<"size">>], 0, VMObj),
     Parts = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
     libsniffle:vm_set(
-      VM, [<<"backups">>, SnapID, <<"size">>], Size),
-    libsniffle:vm_set(
-      VM, [<<"backups">>, SnapID, <<"files">>], [ Target | Parts]),
+      VM,
+      [{[<<"backups">>, SnapID, <<"size">>], Size},
+       {[<<"backups">>, SnapID, <<"files">>], [ Target | Parts]}]),
     upload_snapshot(VM, SnapID, Prt, Upload, <<>>, Size, Options).
 
 
@@ -1043,10 +1040,11 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
                     _ ->
                         case fifo_s3:put_upload(binary:copy(Acc), Upload) of
                             {ok, Upload1} ->
-                                fifo_s3:complete_upload(Upload1);
+                                fifo_s3:complete_upload(Upload1),
+                                ok;
                             {error, Err} ->
                                 lager:error("Upload error: ~p", [Err]),
-                                {error, 1, Err}
+                                {error, Err}
                         end
                 end,
             case R of
@@ -1054,7 +1052,10 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
                     lager:debug("Upload complete: ~p.", [Size]),
                     libsniffle:vm_set(
                       UUID, [<<"backups">>, SnapID, <<"size">>], Size),
-                    {ok, Size};
+                    M = io_lib:format("Uploaded ~s with a total size of done: "
+                                      "~p", [UUID, Size]),
+
+                    {ok, list_to_binary(M)};
                 {error, E} ->
                     fifo_s3:abort_upload(Upload),
                     libsniffle:vm_set(
@@ -1068,7 +1069,7 @@ upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
             libsniffle:vm_set(
               UUID, [<<"backups">>, SnapID, <<"state">>],
               <<"upload failed">>),
-            {error, S, "upload failed"}
+            {error, S, <<"upload failed">>}
     end.
 
 finish_backup(VM, UUID, Opts, ok) ->
@@ -1183,34 +1184,38 @@ snapshot_sizes(VM) ->
                             Spec = chunter_spec:to_sniffle(VMData),
                             get_all_snapshots(VM, Spec)
                     end,
-            case jsxd:get([<<"backups">>], V) of
-                {ok, Bs} ->
-                    KnownB = [ ID || {ID, _} <- Bs],
-                    Backups1 =lists:filter(fun ({Name, _}) ->
-                                                   lists:member(Name, KnownB)
-                                           end, Snaps),
-                    lager:debug("[~s] Backups: ~p", [VM, Backups1]),
-                    [libsniffle:vm_set(
-                       VM,
-                       [<<"backups">>, Name, <<"local_size">>],
-                       Size) || {Name, Size} <- Backups1];
-                _ ->
-                    ok
-            end,
-            case jsxd:get([<<"snapshots">>], V) of
-                {ok, Ss} ->
-                    KnownS = [ ID || {ID, _} <- Ss],
-                    Snaps1 =lists:filter(fun ({Name, _}) ->
-                                                 lists:member(Name, KnownS)
-                                         end, Snaps),
-                    lager:debug("[~s] Snapshots: ~p", [VM, Snaps1]),
-                    [libsniffle:vm_set(
-                       VM,
-                       [<<"snapshots">>, Name, <<"size">>],
-                       Size) || {Name, Size} <- Snaps1];
-                _ ->
-                    ok
-            end
+            R = case jsxd:get([<<"backups">>], V) of
+                    {ok, Bs} ->
+                        KnownB = [ ID || {ID, _} <- Bs],
+                        Backups1 =lists:filter(fun ({Name, _}) ->
+                                                       lists:member(Name, KnownB)
+                                               end, Snaps),
+                        Backups2 =lists:filter(fun ({Name, _}) ->
+                                                       not lists:member(Name, KnownB)
+                                               end, Snaps),
+                        Local = [N || {N, _ } <- Backups2],
+                        NonLocal = lists:subtract(KnownB, Local),
+                        lager:debug("[~s] Backups: ~p", [VM, Backups1]),
+                        [{[<<"backups">>, Name, <<"local_size">>], Size}
+                         || {Name, Size} <- Backups1] ++
+                            [{[<<"backups">>, Name, <<"local_size">>], 0}
+                             || Name <- NonLocal];
+                    _ ->
+                        ok
+                end,
+            R1 = case jsxd:get([<<"snapshots">>], V) of
+                     {ok, Ss} ->
+                         KnownS = [ ID || {ID, _} <- Ss],
+                         Snaps1 =lists:filter(fun ({Name, _}) ->
+                                                      lists:member(Name, KnownS)
+                                              end, Snaps),
+                         lager:debug("[~s] Snapshots: ~p", [VM, Snaps1]),
+                         [{[<<"snapshots">>, Name, <<"size">>], Size}
+                          || {Name, Size} <- Snaps1];
+                     _ ->
+                         ok
+                 end,
+            libsniffle:vm_set(VM, R1 ++ R)
     end.
 
 snap_lines(Disk) when is_binary(Disk) ->

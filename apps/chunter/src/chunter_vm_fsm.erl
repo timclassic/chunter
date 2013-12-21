@@ -979,21 +979,21 @@ do_backup(Path, VM, SnapID, Options) ->
     Bucket = proplists:get_value(s3_bucket, Options),
     Target = <<SnapID/binary, Disk/binary>>,
     {ok, Upload} = fifo_s3:new_upload(Bucket, Target, Conf),
-    Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
+    Cmd = code:priv_dir(chunter) ++ "/zfs_export.gzip.sh",
     Prt = case proplists:get_value(parent, Options) of
               undefined ->
                   lager:debug("Running ZFS command: ~p ~s ~s",
-                              [Cmd, VM, SnapID]),
+                              [Cmd, P, SnapID]),
                   open_port({spawn_executable, Cmd},
-                            [{args, [VM, SnapID]}, use_stdio, binary,
+                            [{args, [P, SnapID]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream]);
               Inc ->
                   libsniffle:vm_set(
                     VM, [<<"backups">>, SnapID, <<"parent">>], Inc),
                   lager:debug("Running ZFS command: ~p ~s ~s ~s",
-                              [Cmd, VM, SnapID, Inc]),
+                              [Cmd, P, SnapID, Inc]),
                   open_port({spawn_executable, Cmd},
-                            [{args, [VM, SnapID, Inc]}, use_stdio, binary,
+                            [{args, [P, SnapID, Inc]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream])
           end,
     libsniffle:vm_set(

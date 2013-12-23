@@ -502,7 +502,7 @@ handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
                                               fun finish_delete_snapshot/4,
                                               Options),
                               libsniffle:vm_set(
-                                VM, [<<"backups">>, Parent, <<"local">>], true)
+                                VM, [<<"backups">>, Parent, <<"local">>], false)
                       end;
                   undefined ->
                       libsniffle:vm_set(
@@ -1080,6 +1080,8 @@ finish_backup(VM, UUID, Opts, ok) ->
             {ok, XML} = file:read_file(
                           binary_to_list(<<"/etc/zones/", VM/binary, ".xml">>)),
             fifo_s3:upload(Bucket, <<UUID/binary, ".xml">>, XML, Conf),
+            libsniffle:vm_set(
+              UUID, [<<"backups">>, SnapID, <<"xml">>], true),
             ok;
         false ->
             ok

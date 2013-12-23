@@ -1081,7 +1081,7 @@ finish_backup(VM, UUID, Opts, ok) ->
                           binary_to_list(<<"/etc/zones/", VM/binary, ".xml">>)),
             fifo_s3:upload(Bucket, <<UUID/binary, ".xml">>, XML, Conf),
             libsniffle:vm_set(
-              UUID, [<<"backups">>, SnapID, <<"xml">>], true),
+              UUID, [<<"backups">>, UUID, <<"xml">>], true),
             ok;
         false ->
             ok

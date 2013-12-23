@@ -1174,12 +1174,11 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
 
 snapshot_sizes(VM) ->
     lager:info("[~s] Updating Snapshots.", [VM]),
-    case libsniffle:servers() of
-        [] ->
-            lager:warning("[~s] No Servers to update snapshotsto.", [VM]),
+    case {libsniffle:servers(), libsniffle:vm_get(VM)} of
+        {[], _} ->
+            lager:warning("[~s] No Servers to update snapshots.", [VM]),
             ok;
-        _ ->
-            {ok, V} = libsniffle:vm_get(VM),
+        {_, {ok, V}} ->
             Snaps = case load_vm(VM) of
                         {error, not_found} ->
                             [];
@@ -1218,7 +1217,10 @@ snapshot_sizes(VM) ->
                      _ ->
                          []
                  end,
-            libsniffle:vm_set(VM, R1 ++ R)
+            libsniffle:vm_set(VM, R1 ++ R);
+        _ ->
+            lager:warning("[~s] Could not read VM data.", [VM]),
+            ok
     end.
 
 snap_lines(Disk) when is_binary(Disk) ->

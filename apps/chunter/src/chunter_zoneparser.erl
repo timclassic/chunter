@@ -102,12 +102,16 @@ load(VM) ->
 -spec convert(Name::binary(), VM::fifo:vm_config()) -> fifo:vm_config().
 
 convert(F, VM)->
-    {ok, XML} = file:read_file(F),
-    case erlsom:simple_form(XML) of
-        {ok,{"zone",Attrs,Value},_}->
-            jsxd:from_list(create_zone_data(VM ++ map_attrs(Attrs)  ++ parse_xml(Value)));
-        Err->
-            Err
+    case file:read_file(F) of
+        {ok, XML}  ->
+            case erlsom:simple_form(XML) of
+                {ok,{"zone",Attrs,Value},_}->
+                    jsxd:from_list(create_zone_data(VM ++ map_attrs(Attrs)  ++ parse_xml(Value)));
+                Err->
+                    Err
+            end;
+        _ ->
+            {error, not_found}
     end.
 
 -spec parse_xml([xml_element()]) -> [xml_element() | {Key::binary()|atom(), Value::term()}].

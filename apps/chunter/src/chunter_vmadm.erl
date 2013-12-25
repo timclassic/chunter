@@ -66,8 +66,7 @@ delete(UUID) ->
     R = os:cmd(binary_to_list(Cmd)),
     lager:debug("[vmadm] ~s", [R]),
 
-    chunter_server:update_mem(),
-    chunter_vm_fsm:remove(UUID).
+    chunter_server:update_mem().
 
 -spec info(UUID::fifo:uuid()) -> fifo:config_list().
 

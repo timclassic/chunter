@@ -754,7 +754,7 @@ init_zonedoor(State) ->
     case erlang:port_info(State#state.zonedoor) of
         undefined ->
             Cmd = code:priv_dir(chunter) ++ "/zonedoor",
-            Args = [binary_to_list(State#state.uuid), "_joyent_sshd_key_is_authorized"],
+            Args = [State#state.uuid, "_joyent_sshd_key_is_authorized"],
             lager:warning("[zonedoor] Starting with cmd: ~s ~s ~s~n", [Cmd | Args]),
             DoorPort = open_port({spawn_executable, Cmd},
                                  [{args, Args}, use_stdio, binary, {line, 1024}, exit_status]),

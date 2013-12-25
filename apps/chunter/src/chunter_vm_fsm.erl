@@ -448,10 +448,13 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
     case restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
             describe_restore(Path),
-            Toss =
+            Toss0 =
                 [S || {_, S} <- Path,
                       jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
                           =:= false],
+            Toss = [T || T <- Toss, T =/= SnapID],
+            libsniffle:vm_set(
+              VM, [<<"backups">>, SnapID, <<"local">>], true),
             spawn(
               fun() ->
                       [snapshot_action(VM, Snap, fun do_restore/4,

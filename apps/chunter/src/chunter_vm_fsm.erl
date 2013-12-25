@@ -25,6 +25,9 @@
               running/2,
               restoring_backup/2,
               creating_backup/2,
+              rolling_back_snapshot/2,
+              creating_snapshot/2,
+              deleting_snapshot/2,
               shutting_down/2]).
 
 -export([create/4,
@@ -37,8 +40,7 @@
          snapshot/2,
          delete_snapshot/2,
          rollback_snapshot/2,
-         force_state/2,
-         snapshot_action/5]).
+         force_state/2]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -59,7 +61,11 @@
          running/2,
          shutting_down/2,
          restoring_backup/2,
-         creating_backup/2]).
+         creating_backup/2,
+         rolling_back_snapshot/2,
+         creating_snapshot/2,
+         deleting_snapshot/2
+        ]).
 
 -define(SERVER, ?MODULE).
 
@@ -349,6 +355,24 @@ creating_backup(timeout, State = #state{orig_state = NextState,
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 
+creating_snapshot(timeout, State = #state{orig_state = NextState,
+                                          args={SnapID}}) ->
+    snapshot_action(State#state.uuid, SnapID, fun do_snapshot/4,
+                    fun finish_snapshot/4, []),
+    {next_state, NextState, State#state{orig_state=undefined, args={}}}.
+
+deleting_snapshot(timeout, State = #state{orig_state = NextState,
+                                        args={SnapID}}) ->
+    snapshot_action(State#state.uuid, SnapID, fun do_delete_snapshot/4,
+                    fun finish_delete_snapshot/4, []),
+    {next_state, NextState, State#state{orig_state=undefined, args={}}}.
+
+rolling_back_snapshot(timeout, State = #state{orig_state = NextState,
+                                          args={SnapID}}) ->
+    snapshot_action(State#state.uuid, SnapID, fun do_rollback_snapshot/4,
+                    fun finish_rollback_snapshot/4, []),
+    {next_state, NextState, State#state{orig_state=undefined, args={}}}.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -523,23 +547,20 @@ handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID, Options}},
     {reply, ok, creating_backup, State1, 0};
 
-handle_sync_event({snapshot, UUID}, _From, StateName, State) ->
-    spawn(?MODULE, snapshot_action,
-          [State#state.uuid, UUID, fun do_snapshot/4,
-           fun finish_snapshot/4, []]),
-    {reply, ok, StateName, State};
+handle_sync_event({snapshot, SnapID}, _From, StateName, State) ->
+    State1 = State#state{orig_state=StateName,
+                         args={SnapID}},
+    {reply, ok, creating_snapshot, State1, 0};
 
-handle_sync_event({snapshot, delete, UUID}, _From, StateName, State) ->
-    spawn(?MODULE, snapshot_action,
-          [State#state.uuid, UUID, fun do_delete_snapshot/4,
-           fun finish_delete_snapshot/4, []]),
-    {reply, ok, StateName, State};
+handle_sync_event({snapshot, delete, SnapID}, _From, StateName, State) ->
+    State1 = State#state{orig_state=StateName,
+                         args={SnapID}},
+    {reply, ok, deleting_snapshot, State1, 0};
 
-handle_sync_event({snapshot, rollback, UUID}, _From, StateName, State) ->
-    spawn(?MODULE, snapshot_action,
-          [State#state.uuid, UUID, fun do_rollback_snapshot/4,
-           fun finish_rollback_snapshot/4, []]),
-    {reply, ok, StateName, State};
+handle_sync_event({snapshot, rollback, SnapID}, _From, StateName, State) ->
+    State1 = State#state{orig_state=StateName,
+                         args={SnapID}},
+    {reply, ok, rolling_back_snapshot, State1, 0};
 
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,

@@ -3,6 +3,8 @@
 -export([
          snapshot/2,
          snapshot/3,
+         destroy_snapshot/2,
+         destroy_snapshot/3,
          destroy/1,
          destroy/2,
          rollback/2,
@@ -23,6 +25,14 @@ destroy(Path) ->
     destroy(Path, []).
 destroy(Path, Args) ->
     zfs("destroy", build_opts(Args, fun destroy_opt_to_char/1), Path).
+
+destroy_snapshot(Path, SnapID) ->
+    destroy_snapshot(Path, SnapID, []).
+destroy(Path, SnapID, Args) ->
+    P = <<Path/binary, "@", SnapID/binary>>,
+    destroy(P, Args).
+
+
 
 snapshot(Path, SnapID) ->
     snapshot(Path, SnapID, []).

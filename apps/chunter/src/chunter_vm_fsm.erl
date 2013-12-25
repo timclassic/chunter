@@ -861,8 +861,8 @@ finish_snapshot(VM, SnapID, _, ok) ->
 finish_snapshot(_VM, _SnapID, _, error) ->
     error.
 
-do_delete_snapshot(<<_:1/binary, P/binary>>, _VM, _SnapID, _) ->
-    chunter_zfs:destroy(P, [f, r]).
+do_delete_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
+    chunter_zfs:destroy(P, SnapID, [f, r]).
 
 finish_delete_snapshot(VM, SnapID, _, ok) ->
     SnapPath = [<<"snapshots">>, SnapID],

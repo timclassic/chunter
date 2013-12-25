@@ -368,7 +368,7 @@ deleting_snapshot(timeout, State = #state{orig_state = NextState,
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 rolling_back_snapshot(timeout, State = #state{orig_state = NextState,
-                                          args={SnapID}}) ->
+                                              args={SnapID}}) ->
     snapshot_action(State#state.uuid, SnapID, fun do_rollback_snapshot/4,
                     fun finish_rollback_snapshot/4, []),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.

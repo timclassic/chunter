@@ -14,6 +14,8 @@
 -ignore_xref([
          snapshot/2,
          snapshot/3,
+         destroy_snapshot/2,
+         destroy_snapshot/3,
          destroy/1,
          destroy/2,
          rollback/2,
@@ -28,7 +30,7 @@ destroy(Path, Args) ->
 
 destroy_snapshot(Path, SnapID) ->
     destroy_snapshot(Path, SnapID, []).
-destroy(Path, SnapID, Args) ->
+destroy_snapshot(Path, SnapID, Args) ->
     P = <<Path/binary, "@", SnapID/binary>>,
     destroy(P, Args).
 

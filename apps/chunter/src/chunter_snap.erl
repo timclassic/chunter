@@ -42,15 +42,11 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                             [{args, [P, SnapID, Inc]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream])
           end,
-    libsniffle:vm_set(
-      VM, [<<"backups">>, SnapID, <<"state">>], <<"uploading">>),
+    libsniffle:vm_set(VM, [<<"backups">>, SnapID, <<"state">>], <<"uploading">>),
     {ok, VMObj} = libsniffle:vm_get(VM),
     Size = jsxd:get([<<"backups">>, SnapID, <<"size">>], 0, VMObj),
-    Parts = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
-    libsniffle:vm_set(
-      VM,
-      [{[<<"backups">>, SnapID, <<"size">>], Size},
-       {[<<"backups">>, SnapID, <<"files">>], [ Target | Parts]}]),
+    Fs = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
+    libsniffle:vm_set(VM, [<<"backups">>, SnapID, <<"files">>], [Target | Fs]),
     upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Size, Options).
 
 
@@ -255,7 +251,6 @@ restore_path_test() ->
     ?assertEqual([{full, <<"f">>}, {incr, <<"e">>}, {incr, <<"d">>}], ResD),
     ?assertEqual({error, nopath}, ResG),
     ok.
-
 
 -endif.
 

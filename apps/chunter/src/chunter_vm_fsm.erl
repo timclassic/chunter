@@ -39,6 +39,7 @@
          restore_backup/3,
          snapshot/2,
          delete_snapshot/2,
+         delete_backup/2,
          rollback_snapshot/2,
          force_state/2]).
 
@@ -131,6 +132,9 @@ restore_backup(UUID, SnapID, Options) ->
 
 backup(UUID, SnapID, Options) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, SnapID, Options}).
+
+delete_backup(UUID, SnapID) ->
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, delete, SnapID}).
 
 snapshot(UUID, SnapID) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {snapshot, SnapID}).
@@ -543,6 +547,13 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
             {reply, E, StateName, State}
     end;
 
+handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
+    State1 = State#state{orig_state=StateName,
+                         args={SnapID}},
+    libsniffle:vm_set(
+      State#state.uuid, [<<"backups">>, SnapID, <<"local">>], false),
+    {reply, ok, deleting_snapshot, State1, 0};
+
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID, Options}},
     {reply, ok, creating_backup, State1, 0};
@@ -557,10 +568,21 @@ handle_sync_event({snapshot, delete, SnapID}, _From, StateName, State) ->
                          args={SnapID}},
     {reply, ok, deleting_snapshot, State1, 0};
 
+
 handle_sync_event({snapshot, rollback, SnapID}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName,
                          args={SnapID}},
     {reply, ok, rolling_back_snapshot, State1, 0};
+
+handle_sync_event(delete, _From, StateName, State) ->
+    case load_vm(State#state.uuid) of
+        {error, not_found} ->
+            {stop, not_found, State};
+        _VM ->
+            spawn(chunter_vmadm, delete, [State#state.uuid]),
+            libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),
+            {reply, ok, StateName, State}
+    end;
 
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,

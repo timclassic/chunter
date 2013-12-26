@@ -168,6 +168,12 @@ handle_message({machines, snapshot, UUID, SnapId}, State)
     chunter_vm_fsm:snapshot(UUID, SnapId),
     {stop, State};
 
+handle_message({machines, backup, delete, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    {stop, chunter_vm_fsm:delete_backup(UUID, SnapId), State};
+
+
 handle_message({machines, snapshot, delete, UUID, SnapId}, State)
   when is_binary(UUID),
        is_binary(SnapId) ->

@@ -826,10 +826,9 @@ write_image(Port, UUID, [Idx|R], Retry) ->
         {ok, B} ->
             lager:debug("<IMG> ~s[~p]: writing", [UUID, Idx]),
             port_command(Port, B),
-            lager:debug("<IMG> ~s[~p]: done", [UUID, Idx]),
             write_image(Port, UUID, R, 0);
-        _ ->
-            lager:warning("<IMG> ~p[~p]: retry!", [UUID, Idx]),
+        E ->
+            lager:warning("<IMG> ~p[~p]: retry! -> ~p", [UUID, Idx, E]),
             timer:sleep(1000),
             write_image(Port, UUID, [Idx|R], Retry+1)
     end;

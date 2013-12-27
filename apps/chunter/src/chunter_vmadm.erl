@@ -62,7 +62,6 @@ delete(UUID) ->
     Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)),
     R = os:cmd(binary_to_list(Cmd)),
     lager:debug("[vmadm] ~s", [R]),
 

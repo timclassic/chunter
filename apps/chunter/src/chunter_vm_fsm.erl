@@ -69,6 +69,7 @@
         ]).
 
 -define(SERVER, ?MODULE).
+-define(WRITE_RETRY, 10).
 
 -record(state, {hypervisor,
                 type,
@@ -814,7 +815,7 @@ install_image(DatasetUUID) ->
             write_image(Port, DatasetUUID, Parts1, 0)
     end.
 
-write_image(Port, UUID, [Idx|_], 2) ->
+write_image(Port, UUID, [Idx|_], ?WRITE_RETRY) ->
     lager:debug("<IMG> ~p import failed at chunk ~p.", [UUID, Idx]),
     port_close(Port),
     {error, retries_exceeded};

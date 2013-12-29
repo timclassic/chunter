@@ -160,6 +160,11 @@ create(Data) ->
               ok ->
                   lager:info([{fifi_component, chunter}],
                              "vmadm:create - vmadm returned sucessfully.", []),
+                  libhowl:send(<<"command">>,
+                               [{<<"event">>, <<"vm-create">>},
+                                {<<"uuid">>, uuid:uuid4s()},
+                                {<<"data">>,
+                                 [{<<"uuid">>, UUID}]}]),
                   chunter_vm_fsm:load(UUID);
               {error, E} ->
                   delete(UUID),

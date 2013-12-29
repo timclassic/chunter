@@ -483,14 +483,19 @@ handle_event(remove, _StateName, State) ->
     libsniffle:vm_unregister(State#state.uuid),
     {stop, normal, State};
 
-handle_event(delete, _StateName, State) ->
-    case load_vm(State#state.uuid) of
+handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
+    case load_vm(UUID) of
         {error, not_found} ->
             ok;
         _VM ->
-            chunter_vmadm:delete(State#state.uuid)
+            chunter_vmadm:delete(UUID)
     end,
-    libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),
+    libhowl:send(<<"command">>,
+                 [{<<"event">>, <<"vm-delete">>},
+                  {<<"uuid">>, uuid:uuid4s()},
+                  {<<"data">>,
+                   [{<<"uuid">>, UUID}]}]),
+    libhowl:send(UUID, [{<<"event">>, <<"delete">>}]),
     {stop, normal, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->

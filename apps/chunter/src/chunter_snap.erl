@@ -21,10 +21,8 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                _ ->
                    <<>>
            end,
-    Conf = mk_s3_conf(Options),
-    Bucket = proplists:get_value(s3_bucket, Options),
     Target = <<SnapID/binary, Disk/binary>>,
-    {ok, Upload} = fifo_s3:new_upload(Bucket, Target, Conf),
+    {ok, Upload} = fifo_s3_upload:new(Target, Options),
     Cmd = code:priv_dir(chunter) ++ "/zfs_export.gzip.sh",
     Prt = case proplists:get_value(parent, Options) of
               undefined ->
@@ -52,7 +50,7 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
 
 upload_to_cloud(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>,
                 Size, Options) ->
-    case fifo_s3:put_upload(binary:copy(MB), Upload) of
+    case fifo_s3_upload:part(Upload, binary:copy(MB)) of
         {ok, Upload1} ->
             lager:debug("Uploading part: ~p.", [Size]),
             libsniffle:vm_set(
@@ -60,7 +58,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>,
               Size),
             upload_to_cloud(UUID, SnapID, Port, Upload1, Acc, Size, Options);
         {error, E} ->
-            fifo_s3:abort_upload(Upload),
+            fifo_s3_upload:abort(Upload),
             lager:error("Upload error: ~p", [E]),
             libsniffle:vm_set(
               UUID, [<<"snapshots">>, SnapID, <<"state">>],
@@ -77,12 +75,12 @@ upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
         {Port, {exit_status, 0}} ->
             R = case Acc of
                     <<>> ->
-                        fifo_s3:complete_upload(Upload),
+                        fifo_s3_upload:done(Upload),
                         ok;
                     _ ->
-                        case fifo_s3:put_upload(binary:copy(Acc), Upload) of
+                        case fifo_s3_upload:part(Upload, binary:copy(Acc)) of
                             {ok, Upload1} ->
-                                fifo_s3:complete_upload(Upload1),
+                                fifo_s3_upload:done(Upload1),
                                 ok;
                             {error, Err} ->
                                 lager:error("Upload error: ~p", [Err]),
@@ -99,14 +97,14 @@ upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
 
                     {ok, list_to_binary(M)};
                 {error, E} ->
-                    fifo_s3:abort_upload(Upload),
+                    fifo_s3_upload:abort(Upload),
                     libsniffle:vm_set(
                       UUID, [<<"backups">>, SnapID, <<"state">>],
                       <<"upload failed">>),
                     {error, 2, E}
             end;
         {Port, {exit_status, S}} ->
-            fifo_s3:abort_upload(Upload),
+            fifo_s3_upload:abort(Upload),
             lager:error("Upload error: ~p", [S]),
             libsniffle:vm_set(
               UUID, [<<"backups">>, SnapID, <<"state">>],

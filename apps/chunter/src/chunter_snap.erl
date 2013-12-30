@@ -28,6 +28,7 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                 {ok, S} ->
                     S
             end,
+    lager:debug("Starting upload wiht chunk size: ~p.", [Chunk]),
     AKey = proplists:get_value(access_key, Options),
     SKey = proplists:get_value(secret_key, Options),
     S3Host = proplists:get_value(s3_host, Options),
@@ -59,8 +60,8 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
     upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Options).
 
 
-upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk, Size, Options) ->
-    case Acc of
+upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
+    case AccIn of
         <<MB:Chunk/binary, Acc/binary>> ->
             case fifo_s3_upload:part(Upload, binary:copy(MB)) of
                 {ok, _Ref} ->
@@ -78,7 +79,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk, Size, Options) ->
                       <<"upload failed">>),
                     {error, 3, E}
             end;
-        _ ->
+        Acc ->
             receive
                 {Port, {data, Data}} ->
                     Size1 = Size + byte_size(Data),
@@ -93,6 +94,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk, Size, Options) ->
                                 case fifo_s3_upload:part(Upload, binary:copy(Acc)) of
                                     {ok, _Ref} ->
                                         fifo_s3_upload:done(Upload),
+                                        lager:debug("Upload done."),
                                         ok;
                                     {error, Err} ->
                                         lager:error("Upload error: ~p", [Err]),

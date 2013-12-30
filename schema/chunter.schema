@@ -1,5 +1,19 @@
 %% -*- erlang -*-
 
+
+{mapping, "paralell_uploads", "fifo_s3.upload_pool_size",
+ [{default, 5},
+  {datatype, integer}]}.
+
+{mapping, "max_paralell_uploads", "fifo_s3.upload_pool_max",
+ [{default, 10},
+  {datatype, integer}]}.
+
+
+{mapping, "s3_upload_chunk_size", "chunter.upload_chunk",
+ [{default, "1MB"},
+  {datatype, bytesize}]}.
+
 %% @doc The interval the zones are checked for their state, this means running
 %% `zoneadm list -ip` on the node. This is only required if a change is missed
 %% due to some hickup but it ensures that the state of zones is always up to

@@ -22,6 +22,12 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                    <<>>
            end,
     Target = <<SnapID/binary, Disk/binary>>,
+    Chunk = case application:get_env(chunter, upload_chunk) of
+                undefined ->
+                    1048576;
+                {ok, S} ->
+                    S
+            end,
     AKey = proplists:get_value(access_key, Options),
     SKey = proplists:get_value(secret_key, Options),
     S3Host = proplists:get_value(s3_host, Options),
@@ -50,71 +56,73 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
     Size = jsxd:get([<<"backups">>, SnapID, <<"size">>], 0, VMObj),
     Fs = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
     libsniffle:vm_set(VM, [<<"backups">>, SnapID, <<"files">>], [Target | Fs]),
-    upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Size, Options).
+    upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Options).
 
 
-upload_to_cloud(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>,
-                Size, Options) ->
-    case fifo_s3_upload:part(Upload, binary:copy(MB)) of
-        {ok, _Ref} ->
-            lager:debug("Uploading part: ~p.", [Size]),
-            libsniffle:vm_set(
-              UUID, [<<"backups">>, SnapID, <<"size">>],
-              Size),
-            upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Size, Options);
-        {error, E} ->
-            fifo_s3_upload:abort(Upload),
-            lager:error("Upload error: ~p", [E]),
-            libsniffle:vm_set(
-              UUID, [<<"snapshots">>, SnapID, <<"state">>],
-              <<"upload failed">>),
-            {error, 3, E}
-    end;
-
-upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
-    receive
-        {Port, {data, Data}} ->
-            Size1 = Size + byte_size(Data),
-            upload_to_cloud(UUID, SnapID, Port, Upload,
-                            <<Acc/binary, Data/binary>>, Size1, Options);
-        {Port, {exit_status, 0}} ->
-            R = case Acc of
-                    <<>> ->
-                        fifo_s3_upload:done(Upload),
-                        ok;
-                    _ ->
-                        case fifo_s3_upload:part(Upload, binary:copy(Acc)) of
-                            {ok, _Ref} ->
-                                fifo_s3_upload:done(Upload),
-                                ok;
-                            {error, Err} ->
-                                lager:error("Upload error: ~p", [Err]),
-                                {error, Err}
-                        end
-                end,
-            case R of
-                ok ->
-                    lager:debug("Upload complete: ~p.", [Size]),
+upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk, Size, Options) ->
+    case Acc of
+        <<MB:Chunk/binary, Acc/binary>> ->
+            case fifo_s3_upload:part(Upload, binary:copy(MB)) of
+                {ok, _Ref} ->
+                    lager:debug("Uploading part: ~p.", [Size]),
                     libsniffle:vm_set(
-                      UUID, [<<"backups">>, SnapID, <<"size">>], Size),
-                    M = io_lib:format("Uploaded ~s with a total size of done: "
-                                      "~p", [UUID, Size]),
-
-                    {ok, list_to_binary(M)};
+                      UUID, [<<"backups">>, SnapID, <<"size">>],
+                      Size),
+                    upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk, Size,
+                                    Options);
                 {error, E} ->
                     fifo_s3_upload:abort(Upload),
+                    lager:error("Upload error: ~p", [E]),
+                    libsniffle:vm_set(
+                      UUID, [<<"snapshots">>, SnapID, <<"state">>],
+                      <<"upload failed">>),
+                    {error, 3, E}
+            end;
+        _ ->
+            receive
+                {Port, {data, Data}} ->
+                    Size1 = Size + byte_size(Data),
+                    upload_to_cloud(UUID, SnapID, Port, Upload,
+                                    <<Acc/binary, Data/binary>>, Chunk, Size1, Options);
+                {Port, {exit_status, 0}} ->
+                    R = case Acc of
+                            <<>> ->
+                                fifo_s3_upload:done(Upload),
+                                ok;
+                            _ ->
+                                case fifo_s3_upload:part(Upload, binary:copy(Acc)) of
+                                    {ok, _Ref} ->
+                                        fifo_s3_upload:done(Upload),
+                                        ok;
+                                    {error, Err} ->
+                                        lager:error("Upload error: ~p", [Err]),
+                                        {error, Err}
+                                end
+                        end,
+                    case R of
+                        ok ->
+                            lager:debug("Upload complete: ~p.", [Size]),
+                            libsniffle:vm_set(
+                              UUID, [<<"backups">>, SnapID, <<"size">>], Size),
+                            M = io_lib:format("Uploaded ~s with a total size of done: "
+                                              "~p", [UUID, Size]),
+
+                            {ok, list_to_binary(M)};
+                        {error, E} ->
+                            fifo_s3_upload:abort(Upload),
+                            libsniffle:vm_set(
+                              UUID, [<<"backups">>, SnapID, <<"state">>],
+                              <<"upload failed">>),
+                            {error, 2, E}
+                    end;
+                {Port, {exit_status, S}} ->
+                    fifo_s3_upload:abort(Upload),
+                    lager:error("Upload error: ~p", [S]),
                     libsniffle:vm_set(
                       UUID, [<<"backups">>, SnapID, <<"state">>],
                       <<"upload failed">>),
-                    {error, 2, E}
-            end;
-        {Port, {exit_status, S}} ->
-            fifo_s3_upload:abort(Upload),
-            lager:error("Upload error: ~p", [S]),
-            libsniffle:vm_set(
-              UUID, [<<"backups">>, SnapID, <<"state">>],
-              <<"upload failed">>),
-            {error, S, <<"upload failed">>}
+                    {error, S, <<"upload failed">>}
+            end
     end.
 
 download(<<_:1/binary, P/binary>>, SnapID, Options) ->
@@ -256,4 +264,3 @@ restore_path_test() ->
     ok.
 
 -endif.
-

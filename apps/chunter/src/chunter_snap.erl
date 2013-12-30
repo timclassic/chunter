@@ -56,12 +56,12 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
 upload_to_cloud(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>,
                 Size, Options) ->
     case fifo_s3_upload:part(Upload, binary:copy(MB)) of
-        {ok, Upload1} ->
+        {ok, _Ref} ->
             lager:debug("Uploading part: ~p.", [Size]),
             libsniffle:vm_set(
               UUID, [<<"backups">>, SnapID, <<"size">>],
               Size),
-            upload_to_cloud(UUID, SnapID, Port, Upload1, Acc, Size, Options);
+            upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Size, Options);
         {error, E} ->
             fifo_s3_upload:abort(Upload),
             lager:error("Upload error: ~p", [E]),
@@ -84,8 +84,8 @@ upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Size, Options) ->
                         ok;
                     _ ->
                         case fifo_s3_upload:part(Upload, binary:copy(Acc)) of
-                            {ok, Upload1} ->
-                                fifo_s3_upload:done(Upload1),
+                            {ok, _Ref} ->
+                                fifo_s3_upload:done(Upload),
                                 ok;
                             {error, Err} ->
                                 lager:error("Upload error: ~p", [Err]),

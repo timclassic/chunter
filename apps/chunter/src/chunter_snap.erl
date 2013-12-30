@@ -22,7 +22,12 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                    <<>>
            end,
     Target = <<SnapID/binary, Disk/binary>>,
-    {ok, Upload} = fifo_s3_upload:new(Target, Options),
+    AKey = proplists:get_value(access_key, Options),
+    SKey = proplists:get_value(secret_key, Options),
+    S3Host = proplists:get_value(s3_host, Options),
+    S3Port = proplists:get_value(s3_port, Options),
+    Bucket = proplists:get_value(s3_bucket, Options),
+    {ok, Upload} = fifo_s3_upload:new(AKey, SKey, S3Host, S3Port, Bucket, Target),
     Cmd = code:priv_dir(chunter) ++ "/zfs_export.gzip.sh",
     Prt = case proplists:get_value(parent, Options) of
               undefined ->

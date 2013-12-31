@@ -134,11 +134,21 @@ download(<<_:1/binary, P/binary>>, SnapID, Options) ->
                _ ->
                    <<>>
            end,
-    Conf = mk_s3_conf(Options),
+    AKey = proplists:get_value(access_key, Options),
+    SKey = proplists:get_value(secret_key, Options),
+    S3Host = proplists:get_value(s3_host, Options),
+    S3Port = proplists:get_value(s3_port, Options),
     Bucket = proplists:get_value(s3_bucket, Options),
     Target = <<SnapID/binary, Disk/binary>>,
-    {ok, Download} = fifo_s3:new_stream(Bucket, Target, Conf,
-                                        [{chunk_size, 10485760}]),
+    Chunk = case application:get_env(chunter, download_chunk) of
+                undefined ->
+                    1048576;
+                {ok, S} ->
+                    S
+            end,
+    lager:debug("Starting download wiht chunk size: ~p.", [Chunk]),
+    {ok, Download} = fifo_s3_download:new(AKey, SKey, S3Host, S3Port, Bucket,
+                                          Target, [{chunk_size, Chunk}]),
     Cmd = code:priv_dir(chunter) ++ "/zfs_import.gzip.sh",
     lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, P, SnapID]),
     Prt = open_port({spawn_executable, Cmd},
@@ -147,19 +157,19 @@ download(<<_:1/binary, P/binary>>, SnapID, Options) ->
     download_to_port(Prt, Download, 0).
 
 download_to_port(Prt, Download, I) ->
-    case fifo_s3:get_stream(Download) of
-        {ok, Data, Download1} ->
-            lager:debug("Download part: ~p.", [I]),
-            port_command(Prt, Data),
-            download_to_port(Prt, Download1, I+1);
-        {error, E} ->
-            port_close(Prt),
-            lager:error("Import error: ~p", [I, E]),
-            {error, 0, E};
+    case fifo_s3_download:get(Download) of
         {ok, done} ->
             lager:debug("Download complete: ~p.", [I]),
             port_close(Prt),
-            {ok, done}
+            {ok, done};
+        {ok, Data} ->
+            lager:debug("Download part: ~p.", [I]),
+            port_command(Prt, Data),
+            download_to_port(Prt, Download, I+1);
+        {error, E} ->
+            port_close(Prt),
+            lager:error("Import error: ~p", [I, E]),
+            {error, 0, E}
     end.
 
 describe_restore([{local, U} | R]) ->

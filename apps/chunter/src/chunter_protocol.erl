@@ -260,8 +260,14 @@ handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
     chunter_vm_fsm:delete(UUID),
     {stop, State};
 
+
+handle_message(update, State) ->
+    lager:info("updating chunter", []),
+    os:cmd("/opt/chunter/bin/update"),
+    {stop, State};
+
 handle_message(Oops, State) ->
-    io:format("oops: ~p~n", [Oops]),
+    lager:info("oops: ~p~n", [Oops]),
     {stop, State}.
 
 handle_call(_Request, _From, State) ->

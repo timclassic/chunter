@@ -803,21 +803,49 @@ install_image(DatasetUUID) ->
             lager:debug("found.", []),
             ok;
         _ ->
-            {ok, Parts} = libsniffle:img_list(DatasetUUID),
-            [Idx | Parts1] = lists:sort(Parts),
-            {Cmd, B} = case libsniffle:img_get(DatasetUUID, Idx) of
-                           {ok, <<31:8, 139:8, _/binary>> = AB} ->
-                               {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
-                           {ok, <<"BZh", _/binary>> = AB} ->
-                               {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
-                       end,
-            lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
-            Port = open_port({spawn_executable, Cmd},
-                             [{args, [DatasetUUID]}, use_stdio, binary,
-                              stderr_to_stdout, exit_status]),
-            port_command(Port, B),
-            lager:debug("We have the following parts: ~p.", [Parts1]),
-            write_image(Port, DatasetUUID, Parts1, 0)
+            case libsniffle:img_list(DatasetUUID) of
+                {ok, Parts} ->
+                    [Idx | Parts1] = lists:sort(Parts),
+                    {Cmd, B} = case libsniffle:img_get(DatasetUUID, Idx) of
+                                   {ok, <<31:8, 139:8, _/binary>> = AB} ->
+                                       {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
+                                   {ok, <<"BZh", _/binary>> = AB} ->
+                                       {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
+                               end,
+                    lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
+                    Port = open_port({spawn_executable, Cmd},
+                                     [{args, [DatasetUUID]}, use_stdio, binary,
+                                      stderr_to_stdout, exit_status]),
+                    port_command(Port, B),
+                    lager:debug("We have the following parts: ~p.", [Parts1]),
+                    write_image(Port, DatasetUUID, Parts1, 0);
+                {ok, AKey, SKey, S3Host, S3Port, Bucket, Target} ->
+                    Chunk = case application:get_env(chunter, download_chunk) of
+                                undefined ->
+                                    1048576;
+                                {ok, S} ->
+                                    S
+                            end,
+                    {ok, Download} = fifo_s3_download:new(AKey, SKey, S3Host, S3Port, Bucket,
+                                                          Target, [{chunk_size, Chunk}]),
+                    {Cmd, B} = case fifo_s3_download:get(Download) of
+                                   {ok, <<31:8, 139:8, _/binary>> = AB} ->
+                                       {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
+                                   {ok, <<"BZh", _/binary>> = AB} ->
+                                       {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
+                               end,
+                    lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
+                    Port = open_port({spawn_executable, Cmd},
+                                     [{args, [DatasetUUID]}, use_stdio, binary,
+                                      stderr_to_stdout, exit_status]),
+                    port_command(Port, B),
+                    case chunter_snap:download_to_port(Port, Download, 1) of
+                        {ok, done} ->
+                            finish_image(DatasetUUID);
+                        E ->
+                            E
+                    end
+            end
     end.
 
 write_image(Port, UUID, [Idx|_], ?WRITE_RETRY) ->
@@ -841,10 +869,10 @@ write_image(Port, UUID, [Idx|R], Retry) ->
 write_image(Port, UUID, [], _) ->
     lager:debug("<IMG> done, going to wait for zfs to finish now.", []),
     port_close(Port),
-    UUIDL = binary_to_list(UUID),
-    %% We need to satisfy imgadm *shakes fist* this seems to be a minimal
-    %% manifest that is enough to not make it throw up.
+    finish_image(UUID).
 
+finish_image(UUID) ->
+    UUIDL = binary_to_list(UUID),
     {ok, DS} = libsniffle:dataset_get(UUID),
     Manifest = jsxd:from_list([{<<"manifest">>,
                                 [{<<"v">>, 2},
@@ -867,7 +895,6 @@ write_image(Port, UUID, [], _) ->
     Cmd = "zfs list -Hp -t all -r  zones/" ++ UUIDL,
 
     wait_image(0, Cmd).
-
 
 do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
     chunter_zfs:snapshot(P, SnapID).

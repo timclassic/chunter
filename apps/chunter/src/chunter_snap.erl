@@ -17,7 +17,8 @@
 
 upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
     Disk = case P of
-               <<_:36/binary, "-", Dx/binary>> ->
+               %% 42 is the lenght of zone/<uuid>
+               <<_:42/binary, "-", Dx/binary>> ->
                    <<"-", Dx/binary>>;
                _ ->
                    <<>>
@@ -130,7 +131,8 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
 
 download(<<_:1/binary, P/binary>>, SnapID, Options) ->
     Disk = case P of
-               <<_:36/binary, "-", Dx/binary>> ->
+               %% 42 is the lenght of zone/<uuid>
+               <<_:42/binary, "-", Dx/binary>> ->
                    <<"-", Dx/binary>>;
                _ ->
                    <<>>

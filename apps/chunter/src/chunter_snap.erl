@@ -7,6 +7,7 @@
 -export([
          describe_restore/1,
          download/3,
+         download_to_port/3,
          upload/4,
          get/1,
          get_all/2,

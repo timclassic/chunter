@@ -64,11 +64,15 @@ generate_sniffle(In, _Type) ->
                   (<<"max_physical_memory">>, V, Obj) ->
                       jsxd:update(<<"ram">>, fun(E) -> E end, round(V/(1024*1024)), Obj);
                   (<<"zonepath">>, V, Obj) ->
-                      [_, Used, Avail | _] = re:split(os:cmd(binary_to_list(<<"/usr/sbin/zfs list -pH ", V/binary>>)), "\t", [{return, list}]),
-                      {UsedI, _} = string:to_integer(Used),
-                      {AvailI, _} = string:to_integer(Avail),
-                      jsxd:thread([{set, <<"zonepath">>, V},
-                                   {set, <<"quota">>, round((UsedI + AvailI) / (1024*1024*1024))}], Obj);
+                      case re:split(os:cmd(binary_to_list(<<"/usr/sbin/zfs list -pH ", V/binary>>)), "\t", [{return, list}]) of
+                          [_, Used, Avail | _] ->
+                              {UsedI, _} = string:to_integer(Used),
+                              {AvailI, _} = string:to_integer(Avail),
+                              jsxd:thread([{set, <<"zonepath">>, V},
+                                           {set, <<"quota">>, round((UsedI + AvailI) / (1024*1024*1024))}], Obj);
+                          _ ->
+                              jsxd:set(<<"zonepath">>, V, Obj)
+                      end;
                   (<<"customer_metadata">>, V, Obj) ->
                       jsxd:fold(fun (<<"root_authorized_keys">>, V1, Obj1) ->
                                         jsxd:set(<<"ssh_keys">>, V1, Obj1);

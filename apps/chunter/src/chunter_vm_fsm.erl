@@ -253,6 +253,17 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
 initialized({restore, SnapID, Options},
             State=#state{uuid=VM}) ->
     {ok, VMObj} = libsniffle:vm_get(VM),
+    case jsxd:get([<<"backups">>, SnapID, <<"xml">>], false, VMObj) of
+        true ->
+            UUIDL = binary_to_list(VM),
+            Conf = chunter_snap:mk_s3_conf(Options),
+            Bucket = proplists:get_value(s3_bucket, Options),
+            {ok, XML} = fifo_s3:download(Bucket, <<SnapID/binary, ".xml">>, Conf),
+            ok = file:write_file(<<"/etc/zones/", VM/binary, ".xml">>, XML),
+            os:cmd("echo '" ++ UUIDL ++ ":installed:/zones/" ++ UUIDL ++ ":" ++ UUIDL ++ "' >> /etc/zones/index");
+        false ->
+            ok
+    end,
     {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
     Local = chunter_snap:get(VM),
     case chunter_snap:restore_path(SnapID, Remote, Local) of

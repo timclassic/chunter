@@ -278,6 +278,12 @@ initialized({restore, SnapID, Options},
               VM, [<<"backups">>, SnapID, <<"local">>], true),
             State1 = State#state{orig_state=loading,
                                  args={SnapID, Options, Path, Toss}},
+            libhowl:send(<<"command">>,
+                         [{<<"event">>, <<"vm-restored">>},
+                          {<<"uuid">>, uuid:uuid4s()},
+                          {<<"data">>,
+                           [{<<"uuid">>, UUID}]}]),
+
             {next_state, restoring_backup, State1, 0};
         E ->
             {next_state, E, initialized, State}
@@ -557,14 +563,10 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
         {error, not_found} ->
             ok;
         _VM ->
-            chunter_vmadm:delete(UUID)
+            chunter_vmadm:delete(UUID),
+            lager:info("Deleting ~s successfull, letting sniffle know.", [UUID]),
+            libsniffle:vm_delete(UUID)
     end,
-    libhowl:send(<<"command">>,
-                 [{<<"event">>, <<"vm-delete">>},
-                  {<<"uuid">>, uuid:uuid4s()},
-                  {<<"data">>,
-                   [{<<"uuid">>, UUID}]}]),
-    libhowl:send(UUID, [{<<"event">>, <<"delete">>}]),
     {stop, normal, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->

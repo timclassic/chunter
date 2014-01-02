@@ -252,7 +252,7 @@ initialized({restore, SnapID, Opts},
             State=#state{uuid=UUID}) ->
     case libsniffle:vm_get(UUID) of
         {ok, VMObj} ->
-            case jsxd:get(VMObj, [<<"backups">>, SnapID, <<"xml">>], false) of
+            case jsxd:get([<<"backups">>, SnapID, <<"xml">>], false, VMObj) of
                 true ->
                     Conf = chunter_snap:mk_s3_conf(Opts),
                     Bucket = proplists:get_value(s3_bucket, Opts),

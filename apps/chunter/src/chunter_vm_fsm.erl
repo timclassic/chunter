@@ -260,30 +260,12 @@ initialized({restore, SnapID, Options},
             Bucket = proplists:get_value(s3_bucket, Options),
             {ok, XML} = fifo_s3:download(Bucket, <<SnapID/binary, ".xml">>, Conf),
             ok = file:write_file(<<"/etc/zones/", VM/binary, ".xml">>, XML),
-            os:cmd("echo '" ++ UUIDL ++ ":installed:/zones/" ++ UUIDL ++ ":" ++ UUIDL ++ "' >> /etc/zones/index");
+            os:cmd("echo '" ++ UUIDL ++ ":installed:/zones/" ++ UUIDL ++ ":" ++ UUIDL ++ "' >> /etc/zones/index"),
+            restore_backup(VM, SnapID, Options),
+            {next_state, loading, State};
         false ->
-            ok
-    end,
-    {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
-    Local = chunter_snap:get(VM),
-    case chunter_snap:restore_path(SnapID, Remote, Local) of
-        {ok, Path} ->
-            chunter_snap:describe_restore(Path),
-            Toss0 =
-                [S || {_, S} <- Path,
-                      jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
-                          =:= false],
-            Toss = [T || T <- Toss0, T =/= SnapID],
-            libsniffle:vm_set(
-              VM, [<<"backups">>, SnapID, <<"local">>], true),
-            State1 = State#state{orig_state=restoring_xml,
-                                 args={Options, Path, Toss}},
-            {next_state, restoring_backup, State1, 0};
-        _E ->
-            {stop, restore, State}
+            {next_state, loading, State}
     end;
-
-
 
 initialized(_, State) ->
     {next_state, initialized, State}.

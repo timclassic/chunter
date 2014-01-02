@@ -258,7 +258,7 @@ initialized({restore, SnapID, Options},
             UUIDL = binary_to_list(VM),
             Conf = chunter_snap:mk_s3_conf(Options),
             Bucket = proplists:get_value(s3_bucket, Options),
-            {ok, XML} = fifo_s3:download(Bucket, <<SnapID/binary, ".xml">>, Conf),
+            {ok, XML} = fifo_s3:download(Bucket, <<VM/binary, "/", SnapID/binary, ".xml">>, Conf),
             ok = file:write_file(<<"/etc/zones/", VM/binary, ".xml">>, XML),
             os:cmd("echo '" ++ UUIDL ++ ":installed:/zones/" ++ UUIDL ++ ":" ++ UUIDL ++ "' >> /etc/zones/index");
         false ->
@@ -274,8 +274,7 @@ initialized({restore, SnapID, Options},
                       jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
-            libsniffle:vm_set(
-              VM, [<<"backups">>, SnapID, <<"local">>], true),
+            backup_update(VM, SnapID, <<"local">>, true),
             State1 = State#state{orig_state=loading,
                                  args={SnapID, Options, Path, Toss}},
             libhowl:send(<<"command">>,
@@ -378,7 +377,7 @@ restoring_xml(timeout, State =
                     UUIDL = binary_to_list(UUID),
                     Conf = chunter_snap:mk_s3_conf(Opts),
                     Bucket = proplists:get_value(s3_bucket, Opts),
-                    {ok, XML} = fifo_s3:download(Bucket, <<SnapID/binary, ".xml">>, Conf),
+                    {ok, XML} = fifo_s3:download(Bucket, <<UUID/binary, "/", SnapID/binary, ".xml">>, Conf),
                     ok = file:write_file(<<"/etc/zones/", UUID/binary, ".xml">>, XML),
                     os:cmd("echo '" ++ UUIDL ++ ":installed:/zones/" ++ UUIDL ++ ":" ++ UUIDL ++ "' >> /etc/zones/index"),
                     {next_state, loading, State};
@@ -409,12 +408,9 @@ creating_backup(timeout, State = #state{orig_state = NextState,
             lager:debug("Deleint snapshot: ~p", [SnapID]),
             snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
                             fun finish_delete_snapshot/4, Options),
-            libsniffle:vm_set(
-              VM, [<<"backups">>, SnapID, <<"local">>], false);
+            backup_update(VM, SnapID, <<"local">>, false);
         parent ->
-            libsniffle:vm_set(
-              VM, [<<"backups">>, SnapID, <<"local">>], true),
-
+            backup_update(VM, SnapID, <<"local">>, true),
             case proplists:get_value(parent, Options) of
                 undefined ->
                     lager:debug("Deleting parent but not defined."),
@@ -425,12 +421,10 @@ creating_backup(timeout, State = #state{orig_state = NextState,
                                     fun do_delete_snapshot/4,
                                     fun finish_delete_snapshot/4,
                                     Options),
-                    libsniffle:vm_set(
-                      VM, [<<"backups">>, Parent, <<"local">>], false)
+                    backup_update(VM, Parent, <<"local">>, false)
             end;
         undefined ->
-            libsniffle:vm_set(
-              VM, [<<"backups">>, SnapID, <<"local">>], true)
+            backup_update(VM, SnapID, <<"local">>, true)
     end,
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
@@ -615,8 +609,7 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
                       jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
-            libsniffle:vm_set(
-              VM, [<<"backups">>, SnapID, <<"local">>], true),
+            backup_update(VM, SnapID, <<"local">>, true),
             State1 = State#state{orig_state=StateName,
                                  args={SnapID, Options, Path, Toss}},
             {reply, ok, restoring_backup, State1, 0};
@@ -625,10 +618,8 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
     end;
 
 handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
-    State1 = State#state{orig_state=StateName,
-                         args={SnapID}},
-    libsniffle:vm_set(
-      State#state.uuid, [<<"backups">>, SnapID, <<"local">>], false),
+    State1 = State#state{orig_state=StateName, args={SnapID}},
+    backup_update(State#state.uuid, SnapID, <<"local">>, false),
     {reply, ok, deleting_snapshot, State1, 0};
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
@@ -992,8 +983,7 @@ do_delete_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
 finish_delete_snapshot(VM, SnapID, _, ok) ->
     SnapPath = [<<"snapshots">>, SnapID],
     lager:debug("Deleting ~p", [SnapPath]),
-    libsniffle:vm_set(
-      VM, SnapPath, delete),
+    libsniffle:vm_set(VM, SnapPath, delete),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -1028,17 +1018,13 @@ finish_backup(VM, UUID, Opts, ok) ->
             Bucket = proplists:get_value(s3_bucket, Opts),
             {ok, XML} = file:read_file(
                           binary_to_list(<<"/etc/zones/", VM/binary, ".xml">>)),
-            fifo_s3:upload(Bucket, <<UUID/binary, ".xml">>, XML, Conf),
-            libsniffle:vm_set(
-              VM, [<<"backups">>, UUID, <<"xml">>], true),
+            fifo_s3:upload(Bucket, <<VM/binary, "/", UUID/binary, ".xml">>, XML, Conf),
+            backup_update(VM, UUID, <<"xml">>, true),
             ok;
         false ->
             ok
     end,
-    libsniffle:vm_set(
-      VM, [<<"backups">>, UUID, <<"state">>],
-      <<"done">>),
-    ok;
+    backup_update(VM, UUID, <<"state">>, <<"completed">>);
 
 finish_backup(_VM, _UUID, _, error) ->
     error.
@@ -1163,11 +1149,11 @@ do_restore(Path, VM, {local, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts);
 do_restore(Path, VM, {full, SnapId}, Opts) ->
     do_destroy(Path, VM, SnapId, Opts),
-    chunter_snap:download(Path, SnapId, Opts),
+    chunter_snap:download(Path, VM, SnapId, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts);
 do_restore(Path, VM, {incr, SnapId}, Opts) ->
-    chunter_snap:download(Path, SnapId, Opts),
+    chunter_snap:download(Path, VM, SnapId, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts).
 
@@ -1257,3 +1243,12 @@ atom_to_binary(B) when is_binary(B) ->
     B;
 atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
+
+backup_update(VM, SnapID, K, V) ->
+    libsniffle:vm_set(VM, [<<"backups">>, SnapID, K], V),
+    libhowl:send(VM,
+                 [{<<"event">>, <<"backup">>},
+                  {<<"data">>,
+                   [{<<"action">>, <<"update">>},
+                    {<<"data">>, [{K, V}]},
+                    {<<"uuid">>, SnapID}]}]).

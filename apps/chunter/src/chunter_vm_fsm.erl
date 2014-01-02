@@ -128,8 +128,16 @@ register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
 
 restore_backup(UUID, SnapID, Options) ->
-    gen_fsm:sync_send_all_state_event(
-      {global, {vm, UUID}}, {backup, restore, SnapID, Options}).
+    case global:whereis_name({vm, UUID}) of
+        undefined ->
+            start_link(UUID),
+            gen_fsm:send_event({global, {vm, UUID}},
+                               {restore, SnapID, Options});
+        _ ->
+            gen_fsm:sync_send_all_state_event(
+              {global, {vm, UUID}}, {backup, restore, SnapID, Options})
+    end.
+
 
 backup(UUID, SnapID, Options) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, SnapID, Options}).
@@ -239,6 +247,27 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     {next_state, creating,
      State#state{type = Type,
                  public_state = change_state(UUID, <<"creating">>)}};
+
+initialized({restore, SnapID, Opts},
+            State=#state{uuid=UUID}) ->
+    case libsniffle:vm_get(UUID) of
+        {ok, VMObj} ->
+            case jsxd:get(VMObj, [<<"backups">>, SnapID, <<"xml">>], false) of
+                true ->
+                    Conf = chunter_snap:mk_s3_conf(Opts),
+                    Bucket = proplists:get_value(s3_bucket, Opts),
+                    {ok, XML} = fifo_s3:download(Bucket, <<SnapID/binary, ".xml">>, Conf),
+                    ok = file:write_file(<<"/etc/zones/", UUID/binary, ".xml">>, XML),
+                    restore_backup(UUID, SnapID, Opts),
+                    {next_state, loading, State};
+                false ->
+                    {stop, no_xml, State}
+            end;
+
+        _ ->
+            {stop, not_found, State}
+    end;
+
 
 initialized(_, State) ->
     {next_state, initialized, State}.

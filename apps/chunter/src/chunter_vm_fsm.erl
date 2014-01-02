@@ -278,7 +278,7 @@ initialized({restore, SnapID, Options},
               VM, [<<"backups">>, SnapID, <<"local">>], true),
             State1 = State#state{orig_state=restoring_xml,
                                  args={Options, Path, Toss}},
-            {reply, ok, restoring_backup, State1, 0};
+            {next_state, restoring_backup, State1, 0};
         _E ->
             {stop, restore, State}
     end;

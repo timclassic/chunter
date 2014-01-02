@@ -67,7 +67,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
         <<MB:Chunk/binary, Acc/binary>> ->
             case fifo_s3_upload:part(Upload, binary:copy(MB)) of
                 ok ->
-                    lager:debug("Uploading part: ~p.", [Size]),
+                    lager:debug("Uploading: ~p MB.", [round(Size/1024/1024)]),
                     libsniffle:vm_set(
                       UUID, [<<"backups">>, SnapID, <<"size">>],
                       Size),
@@ -105,7 +105,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
                         end,
                     case R of
                         ok ->
-                            lager:debug("Upload complete: ~p.", [Size]),
+                            lager:debug("Upload complete: ~p MB.", [round(Size/1024/1024)]),
                             libsniffle:vm_set(
                               UUID, [<<"backups">>, SnapID, <<"size">>], Size),
                             M = io_lib:format("Uploaded ~s with a total size of done: "

@@ -23,6 +23,7 @@
               stopped/2,
               booting/2,
               running/2,
+              restoring_xml/2,
               restoring_backup/2,
               creating_backup/2,
               rolling_back_snapshot/2,
@@ -61,6 +62,7 @@
          booting/2,
          running/2,
          shutting_down/2,
+         restoring_xml/2,
          restoring_backup/2,
          creating_backup/2,
          rolling_back_snapshot/2,
@@ -248,25 +250,28 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
      State#state{type = Type,
                  public_state = change_state(UUID, <<"creating">>)}};
 
-initialized({restore, SnapID, Opts},
-            State=#state{uuid=UUID}) ->
-    case libsniffle:vm_get(UUID) of
-        {ok, VMObj} ->
-            case jsxd:get([<<"backups">>, SnapID, <<"xml">>], false, VMObj) of
-                true ->
-                    Conf = chunter_snap:mk_s3_conf(Opts),
-                    Bucket = proplists:get_value(s3_bucket, Opts),
-                    {ok, XML} = fifo_s3:download(Bucket, <<SnapID/binary, ".xml">>, Conf),
-                    ok = file:write_file(<<"/etc/zones/", UUID/binary, ".xml">>, XML),
-                    restore_backup(UUID, SnapID, Opts),
-                    {next_state, loading, State};
-                false ->
-                    {stop, no_xml, State}
-            end;
-
-        _ ->
-            {stop, not_found, State}
+initialized({restore, SnapID, Options},
+            State=#state{uuid=VM}) ->
+    {ok, VMObj} = libsniffle:vm_get(VM),
+    {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
+    Local = chunter_snap:get(VM),
+    case chunter_snap:restore_path(SnapID, Remote, Local) of
+        {ok, Path} ->
+            chunter_snap:describe_restore(Path),
+            Toss0 =
+                [S || {_, S} <- Path,
+                      jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
+                          =:= false],
+            Toss = [T || T <- Toss0, T =/= SnapID],
+            libsniffle:vm_set(
+              VM, [<<"backups">>, SnapID, <<"local">>], true),
+            State1 = State#state{orig_state=restoring_xml,
+                                 args={Options, Path, Toss}},
+            {reply, ok, restoring_backup, State1, 0};
+        _E ->
+            {stop, restore, State}
     end;
+
 
 
 initialized(_, State) ->
@@ -334,15 +339,41 @@ shutting_down(_, State) ->
 
 restoring_backup(timeout, State =
                      #state{orig_state = NextState,
-                            args = {Options, Path, Toss},
+                            args = {_SnapID, Options, Path, Toss},
                             uuid = VM}) ->
     [snapshot_action(VM, Snap, fun do_restore/4, Options)
      || Snap <- Path],
     [snapshot_action(VM, Snap, fun do_delete_snapshot/4,
                      fun finish_delete_snapshot/4, Options)
      || Snap <- Toss],
-    {next_state, NextState, State#state{orig_state=undefined, args={}}}.
+    case NextState of
+        restoring_xml ->
+            {next_state, NextState, State};
+        _ ->
+            {next_state, NextState, State#state{orig_state=undefined, args={}}}
+    end.
 
+restoring_xml(timeout, State =
+                  #state{args = {SnapID, Opts, _Path, _Toss},
+                         uuid = UUID}) ->
+    case libsniffle:vm_get(UUID) of
+        {ok, VMObj} ->
+            case jsxd:get([<<"backups">>, SnapID, <<"xml">>], false, VMObj) of
+                true ->
+                    UUIDL = binary_to_list(UUID),
+                    Conf = chunter_snap:mk_s3_conf(Opts),
+                    Bucket = proplists:get_value(s3_bucket, Opts),
+                    {ok, XML} = fifo_s3:download(Bucket, <<SnapID/binary, ".xml">>, Conf),
+                    ok = file:write_file(<<"/etc/zones/", UUID/binary, ".xml">>, XML),
+                    os:cmd("echo '" ++ UUIDL ++ ":installed:/zones/" ++ UUIDL ++ ":" ++ UUIDL ++ "' >> /etc/zones/index"),
+                    {next_state, loading, State};
+                false ->
+                    {stop, no_xml, State}
+            end;
+
+        _ ->
+            {stop, not_found, State}
+    end.
 
 creating_backup(timeout, State = #state{orig_state = NextState,
                                         args={SnapID, Options}}) ->
@@ -576,7 +607,7 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
             libsniffle:vm_set(
               VM, [<<"backups">>, SnapID, <<"local">>], true),
             State1 = State#state{orig_state=StateName,
-                                 args={Options, Path, Toss}},
+                                 args={SnapID, Options, Path, Toss}},
             {reply, ok, restoring_backup, State1, 0};
         E ->
             {reply, E, StateName, State}

@@ -282,7 +282,7 @@ initialized({restore, SnapID, Options},
                          [{<<"event">>, <<"vm-restored">>},
                           {<<"uuid">>, uuid:uuid4s()},
                           {<<"data">>,
-                           [{<<"uuid">>, UUID}]}]),
+                           [{<<"uuid">>, VM}]}]),
 
             {next_state, restoring_backup, State1, 0};
         E ->

@@ -620,6 +620,7 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
 handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID}},
     backup_update(State#state.uuid, SnapID, <<"local">>, false),
+    backup_update(State#state.uuid, SnapID, <<"local_size">>, 0),
     {reply, ok, deleting_snapshot, State1, 0};
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->

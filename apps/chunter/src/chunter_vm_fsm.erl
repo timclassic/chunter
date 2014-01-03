@@ -23,7 +23,6 @@
               stopped/2,
               booting/2,
               running/2,
-              restoring_xml/2,
               restoring_backup/2,
               creating_backup/2,
               rolling_back_snapshot/2,
@@ -62,7 +61,6 @@
          booting/2,
          running/2,
          shutting_down/2,
-         restoring_xml/2,
          restoring_backup/2,
          creating_backup/2,
          rolling_back_snapshot/2,
@@ -282,7 +280,6 @@ initialized({restore, SnapID, Options},
                           {<<"uuid">>, uuid:uuid4s()},
                           {<<"data">>,
                            [{<<"uuid">>, VM}]}]),
-
             {next_state, restoring_backup, State1, 0};
         E ->
             {next_state, E, initialized, State}
@@ -353,41 +350,19 @@ shutting_down(_, State) ->
 
 restoring_backup(timeout, State =
                      #state{orig_state = NextState,
-                            args = {_SnapID, Options, Path, Toss},
+                            args = {SnapID, Options, Path, Toss},
                             uuid = VM}) ->
     [snapshot_action(VM, Snap, fun do_restore/4, Options)
      || Snap <- Path],
     [snapshot_action(VM, Snap, fun do_delete_snapshot/4,
                      fun finish_delete_snapshot/4, Options)
      || Snap <- Toss],
-    case NextState of
-        restoring_xml ->
-            {next_state, NextState, State};
-        _ ->
-            {next_state, NextState, State#state{orig_state=undefined, args={}}}
-    end.
-
-restoring_xml(timeout, State =
-                  #state{args = {SnapID, Opts, _Path, _Toss},
-                         uuid = UUID}) ->
-    case libsniffle:vm_get(UUID) of
-        {ok, VMObj} ->
-            case jsxd:get([<<"backups">>, SnapID, <<"xml">>], false, VMObj) of
-                true ->
-                    UUIDL = binary_to_list(UUID),
-                    Conf = chunter_snap:mk_s3_conf(Opts),
-                    Bucket = proplists:get_value(s3_bucket, Opts),
-                    {ok, XML} = fifo_s3:download(Bucket, <<UUID/binary, "/", SnapID/binary, ".xml">>, Conf),
-                    ok = file:write_file(<<"/etc/zones/", UUID/binary, ".xml">>, XML),
-                    os:cmd("echo '" ++ UUIDL ++ ":installed:/zones/" ++ UUIDL ++ ":" ++ UUIDL ++ "' >> /etc/zones/index"),
-                    {next_state, loading, State};
-                false ->
-                    {stop, no_xml, State}
-            end;
-
-        _ ->
-            {stop, not_found, State}
-    end.
+    libhowl:send(VM,
+                 [{<<"event">>, <<"backup">>},
+                  {<<"data">>,
+                   [{<<"action">>, <<"restored">>},
+                    {<<"uuid">>, SnapID}]}]),
+    {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 creating_backup(timeout, State = #state{orig_state = NextState,
                                         args={SnapID, Options}}) ->

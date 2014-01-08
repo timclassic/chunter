@@ -335,7 +335,7 @@ nic_driver_test() ->
     ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
 
 zone_ram_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10},{<<"ram">>, 1024}]),
+    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}]),
     InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"dataset">>, <<"d">>}]),
     InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = apply_defaults(InP, InD, InO),
@@ -435,9 +435,11 @@ nics_test() ->
     ?assertEqual(In, to_sniffle(to_vmadm(InP, InD, InO))).
 
 apply_defaults(InP, InD, InO) ->
+    Swap = jsxd:get(<<"ram">>, 0, InP),
     jsxd:thread([{merge, InP},
                  {set, <<"autoboot">>, true},
                  {set, <<"cpu_cap">>, 100},
+                 {set, <<"max_swap">>, Swap},
                  {delete, <<"name">>},
                  {set, <<"package">>, <<"p">>},
                  {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
@@ -458,7 +460,7 @@ apply_defaults_kvm(InP, InD, InO, Cap, N) ->
                     {<<"image_size">>, 0},
                     {<<"image_uuid">>, <<"d">>}],
                    [{<<"boot">>, false},
-                         {<<"size">>, 10240}]]},
+                    {<<"size">>, 10240}]]},
                  {set, <<"vcpus">>, N}],
                 In0).
 -endif.

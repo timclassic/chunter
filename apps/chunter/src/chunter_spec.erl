@@ -50,7 +50,7 @@ generate_sniffle(In, _Type) ->
     KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>,
                 <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
                 <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
-                <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>],
+                <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>],
     jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
                       jsxd:merge(Int, Obj);
                   (<<"dataset_uuid">>, V, Obj) ->
@@ -119,6 +119,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                           jsxd:get(<<"autoboot">>, true,  OwnerData)},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
                          {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
+                         {set, <<"max_swap">>, jsxd:get(<<"max_swap">>, Ram, Package)},
                          {set, <<"owner_uuid">>,
                           jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>,  OwnerData)},
                          {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare, Package)},
@@ -209,7 +210,7 @@ generate_spec(Package, Dataset, OwnerData) ->
 
 create_update(_, [], Config) ->
     KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>,
-                <<"update_nics">>, <<"autoboot">>],
+                <<"update_nics">>, <<"autoboot">>, <<"max_swap">>],
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
                            (<<"root_pw">>, V, Obj) ->

@@ -54,11 +54,11 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     NSQ = case application:get_env(nsq_producer) of
-              undefined ->
-                  false;
-              {Host, Port} ->
+              {ok, {Host, Port}} ->
                   ensq:producer(metrics, Host, Port),
-                  true
+                  true;
+              _ ->
+                  false
           end,
     timer:send_interval(1000, tick),
     eplugin:call('perf:init'),

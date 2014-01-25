@@ -30,6 +30,10 @@
  [{default, "1MB"},
   {datatype, bytesize}]}.
 
+{mapping, "nsq_producer", "chunter.nsq_producer",
+ [{commented, {"127.0.0.1", 4150}},
+  {datatype, ip}]}.
+
 %% @doc The interval the zones are checked for their state, this means running
 %% `zoneadm list -ip` on the node. This is only required if a change is missed
 %% due to some hickup but it ensures that the state of zones is always up to

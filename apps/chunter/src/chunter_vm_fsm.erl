@@ -194,6 +194,7 @@ init([UUID]) ->
     {Hypervisor, _} = chunter_server:host_info(),
     libsniffle:vm_register(UUID, Hypervisor),
     timer:send_interval(900000, update_snapshots), % This is every 15 minutes
+    timer:send_interval(10000, update_services),  % This is every 10 seconds
     snapshot_sizes(UUID),
     {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor}}.
 
@@ -241,7 +242,6 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     Type = case jsxd:get(<<"type">>, SniffleData1) of
                {ok, <<"kvm">>} -> kvm;
                _ ->
-                   timer:send_interval(10000, update_services),  % This is every 10 seconds
                    zone
 
            end,
@@ -492,7 +492,6 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             Type = case jsxd:get(<<"type">>, SniffleData) of
                        {ok, <<"kvm">>} -> kvm;
                        _ ->
-                           timer:send_interval(10000, update_services),  % This is every 10 seconds
                            zone
                    end,
             lager:info("[~s] Has type: ~p.", [UUID, Type]),
@@ -722,16 +721,16 @@ handle_info({_D,{exit_status,1}}, StateName,
     {next_state, StateName, State};
 
 handle_info(update_services, StateName, State=#state{uuid=UUID}) ->
-    {ok, Services} =  smurf:list(UUID),
-    lager:info("[~s] Updating Services.", [UUID, length(Services)]),
-    Services1 = [[{<<"service">>, Srv},
-                  {<<"state">>, SrvState}] || {Srv, SrvState, _} <- Services],
-    libsniffle:vm_set(UUID, <<"services">>, jsxd:from_list(Services1)),
-    {next_state, StateName, State};
-
-handle_info(update_snapshots, StateName, State) ->
-    snapshot_sizes(State#state.uuid),
-    {next_state, StateName, State};
+    case smurf:list(UUID) of
+        {ok, Services} ->
+            lager:info("[~s] Updating ~p Services.", [UUID, length(Services)]),
+            Services1 = [[{<<"service">>, Srv},
+                          {<<"state">>, SrvState}] || {Srv, SrvState, _} <- Services],
+            libsniffle:vm_set(UUID, <<"services">>, jsxd:from_list(Services1)),
+            {next_state, StateName, State};
+        _ ->
+            {next_state, StateName, State}
+        end;
 
 handle_info(get_info, stopped, State) ->
     {next_state, stopped, State};

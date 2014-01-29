@@ -21,7 +21,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {i=0, kstat}).
+-record(state, {i=0, kstat, nsq}).
 
 %%%===================================================================
 %%% API
@@ -53,10 +53,17 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    NSQ = case application:get_env(nsq_producer) of
+              {ok, {Host, Port}} ->
+                  ensq:producer(metrics, Host, Port),
+                  true;
+              _ ->
+                  false
+          end,
     timer:send_interval(1000, tick),
     eplugin:call('perf:init'),
     {ok, Handle} = ekstat:open(),
-    {ok, #state{kstat = Handle}}.
+    {ok, #state{kstat = Handle, nsq=NSQ}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -104,31 +111,36 @@ handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 30) =:=0->
     Res = eplugin:fold('perf:tick:1s', {KStat, []}),
     Res1 = eplugin:fold('perf:tick:10s', Res),
     {KStat, Res2} = eplugin:fold('perf:tick:30s', Res1),
-    Res3 = lists:map(fun ({K, V}) ->
-                             {<<K/binary, "-metrics">>, V}
-                     end, Res2),
-    libhowl:send(Res3),
+    send(Res2, State#state.nsq),
     {noreply, State#state{i = I + 1}};
 
 handle_info(tick, State = #state{kstat = KStat, i = I}) when (I rem 10) =:=0->
     ekstat:update(KStat),
     Res = eplugin:fold('perf:tick:1s', {KStat, []}),
     {KStat, Res1} = eplugin:fold('perf:tick:10s', Res),
-    Res2 = lists:map(fun ({K, V}) ->
-                             {<<K/binary, "-metrics">>, V}
-                     end, Res1),
-    libhowl:send(Res2),
+    send(Res1, State#state.nsq),
     {noreply, State#state{i = I + 1}};
 handle_info(tick, State = #state{kstat = KStat, i = I}) ->
     ekstat:update(KStat),
     {KStat, Res} = eplugin:fold('perf:tick:1s', {KStat, []}),
-    Res1 = lists:map(fun ({K, V}) ->
-                             {<<K/binary, "-metrics">>, V}
-                     end, Res),
-    libhowl:send(Res1),
+    send(Res, State#state.nsq),
     {noreply, State#state{i = I + 1}};
 handle_info(_Info, State) ->
     {noreply, State}.
+
+send(Res, true) ->
+    Res1 = lists:map(fun ({K, V}) ->
+                             JSON = jsx:encode([{vm, K}, {data, V}]),
+                             ensq:send(metrics, JSON),
+                             {<<K/binary, "-metrics">>, V}
+                     end, Res),
+    libhowl:send(Res1);
+
+send(Res, false) ->
+    Res1 = lists:map(fun ({K, V}) ->
+                             {<<K/binary, "-metrics">>, V}
+                     end, Res),
+    libhowl:send(Res1).
 
 %%--------------------------------------------------------------------
 %% @private

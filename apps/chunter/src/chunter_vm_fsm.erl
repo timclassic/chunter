@@ -78,6 +78,7 @@
                 zonedoor,
                 orig_state,
                 args,
+                services = [],
                 listeners = [],
                 public_state}).
 
@@ -193,6 +194,7 @@ init([UUID]) ->
     {Hypervisor, _} = chunter_server:host_info(),
     libsniffle:vm_register(UUID, Hypervisor),
     timer:send_interval(900000, update_snapshots), % This is every 15 minutes
+    timer:send_interval(10000, update_services),  % This is every 10 seconds
     snapshot_sizes(UUID),
     {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor}}.
 
@@ -713,6 +715,16 @@ handle_info({_D,{exit_status,1}}, StateName,
                        type = zone
                       }) ->
     timer:send_after(1000, init_zonedoor),
+    {next_state, StateName, State};
+
+handle_info(update_services, StateName, State=#state{uuid=UUID, type=zone}) ->
+    {ok, Services} =  smurf:list(UUID),
+    Services1 = [[{<<"service">>, Srv},
+                  {<<"state">>, SrvState}] || {Srv, SrvState, _} <- Services],
+    libsniffle:vm_set(UUID, <<"services">>, jsxd:from_list(Services1)),
+    {next_state, StateName, State};
+
+handle_info(update_services, StateName, State) ->
     {next_state, StateName, State};
 
 handle_info(update_snapshots, StateName, State) ->

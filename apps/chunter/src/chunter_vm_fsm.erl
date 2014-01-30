@@ -690,14 +690,14 @@ handle_info({D, {data, {eol, Data}}}, StateName,
     end,
     {next_state, StateName, State};
 
-handle_info({_C,{exit_status,1}}, stopped,
+handle_info({_C,{exit_status, _}}, stopped,
             State = #state{
                        console = _C,
                        type = zone
                       }) ->
     {next_state, stopped, State};
 
-handle_info({_C,{exit_status,1}}, StateName,
+handle_info({_C,{exit_status, _}}, StateName,
             State = #state{
                        console = _C,
                        type = zone
@@ -705,14 +705,14 @@ handle_info({_C,{exit_status,1}}, StateName,
     timer:send_after(1000, init_console),
     {next_state, StateName, State};
 
-handle_info({_D,{exit_status,1}}, stopped,
+handle_info({_D,{exit_status, _}}, stopped,
             State = #state{
                        zonedoor = _D,
                        type = zone
                       }) ->
     {next_state, stopped, State};
 
-handle_info({_D,{exit_status,1}}, StateName,
+handle_info({_D, {exit_status, _}}, StateName,
             State = #state{
                        zonedoor = _D,
                        type = zone

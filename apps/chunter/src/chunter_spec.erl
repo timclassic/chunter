@@ -47,7 +47,7 @@ to_sniffle(Spec) ->
                        Type::fifo:vm_type()) -> fifo:config_list().
 
 generate_sniffle(In, _Type) ->
-    KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>,
+    KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>, <<"routes">>,
                 <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
                 <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
                 <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>],
@@ -114,7 +114,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                       0
               end,
     RamShare = round(1024*RamPerc),
-    Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>]},
+    Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>, <<"routes">>]},
                          {set, <<"autoboot">>,
                           jsxd:get(<<"autoboot">>, true,  OwnerData)},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
@@ -210,7 +210,7 @@ generate_spec(Package, Dataset, OwnerData) ->
 
 create_update(_, [], Config) ->
     KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>,
-                <<"update_nics">>, <<"autoboot">>, <<"max_swap">>],
+                <<"update_nics">>, <<"autoboot">>, <<"max_swap">>, <<"set_routes">>, <<"remove_routes">>],
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                                jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
                            (<<"root_pw">>, V, Obj) ->

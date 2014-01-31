@@ -194,7 +194,6 @@ start_link(UUID) ->
 init([UUID]) ->
     {Hypervisor, _} = chunter_server:host_info(),
     libsniffle:vm_register(UUID, Hypervisor),
-    libsniffle:vm_set(UUID, <<"services">>, delete),
     timer:send_interval(900000, update_snapshots), % This is every 15 minutes
     timer:send_interval(10000, update_services),  % This is every 10 seconds
     snapshot_sizes(UUID),
@@ -489,7 +488,6 @@ handle_event({force_state, NextState}, StateName, State) ->
 
 handle_event(register, StateName, State = #state{uuid = UUID}) ->
     libsniffle:vm_register(UUID, State#state.hypervisor),
-    libsniffle:vm_set(UUID, <<"services">>, delete),
     %%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(UUID) of
         {error, not_found} ->
@@ -736,17 +734,25 @@ handle_info(update_services, StateName, State=#state{
                                                 }) ->
     case smurf:list(UUID) of
         {ok, Services} ->
-            lager:info("[~s] Updating ~p Services.", [UUID, length(Services)]),
-            ServiceSet = ordsets:from_list(Services),
+            Services1 = [{Srv, SrvSt} || {Srv, SrvSt, _} <- Services],
+            ServiceSet = ordsets:from_list(Services1),
             case ordsets:subtract(ServiceSet, OldServices) of
                 [] ->
                     {next_state, StateName, State};
-
                 Changed ->
-                    libsniffle:vm_set(UUID, [{[<<"services">>, Srv], SrvState}
-                                             || {Srv, SrvState, _} <- Changed]),
-                    update_services(UUID, [{Srv, SrvState} ||
-                                              {Srv, SrvState, _} <- Changed], NSQ),
+                    case OldServices of
+                        [] ->
+                            lager:info("[~s] Initializing ~p Services.",
+                                       [UUID, length(Changed)]),
+                            libsniffle:vm_set(UUID, <<"services">>, ServiceSet);
+                        _ ->
+                            lager:info("[~s] Updating ~p Services.",
+                                       [UUID, length(Changed)]),
+                            libsniffle:vm_set(
+                              UUID, [{[<<"services">>, Srv], SrvState}
+                                     || {Srv, SrvState} <- Changed]),
+                            update_services(UUID, Changed, NSQ)
+                    end,
                     {next_state, StateName, State#state{services = ServiceSet}}
             end;
         _ ->

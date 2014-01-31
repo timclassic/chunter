@@ -743,9 +743,10 @@ handle_info(update_services, StateName, State=#state{
                     {next_state, StateName, State};
 
                 Changed ->
-                    Services2 = [{Srv, SrvState} || {Srv, SrvState, _} <- Changed],
-                    libsniffle:vm_set(UUID, <<"services">>, Services2),
-                    update_services(UUID, Services2, NSQ),
+                    libsniffle:vm_set(UUID, [{[<<"services">>, Srv], SrvState}
+                                             || {Srv, SrvState, _} <- Changed]),
+                    update_services(UUID, [{Srv, SrvState} ||
+                                              {Srv, SrvState, _} <- Changed], NSQ),
                     {next_state, StateName, State#state{services = ServiceSet}}
             end;
         _ ->

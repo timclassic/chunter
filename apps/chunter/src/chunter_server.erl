@@ -108,6 +108,13 @@ init([]) ->
     libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, SysInfo},
                                      {<<"version">>, ?VERSION},
                                      {<<"virtualisation">>, Capabilities}]),
+    case application:get_env(nsq_producer) of
+        {ok, {Host, Port}} ->
+            ensq:producer(services, Host, Port),
+            true;
+        _ ->
+            false
+    end,
 
     {ok, #state{
             sysinfo = SysInfo,

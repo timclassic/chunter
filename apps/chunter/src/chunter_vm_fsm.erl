@@ -80,6 +80,7 @@
                 args,
                 services = [],
                 listeners = [],
+                nsq = false,
                 public_state}).
 
 %%%===================================================================
@@ -193,10 +194,17 @@ start_link(UUID) ->
 init([UUID]) ->
     {Hypervisor, _} = chunter_server:host_info(),
     libsniffle:vm_register(UUID, Hypervisor),
+    libsniffle:vm_set(UUID, <<"services">>, delete),
     timer:send_interval(900000, update_snapshots), % This is every 15 minutes
     timer:send_interval(10000, update_services),  % This is every 10 seconds
     snapshot_sizes(UUID),
-    {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor}}.
+    NSQ = case application:get_env(nsq_producer) of
+              {ok, _} ->
+                  true;
+              _ ->
+                  false
+          end,
+    {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor, nsq = NSQ}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -481,6 +489,7 @@ handle_event({force_state, NextState}, StateName, State) ->
 
 handle_event(register, StateName, State = #state{uuid = UUID}) ->
     libsniffle:vm_register(UUID, State#state.hypervisor),
+    libsniffle:vm_set(UUID, <<"services">>, delete),
     %%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(UUID) of
         {error, not_found} ->
@@ -501,7 +510,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
             State1 = State#state{type = Type},
             change_state(State1#state.uuid, atom_to_binary(StateName), false),
-            {next_state, StateName, State1}
+            {next_state, StateName, State1#state{services = []}}
     end;
 
 handle_event({update, Package, Config}, StateName,
@@ -720,14 +729,20 @@ handle_info({_D, {exit_status, _}}, StateName,
     timer:send_after(1000, init_zonedoor),
     {next_state, StateName, State};
 
-handle_info(update_services, StateName, State=#state{uuid=UUID}) ->
+handle_info(update_services, StateName, State=#state{
+                                                 uuid=UUID,
+                                                 nsq=NSQ,
+                                                 services = OldServices
+                                                }) ->
     case smurf:list(UUID) of
         {ok, Services} ->
             lager:info("[~s] Updating ~p Services.", [UUID, length(Services)]),
-            Services1 = [[{<<"service">>, Srv},
-                          {<<"state">>, SrvState}] || {Srv, SrvState, _} <- Services],
-            libsniffle:vm_set(UUID, <<"services">>, jsxd:from_list(Services1)),
-            {next_state, StateName, State};
+            ServiceSet = ordsets:from_list(Services),
+            Changed = ordsets:substract(ServiceSet, OldServices),
+            Services2 = [{Srv, SrvState} || {Srv, SrvState, _} <- Changed],
+            libsniffle:vm_set(UUID, <<"services">>, Services2),
+            update_services(UUID, Services2, NSQ),
+            {next_state, StateName, State#state{services = ServiceSet}};
         _ ->
             {next_state, StateName, State}
         end;
@@ -1241,3 +1256,12 @@ backup_update(VM, SnapID, K, V) ->
                    [{<<"action">>, <<"update">>},
                     {<<"data">>, [{K, V}]},
                     {<<"uuid">>, SnapID}]}]).
+
+
+update_services(UUID, Changed, true) ->
+    JSON = jsx:encode([{vm, UUID}, {data, Changed}]),
+    ensq:send(services, JSON),
+    update_services(UUID, Changed, false);
+
+update_services(UUID, Changed, false) ->
+    libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed}]).

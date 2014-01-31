@@ -738,11 +738,16 @@ handle_info(update_services, StateName, State=#state{
         {ok, Services} ->
             lager:info("[~s] Updating ~p Services.", [UUID, length(Services)]),
             ServiceSet = ordsets:from_list(Services),
-            Changed = ordsets:subtract(ServiceSet, OldServices),
-            Services2 = [{Srv, SrvState} || {Srv, SrvState, _} <- Changed],
-            libsniffle:vm_set(UUID, <<"services">>, Services2),
-            update_services(UUID, Services2, NSQ),
-            {next_state, StateName, State#state{services = ServiceSet}};
+            case ordsets:subtract(ServiceSet, OldServices) of
+                [] ->
+                    {next_state, StateName, State};
+
+                Changed ->
+                    Services2 = [{Srv, SrvState} || {Srv, SrvState, _} <- Changed],
+                    libsniffle:vm_set(UUID, <<"services">>, Services2),
+                    update_services(UUID, Services2, NSQ),
+                    {next_state, StateName, State#state{services = ServiceSet}}
+            end;
         _ ->
             {next_state, StateName, State}
         end;

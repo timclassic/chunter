@@ -109,8 +109,8 @@ init([]) ->
                                      {<<"version">>, ?VERSION},
                                      {<<"virtualisation">>, Capabilities}]),
     case application:get_env(nsq_producer) of
-        {ok, {Host, Port}} ->
-            ensq:producer(services, Host, Port),
+        {ok, {NSQHost, NSQPort}} ->
+            ensq:producer(services, NSQHost, NSQPort),
             true;
         _ ->
             false

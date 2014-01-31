@@ -36,6 +36,9 @@ test: all
 	$(REBAR) skip_deps=true xref
 	$(REBAR) skip_deps=true eunit
 
+qtest:
+	$(REBAR) skip_deps=true eunit
+
 rel: all
 	-rm -r ./rel/chunter/share
 	$(REBAR) generate

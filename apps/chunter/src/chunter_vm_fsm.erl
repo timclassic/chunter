@@ -750,7 +750,7 @@ handle_info(update_services, StateName, State=#state{
                                        [UUID, length(Changed)]),
                             [libsniffle:vm_set(
                                UUID, [<<"services">>, Srv], SrvState)
-                             || {Srv, SrvState} <- Changed]),
+                             || {Srv, SrvState} <- Changed],
                             update_services(UUID, Changed, NSQ)
                     end,
                     {next_state, StateName, State#state{services = ServiceSet}}

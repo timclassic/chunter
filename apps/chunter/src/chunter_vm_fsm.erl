@@ -748,9 +748,9 @@ handle_info(update_services, StateName, State=#state{
                         _ ->
                             lager:info("[~s] Updating ~p Services.",
                                        [UUID, length(Changed)]),
-                            libsniffle:vm_set(
-                              UUID, [{[<<"services">>, Srv], SrvState}
-                                     || {Srv, SrvState} <- Changed]),
+                            [libsniffle:vm_set(
+                               UUID, [<<"services">>, Srv], SrvState)
+                             || {Srv, SrvState} <- Changed]),
                             update_services(UUID, Changed, NSQ)
                     end,
                     {next_state, StateName, State#state{services = ServiceSet}}

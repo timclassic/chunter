@@ -1,8 +1,11 @@
 REBAR = $(shell pwd)/rebar
 
-.PHONY: deps rel package
+.PHONY: deps rel package quick-test
 
-all: deps compile
+all: cp-hooks deps compile
+
+cp-hooks:
+	cp hooks/* .git/hooks
 
 apps/chunter/priv/zonedoor: utils/zonedoor.c
 	gcc -lzdoor utils/zonedoor.c -o apps/chunter/priv/zonedoor
@@ -36,7 +39,7 @@ test: all
 	$(REBAR) skip_deps=true xref
 	$(REBAR) skip_deps=true eunit
 
-qtest:
+quick-test: cp-hooks
 	$(REBAR) skip_deps=true eunit
 
 rel: all

@@ -764,7 +764,7 @@ handle_info(update_services, StateName, State=#state{
             end;
         _ ->
             {next_state, StateName, State}
-        end;
+    end;
 
 handle_info(get_info, stopped, State) ->
     {next_state, stopped, State};
@@ -1162,7 +1162,7 @@ snapshot_sizes(VM) ->
                      _ ->
                          []
                  end,
-            libsniffle:vm_set(VM, R1 ++ R);
+            [libsniffle:vm_set(VM, K, Size) || {K, Size} <- (R1 ++ R)];
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),
             ok

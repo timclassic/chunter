@@ -659,6 +659,10 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%--------------------------------------------------------------------
 
 
+handle_info(update_snapshots, StateName, State = #state{uuid = UUID}) ->
+    snapshot_sizes(UUID),
+    {next_state, StateName, State};
+
 handle_info({C, {data, Data}}, StateName, State = #state{console = C,
                                                          listeners = Ls}) ->
     Ls1 = [ L || L <- Ls, is_process_alive(L)],
@@ -730,7 +734,8 @@ handle_info({_D, {exit_status, _}}, StateName,
 handle_info(update_services, StateName, State=#state{
                                                  uuid=UUID,
                                                  nsq=NSQ,
-                                                 services = OldServices
+                                                 services = OldServices,
+                                                 type = zone
                                                 }) ->
     case smurf:list(UUID) of
         {ok, Services} ->
@@ -765,6 +770,10 @@ handle_info(update_services, StateName, State=#state{
         _ ->
             {next_state, StateName, State}
     end;
+
+handle_info(update_services, StateName, State) ->
+    lager:debug("[~s] Ignoring service update for KVM.", [State#state.uuid]),
+    {next_state, StateName, State};
 
 handle_info(get_info, stopped, State) ->
     {next_state, stopped, State};
@@ -1073,6 +1082,7 @@ snapshp_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
                       {error, <<"missing">>}
               end
       end, LastReply, Disks).
+
 snapshot_action(VM, UUID, Fun, Opts) ->
     snapshot_action(VM, UUID, Fun, fun(_,_,_,_) -> ok end, Opts).
 

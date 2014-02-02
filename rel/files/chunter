@@ -132,7 +132,8 @@ case "$1" in
         $NODETOOL stop
         ES=$?
         if [ "$ES" -ne 0 ]; then
-            exit $ES
+            echo "We died with exit code $ES but still exit properly"
+            #exit $ES
         fi
         pkill -z0 zonedoor
         while `kill -0 $PID 2>/dev/null`;

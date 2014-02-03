@@ -437,7 +437,7 @@ nics_test() ->
     ?assertEqual(In, to_sniffle(to_vmadm(InP, InD, InO))).
 
 apply_defaults(InP, InD, InO) ->
-    Swap = jsxd:get(<<"ram">>, 0, InP)*2,
+    Swap = erlang:max(256, jsxd:get(<<"ram">>, 0, InP)*2),
     jsxd:thread([{merge, InP},
                  {set, <<"autoboot">>, true},
                  {set, <<"cpu_cap">>, 100},

@@ -41,6 +41,7 @@
          delete_snapshot/2,
          delete_backup/2,
          rollback_snapshot/2,
+         service_action/3,
          force_state/2]).
 
 %% gen_fsm callbacks
@@ -140,6 +141,13 @@ restore_backup(UUID, SnapID, Options) ->
               {global, {vm, UUID}}, {backup, restore, SnapID, Options})
     end.
 
+
+service_action(UUID, Action, Service)
+  when Action =:= enable;
+       Action =:= disable;
+       Action =:= clear ->
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}},
+                                      {service, Action, Service}).
 
 backup(UUID, SnapID, Options) ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, {backup, SnapID, Options}).
@@ -609,6 +617,18 @@ handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
     backup_update(State#state.uuid, SnapID, <<"local">>, false),
     backup_update(State#state.uuid, SnapID, <<"local_size">>, 0),
     {reply, ok, deleting_snapshot, State1, 0};
+
+handle_sync_event({service, enable, Service}, _From, StateName, State) ->
+    smurf:enable(Service, [{zone, State#state.uuid}]),
+    {reply, ok, StateName, State, 0};
+
+handle_sync_event({service, disable, Service}, _From, StateName, State) ->
+    smurf:disable(Service, [{zone, State#state.uuid}]),
+    {reply, ok, StateName, State, 0};
+
+handle_sync_event({service, clear, Service}, _From, StateName, State) ->
+    smurf:clear(Service, [{zone, State#state.uuid}]),
+    {reply, ok, StateName, State, 0};
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID, Options}},

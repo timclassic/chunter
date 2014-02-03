@@ -114,12 +114,14 @@ generate_spec(Package, Dataset, OwnerData) ->
                       0
               end,
     RamShare = round(1024*RamPerc),
+    MaxSwap = jsxd:get(<<"max_swap">>, Ram*2, Package),
+    MaxSwap1 = erlang:max(256, MaxSwap),
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>, <<"routes">>]},
                          {set, <<"autoboot">>,
                           jsxd:get(<<"autoboot">>, true,  OwnerData)},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
                          {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
-                         {set, <<"max_swap">>, jsxd:get(<<"max_swap">>, Ram, Package)},
+                         {set, <<"max_swap">>, MaxSwap1},
                          {set, <<"owner_uuid">>,
                           jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>,  OwnerData)},
                          {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare, Package)},
@@ -435,7 +437,7 @@ nics_test() ->
     ?assertEqual(In, to_sniffle(to_vmadm(InP, InD, InO))).
 
 apply_defaults(InP, InD, InO) ->
-    Swap = jsxd:get(<<"ram">>, 0, InP),
+    Swap = jsxd:get(<<"ram">>, 0, InP)*2,
     jsxd:thread([{merge, InP},
                  {set, <<"autoboot">>, true},
                  {set, <<"cpu_cap">>, 100},

@@ -385,6 +385,7 @@ restoring_backup(timeout, State =
                   {<<"data">>,
                    [{<<"action">>, <<"restored">>},
                     {<<"uuid">>, SnapID}]}]),
+    timer:send_after(500, get_info),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 creating_backup(timeout, State = #state{orig_state = NextState,
@@ -796,6 +797,7 @@ handle_info(update_services, StateName, State) ->
     {next_state, StateName, State};
 
 handle_info(get_info, stopped, State) ->
+    timer:send_after(1000, get_info),
     {next_state, stopped, State};
 
 handle_info(get_info, StateName, State=#state{type=zone}) ->

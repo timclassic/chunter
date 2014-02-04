@@ -73,7 +73,7 @@
 -define(WRITE_RETRY, 10).
 
 -record(state, {hypervisor,
-                type,
+                type = zone,
                 uuid,
                 console,
                 zonedoor,
@@ -256,9 +256,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
                           {<<"config">>, SniffleData1}]}]),
     Type = case jsxd:get(<<"type">>, SniffleData1) of
                {ok, <<"kvm">>} -> kvm;
-               _ ->
-                   zone
-
+               _ -> zone
            end,
     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
     install_image(DatasetUUID),
@@ -292,13 +290,19 @@ initialized({restore, SnapID, Options},
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
             backup_update(VM, SnapID, <<"local">>, true),
+            Type = case jsxd:get(<<"type">>, VMObj) of
+                       {ok, <<"kvm">>} -> kvm;
+                       _ -> zone
+                   end,
             State1 = State#state{orig_state=loading,
+                                 type = Type,
                                  args={SnapID, Options, Path, Toss}},
             libhowl:send(<<"command">>,
                          [{<<"event">>, <<"vm-restored">>},
                           {<<"uuid">>, uuid:uuid4s()},
                           {<<"data">>,
                            [{<<"uuid">>, VM}]}]),
+
             {next_state, restoring_backup, State1, 0};
         E ->
             {next_state, E, initialized, State}
@@ -506,8 +510,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             SniffleData = chunter_spec:to_sniffle(VMData),
             Type = case jsxd:get(<<"type">>, SniffleData) of
                        {ok, <<"kvm">>} -> kvm;
-                       _ ->
-                           zone
+                       _ -> zone
                    end,
             lager:info("[~s] Has type: ~p.", [UUID, Type]),
             libhowl:send(UUID, [{<<"event">>, <<"update">>},

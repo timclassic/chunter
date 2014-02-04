@@ -1174,6 +1174,9 @@ snapshot_sizes(VM) ->
                                                end, Snaps),
                         Local = [N || {N, _ } <- Backups2],
                         NonLocal = lists:subtract(KnownB, Local),
+                        lager:debug("[~s] Local: ~p", [VM, Local]),
+                        lager:debug("[~s] KnownB: ~p", [VM, KnownB]),
+                        lager:debug("[~s] NonLocal: ~p", [VM, NonLocal]),
                         [{[<<"backups">>, Name, <<"local_size">>], Size}
                          || {Name, Size} <- Backups1] ++
                             [{[<<"backups">>, Name, <<"local_size">>], 0}

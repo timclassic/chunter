@@ -1169,14 +1169,10 @@ snapshot_sizes(VM) ->
                         Backups1 =lists:filter(fun ({Name, _}) ->
                                                        lists:member(Name, KnownB)
                                                end, Snaps),
-                        Backups2 =lists:filter(fun ({Name, _}) ->
-                                                       not lists:member(Name, KnownB)
-                                               end, Snaps),
-                        Local = [N || {N, _ } <- Backups2],
+                        Local = [N || {N, _ } <- Backups1],
                         NonLocal = lists:subtract(KnownB, Local),
                         lager:debug("[~s] Snaps: ~p", [VM, Snaps]),
                         lager:debug("[~s] Backups1: ~p", [VM, Backups1]),
-                        lager:debug("[~s] Backups2: ~p", [VM, Backups2]),
                         lager:debug("[~s] Local: ~p", [VM, Local]),
                         lager:debug("[~s] KnownB: ~p", [VM, KnownB]),
                         lager:debug("[~s] NonLocal: ~p", [VM, NonLocal]),

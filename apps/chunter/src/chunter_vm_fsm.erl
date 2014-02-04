@@ -619,16 +619,13 @@ handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
     {reply, ok, deleting_snapshot, State1, 0};
 
 handle_sync_event({service, enable, Service}, _From, StateName, State) ->
-    smurf:enable(Service, [{zone, State#state.uuid}]),
-    {reply, ok, StateName, State, 0};
+    {reply, smurf:enable(Service, [{zone, State#state.uuid}]), StateName, State, 0};
 
 handle_sync_event({service, disable, Service}, _From, StateName, State) ->
-    smurf:disable(Service, [{zone, State#state.uuid}]),
-    {reply, ok, StateName, State, 0};
+    {reply, smurf:disable(Service, [{zone, State#state.uuid}]), StateName, State, 0};
 
 handle_sync_event({service, clear, Service}, _From, StateName, State) ->
-    smurf:clear(Service, [{zone, State#state.uuid}]),
-    {reply, ok, StateName, State, 0};
+    {reply, smurf:clear(Service, [{zone, State#state.uuid}]), StateName, State, 0};
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID, Options}},

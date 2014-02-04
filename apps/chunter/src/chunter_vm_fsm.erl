@@ -1171,11 +1171,6 @@ snapshot_sizes(VM) ->
                                                end, Snaps),
                         Local = [N || {N, _ } <- Backups1],
                         NonLocal = lists:subtract(KnownB, Local),
-                        lager:debug("[~s] Snaps: ~p", [VM, Snaps]),
-                        lager:debug("[~s] Backups1: ~p", [VM, Backups1]),
-                        lager:debug("[~s] Local: ~p", [VM, Local]),
-                        lager:debug("[~s] KnownB: ~p", [VM, KnownB]),
-                        lager:debug("[~s] NonLocal: ~p", [VM, NonLocal]),
                         [{[<<"backups">>, Name, <<"local_size">>], Size}
                          || {Name, Size} <- Backups1] ++
                             [{[<<"backups">>, Name, <<"local_size">>], 0}
@@ -1195,8 +1190,6 @@ snapshot_sizes(VM) ->
                          []
                  end,
             BnS = R1 ++ R,
-            lager:debug("[~s] Updating Backups and Snapshots: ~p",
-                        [VM, BnS]),
             [libsniffle:vm_set(VM, K, Size) || {K, Size} <- BnS];
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),

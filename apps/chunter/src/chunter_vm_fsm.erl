@@ -202,8 +202,10 @@ start_link(UUID) ->
 init([UUID]) ->
     {Hypervisor, _} = chunter_server:host_info(),
     libsniffle:vm_register(UUID, Hypervisor),
-    timer:send_interval(900000, update_snapshots), % This is every 15 minutes
-    timer:send_interval(10000, update_services),  % This is every 10 seconds
+    {ok, SnapshotIVal} = application:get_env(snapshot_update_interval),
+    {ok, ServiceIVal} = application:get_env(update_services_interval),
+    timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
+    timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
     snapshot_sizes(UUID),
     NSQ = case application:get_env(nsq_producer) of
               {ok, _} ->

@@ -1,38 +1,62 @@
 %% -*- erlang -*-
 
-
-{mapping, "paralell_uploads", "fifo_s3.upload_pool_size",
- [{default, 5},
-  {datatype, integer}]}.
-
-{mapping, "max_paralell_uploads", "fifo_s3.upload_pool_max",
- [{default, 10},
-  {datatype, integer}]}.
-
-{mapping, "preload", "fifo_s3.download_preload_chunks",
- [{default, 2},
-  {datatype, integer}]}.
-
-{mapping, "paralell_downloads", "fifo_s3.download_pool_size",
- [{default, 5},
-  {datatype, integer}]}.
-
-{mapping, "max_paralell_downloads", "fifo_s3.download_pool_max",
- [{default, 10},
-  {datatype, integer}]}.
-
-
+%% @doc Size of the chunks for uploading to the s3 storage.
 {mapping, "s3_upload_chunk_size", "chunter.upload_chunk",
  [{default, "1MB"},
   {datatype, bytesize}]}.
 
+%% @doc Initial number of paralel uploads to s3.
+{mapping, "paralell_uploads", "fifo_s3.upload_pool_size",
+ [{default, 5},
+  {datatype, integer}]}.
+
+%% @doc Maximal number of paralel uploads to s3.
+{mapping, "max_paralell_uploads", "fifo_s3.upload_pool_max",
+ [{default, 10},
+  {datatype, integer}]}.
+
+%% @doc Number of chunks to prefreth.
+{mapping, "preload", "fifo_s3.download_preload_chunks",
+ [{default, 2},
+  {datatype, integer}]}.
+
+%% @doc Size of the chunks for downloading fomr the s3 storage.
 {mapping, "s3_download_chunk_size", "chunter.download_chunk",
  [{default, "1MB"},
   {datatype, bytesize}]}.
 
+%% @doc Initial number of paralel downloads from s3.
+{mapping, "paralell_downloads", "fifo_s3.download_pool_size",
+ [{default, 5},
+  {datatype, integer}]}.
+
+%% @doc Maximal number of paralel downloads from s3.
+{mapping, "max_paralell_downloads", "fifo_s3.download_pool_max",
+ [{default, 10},
+  {datatype, integer}]}.
+
+%% @doc NSQ endpoint to send messages to, right now performance metrics
+%% and service changes
+%% changes are noted even when the state is the same at least for the nsq
+%% logging.
+
 {mapping, "nsq_producer", "chunter.nsq_producer",
  [{commented, {"127.0.0.1", 4150}},
   {datatype, ip}]}.
+
+%% @doc The interval services for a zone are checked, the default is 10s
+%% changes are noted even when the state is the same at least for the nsq
+%% logging.
+{mapping, "update_services_interval", "chunter.update_services_interval",
+ [{default, "10s"},
+  {datatype, {duration, ms}}]}.
+
+%% @doc The interval the ZFS snapshots are checked this should not be too fast
+%% since it will increase load. The default is every 15 minutes. This also does
+%% not change too often so increasing it does not make too much sense.
+{mapping, "snapshot_update_interval", "chunter.snapshot_update_interval",
+ [{default, "15m"},
+  {datatype, {duration, ms}}]}.
 
 %% @doc The interval the zones are checked for their state, this means running
 %% `zoneadm list -ip` on the node. This is only required if a change is missed

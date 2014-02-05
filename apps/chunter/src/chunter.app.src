@@ -23,9 +23,10 @@
                   ranch
                  ]},
   {mod, { chunter_app, []}},
-  {env, [
-         {port, 4200},
+  {env, [{port, 4200},
          {zonemon_interval, 1000},
-         {zpool_interval, 30000}
+         {zpool_interval, 30000},
+         {snapshot_update_interval, 900000},
+         {update_services_interval, 10000}
         ]}
  ]}.

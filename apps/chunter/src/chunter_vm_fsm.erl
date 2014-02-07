@@ -390,9 +390,8 @@ restoring_backup(timeout, State =
     timer:send_after(500, get_info),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
-creating_backup(timeout, State = #state{orig_state = NextState,
+creating_backup(timeout, State = #state{orig_state = NextState, uuid=VM,
                                         args={SnapID, Options}}) ->
-    VM = State#state.uuid,
     lager:debug("Creating Backup with options: ~p", [Options]),
     case proplists:is_defined(create, Options) of
         true ->

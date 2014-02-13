@@ -65,8 +65,13 @@ then
         conf_fifo_ip=$(ipadm show-addr -o ADDROBJ,ADDR  | grep "^$conf_fifo_nic" | awk '{print $2}' | awk -F/ '{print $1}')
         conf_admin_ip=$conf_fifo_ip
     fi
-    sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" $DST/chunter/etc/chunter.conf.example > $DST/chunter/etc/chunter.conf
-    cp $DST/chunter/etc/chunter.conf.example $DST/chunter/etc/chunter.conf
+    if [[ "$conf_admin_ip" = "" ]]
+    then
+        cp $DST/chunter/etc/chunter.conf.example $DST/chunter/etc/chunter.conf
+    else
+        sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" $DST/chunter/etc/chunter.conf.example > $DST/chunter/etc/chunter.conf
+    fi
+
 fi
 
 mkdir -p $DST/custom/smf

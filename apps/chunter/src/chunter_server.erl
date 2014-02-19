@@ -37,8 +37,10 @@
                 port,
                 sysinfo,
                 connected = false,
+                services = [],
                 capabilities = [],
                 total_memory = 0,
+                nsq = false,
                 provisioned_memory = 0}).
 
 %%%===================================================================
@@ -88,6 +90,8 @@ init([]) ->
                "chunter:init.", []),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
+    ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
+    timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
     register_hypervisor(),
     lists:foldl(
       fun (VM, _) ->
@@ -115,11 +119,17 @@ init([]) ->
         _ ->
             false
     end,
-
+    NSQ = case application:get_env(nsq_producer) of
+              {ok, _} ->
+                  true;
+              _ ->
+                  false
+          end,
     {ok, #state{
             sysinfo = SysInfo,
             name = Host,
-            capabilities = Capabilities
+            capabilities = Capabilities,
+            nsq = NSQ
            }}.
 
 
@@ -257,6 +267,37 @@ handle_cast(Msg, #state{name = Name} = State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info(update_services, State=#state{
+                                                 name=Host,
+                                                 nsq=NSQ,
+                                                 services = OldServices
+                                                }) ->
+    case {chunter_smf:update(OldServices), OldServices} of
+        {{ok, ServiceSet, Changed}, []} ->
+            lager:info("[GZ] Initializing ~p Services.",
+                       [length(Changed)]),
+            libsniffle:hypervisor_set(Host, <<"services">>,
+                                      [{Srv, St}
+                                       || {Srv, _, St} <- Changed]),
+            {next_state, State#state{services = ServiceSet}};
+        {{ok, ServiceSet, Changed}, _} ->
+            lager:info("[GZ] Updating ~p Services.",
+                       [length(Changed)]),
+            %% Update changes which are not removes
+            [libsniffle:hypervisor_set(
+               Host, [<<"services">>, Srv], SrvState)
+             || {Srv, _, SrvState} <- Changed,
+                SrvState =/= <<"removed">>],
+            %% Delete services that were changed.
+            [libsniffle:hypervisor_set(
+               Host, [<<"services">>, Srv], delete)
+             || {Srv, _, <<"removed">>} <- Changed],
+            update_services(Host, Changed, NSQ),
+            {next_state, State#state{services = ServiceSet}};
+        _ ->
+            {next_state, State}
+    end;
+
 handle_info(timeout, State) ->
     {noreply, State};
 
@@ -355,3 +396,14 @@ register_hypervisor() ->
             libsniffle:hypervisor_register(Host, IPStr, Port),
             ok
     end.
+
+update_services(UUID, Changed, true) ->
+    Changed1 = [{Srv, [{<<"old">>, Old},
+                       {<<"new">>, New}]} || {Srv, Old, New} <- Changed],
+    JSON = jsx:encode([{hypervisor, UUID}, {data, Changed1}]),
+    ensq:send(services, JSON),
+    update_services(UUID, Changed, false);
+
+update_services(UUID, Changed, false) ->
+    Changed1 = [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New],
+    libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}]).

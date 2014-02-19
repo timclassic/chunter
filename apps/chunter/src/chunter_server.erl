@@ -279,7 +279,7 @@ handle_info(update_services, State=#state{
             libsniffle:hypervisor_set(Host, <<"services">>,
                                       [{Srv, St}
                                        || {Srv, _, St} <- Changed]),
-            {next_state, State#state{services = ServiceSet}};
+            {noreply, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
             lager:info("[GZ] Updating ~p Services.",
                        [length(Changed)]),
@@ -293,9 +293,9 @@ handle_info(update_services, State=#state{
                Host, [<<"services">>, Srv], delete)
              || {Srv, _, <<"removed">>} <- Changed],
             update_services(Host, Changed, NSQ),
-            {next_state, State#state{services = ServiceSet}};
+            {noreply, State#state{services = ServiceSet}};
         _ ->
-            {next_state, State}
+            {noreply, State}
     end;
 
 handle_info(timeout, State) ->

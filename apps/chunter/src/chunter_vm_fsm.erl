@@ -759,36 +759,28 @@ handle_info(update_services, StateName, State=#state{
                                                  services = OldServices,
                                                  type = zone
                                                 }) ->
-    case smurf:list(UUID) of
-        {ok, Services} ->
-            ServiceSet = ordsets:from_list(Services),
-            case cmp_states(OldServices, ServiceSet) of
-                [] ->
-                    {next_state, StateName, State};
-                Changed ->
-                    case OldServices of
-                        [] ->
-                            lager:info("[~s] Initializing ~p Services.",
-                                       [UUID, length(Changed)]),
-                            libsniffle:vm_set(UUID, <<"services">>,
-                                              [{Srv, St}
-                                               || {Srv, _, St} <- Changed]);
-                        _ ->
-                            lager:info("[~s] Updating ~p Services.",
-                                       [UUID, length(Changed)]),
-                            %% Update changes which are not removes
-                            [libsniffle:vm_set(
-                               UUID, [<<"services">>, Srv], SrvState)
-                             || {Srv, _, SrvState} <- Changed,
-                                SrvState =/= <<"removed">>],
-                            %% Delete services that were changed.
-                            [libsniffle:vm_set(
-                               UUID, [<<"services">>, Srv], delete)
-                             || {Srv, _, <<"removed">>} <- Changed],
-                            update_services(UUID, Changed, NSQ)
-                    end,
-                    {next_state, StateName, State#state{services = ServiceSet}}
-            end;
+    case {chunter_smf:update(UUID, OldServices), OldServices} of
+        {{ok, ServiceSet, Changed}, []} ->
+            lager:info("[~s] Initializing ~p Services.",
+                       [UUID, length(Changed)]),
+            libsniffle:vm_set(UUID, <<"services">>,
+                              [{Srv, St}
+                               || {Srv, _, St} <- Changed]),
+            {next_state, StateName, State#state{services = ServiceSet}};
+        {{ok, ServiceSet, Changed}, _} ->
+            lager:info("[~s] Updating ~p Services.",
+                       [UUID, length(Changed)]),
+            %% Update changes which are not removes
+            [libsniffle:vm_set(
+               UUID, [<<"services">>, Srv], SrvState)
+             || {Srv, _, SrvState} <- Changed,
+                SrvState =/= <<"removed">>],
+            %% Delete services that were changed.
+            [libsniffle:vm_set(
+               UUID, [<<"services">>, Srv], delete)
+             || {Srv, _, <<"removed">>} <- Changed],
+            update_services(UUID, Changed, NSQ),
+            {next_state, StateName, State#state{services = ServiceSet}};
         _ ->
             {next_state, StateName, State}
     end;
@@ -1305,7 +1297,6 @@ backup_update(VM, SnapID, K, V) ->
                     {<<"data">>, [{K, V}]},
                     {<<"uuid">>, SnapID}]}]).
 
-
 update_services(UUID, Changed, true) ->
     Changed1 = [{Srv, [{<<"old">>, Old},
                        {<<"new">>, New}]} || {Srv, Old, New} <- Changed],
@@ -1316,43 +1307,3 @@ update_services(UUID, Changed, true) ->
 update_services(UUID, Changed, false) ->
     Changed1 = [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New],
     libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}]).
-
-cmp_states(Old, New) ->
-    Changed1 = lists:foldl(fun({Srv, State, _}, Acc) ->
-                                   case lists:keyfind(Srv, 1, Old) of
-                                       false ->
-                                           [{Srv, <<"none">>, State} | Acc];
-                                       {Srv, OldState, _} ->
-                                           [{Srv, OldState, State} | Acc]
-                                   end
-                           end, [], ordsets:subtract(New, Old)),
-    Changed2 = lists:foldl(fun({Srv, State, _}, Acc) ->
-                                   case lists:keyfind(Srv, 1, New) of
-                                       false ->
-                                           [{Srv, State, <<"removed">>} | Acc];
-                                       {Srv, _, _} ->
-                                           Acc
-                                   end
-                           end, Changed1, ordsets:subtract(Old, New)),
-    ordsets:from_list(Changed2).
-
--ifdef(TEST).
-
-cmp_states_test() ->
-    Old = [{unchanged, running, 0},
-           {unchanged1, running, 0},
-           {deleted, running, 0},
-           {changed, stopped, 0}],
-    New = [{unchanged, running, 0},
-           {unchanged1, running, 0},
-           {new, running, 0},
-           {changed, running, 0}],
-    OldS = ordsets:from_list(Old),
-    NewS = ordsets:from_list(New),
-    Expected = [{deleted, running, <<"removed">>},
-                {new, <<"none">>, running},
-                {changed, stopped, running}],
-    ExpectedS = ordsets:from_list(Expected),
-    ?assertEqual(ExpectedS, cmp_states(OldS, NewS)).
-
--endif.

@@ -26,6 +26,7 @@ start_link() ->
 init([]) ->
     {ok, {{one_for_one, 5, 10},
           [
+           ?CHILD(chunter_lock, server),
            ?CHILD(chunter_vm_sup, supervisor),
            ?CHILD(chunter_server, worker),
            ?CHILD(chunter_kstat_arc, worker),

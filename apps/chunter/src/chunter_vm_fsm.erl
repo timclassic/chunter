@@ -317,7 +317,9 @@ initialized(_, State) ->
                       {next_state, atom(), State::term()}.
 
 creating({transition, NextState}, State) ->
-    {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}}.
+    chunter_lock:release(State#state.uuid),
+    {next_state, binary_to_atom(NextState),
+     State#state{public_state = change_state(State#state.uuid, NextState)}}.
 
 -spec loading({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.

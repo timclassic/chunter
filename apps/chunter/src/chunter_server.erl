@@ -22,9 +22,7 @@
          connect/0,
          update_mem/0,
          reserve_mem/1,
-         disconnect/0,
-         lock/1,
-         release/1]).
+         disconnect/0]).
 
 
 %% gen_server callbacks
@@ -39,19 +37,10 @@
 
 -define(HOST_ID_FILE, "host_id").
 
-%% Timeout for which a lock can be held before it needs to release.
--ifndef(TEST).
-%% Default is 1m.
--define(LOCK_TIMEOUT, 60*1000*1000).
--else.
-%% In tests we want this to be much shorter.
--define(LOCK_TIMEOUT, 500*1000).
--endif.
-
 -record(state, {name,
                 port,
                 sysinfo,
-                lock = undefined,
+
                 connected = false,
                 services = [],
                 capabilities = [],
@@ -85,12 +74,6 @@ reserve_mem(N) ->
 
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
-
-lock(UUID) ->
-    gen_server:call(?SERVER, {lock, UUID}, 500).
-
-release(UUID) ->
-    gen_server:call(?SERVER, {release, UUID}, 500).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -169,44 +152,6 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-
-handle_call({release, UUID}, _From, #state{lock = undefined} = State) ->
-    lager:warning("[lock] Tried to release ~s we were not locked.",
-                  [UUID]),
-    {reply, failed, State};
-
-handle_call({release, UUID}, _From, #state{lock = {UUID, Old}} = State) ->
-    D = timer:now_diff(now(), Old),
-    lager:info("[lock] Lock ~s released after ~ps", [UUID, D/(1000*1000)]),
-    {reply, ok, State#state{lock=undefined}};
-
-handle_call({release, NewUUID}, _From, #state{lock = {OldUUID, _}} = State) ->
-    lager:warning("[lock] Tried to release ~s but ~s was the lock.",
-                  [NewUUID, OldUUID]),
-    {reply, failed, State};
-
-handle_call({lock, UUID}, _From, #state{lock = undefined} = State) ->
-    lager:info("[lock] Lock ~s claimed", [UUID]),
-    {reply, ok, State#state{lock = {UUID, now()}}};
-
-handle_call({lock, UUID}, _From, #state{lock = {UUID, Old}} = State) ->
-    D = timer:now_diff(now(), Old),
-    lager:info("[lock] Lock ~s renewed after ~ps", [UUID, D/(1000*1000)]),
-    {reply, ok, State#state{lock = {UUID, now()}}};
-
-handle_call({lock, NewUUID}, _From, #state{lock = {OldUUID, Old}} = State) ->
-    case timer:now_diff(now(), Old) of
-        D when D > ?LOCK_TIMEOUT ->
-            io:format("~p > ~p ~n.", [D, ?LOCK_TIMEOUT]),
-            lager:warning("[lock] Lock ~s timed out after ~ps and replaced by "
-                          "~s.", [OldUUID, NewUUID, D/(1000*1000)]),
-            {reply, ok, State#state{lock = {NewUUID, now()}}};
-        D ->
-            lager:info("[lock] Lock ~s rejected old lock ~p still in effect "
-                       "for another ~ps.",
-                       [NewUUID, OldUUID, (D - ?LOCK_TIMEOUT)/(1000*1000)]),
-            {reply, failed, State}
-    end;
 
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
     %%    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
@@ -467,35 +412,3 @@ update_services(UUID, Changed, true) ->
 update_services(UUID, Changed, false) ->
     Changed1 = [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New],
     libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}]).
-
-
--ifdef(TEST).
-
-lock_test() ->
-    State0 = #state{},
-    {reply, R1, State1} = handle_call({lock, 1}, from, State0),
-    {reply, R2, State2} = handle_call({lock, 2}, from, State1),
-    {reply, R3, State3} = handle_call({lock, 2}, from, State2),
-    {reply, R4, State4} = handle_call({release, 2}, from, State3),
-    {reply, R5, State5} = handle_call({release, 1}, from, State4),
-    {reply, R6, _State6} = handle_call({release, 1}, from, State5),
-    ?assertEqual(ok, R1),
-    ?assertEqual(failed, R2),
-    ?assertEqual(failed, R3),
-    ?assertEqual(failed, R4),
-    ?assertEqual(ok, R5),
-    ?assertEqual(failed, R6),
-    ok.
-
-timeout_test() ->
-    State0 = #state{},
-    {reply, R1, State1} = handle_call({lock, 1}, from, State0),
-    timer:sleep(250),
-    {reply, R2, State2} = handle_call({lock, 2}, from, State1),
-    timer:sleep(300),
-    {reply, R3, _State3} = handle_call({lock, 2}, from, State2),
-    ?assertEqual(ok, R1),
-    ?assertEqual(failed, R2),
-    ?assertEqual(ok, R3).
-
--endif.

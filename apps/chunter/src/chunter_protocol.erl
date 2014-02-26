@@ -178,6 +178,7 @@ handle_message({machines, service, enable, UUID, Service}, State)
        is_binary(Service) ->
     {stop, chunter_vm_fsm:service_action(UUID, enable, Service), State};
 
+
 handle_message({machines, service, disable, UUID, Service}, State)
   when is_binary(UUID),
        is_binary(Service) ->
@@ -265,10 +266,18 @@ handle_message({machines, reboot, force, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:force_reboot(UUID),
     {stop, State};
 
+handle_message({lock, UUID}, State) ->
+    {stop, chunter_server:lock(UUID), State};
+
 handle_message({machines, create, UUID, PSpec, DSpec, Config}, State)
   when is_binary(UUID), is_list(PSpec), is_list(DSpec), is_list(Config) ->
-    chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
-    {stop, State};
+    case chunter_server:lock(UUID) of
+        ok ->
+            chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
+            {stop, ok, State};
+        _ ->
+            {stop, {error, lock}, State}
+    end;
 
 handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
     chunter_vm_fsm:delete(UUID),
@@ -295,7 +304,6 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
 
 llquantize(Data) ->
     lists:foldr(fun ({_, Path, Vals}, Obj) ->

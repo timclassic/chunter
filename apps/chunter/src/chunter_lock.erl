@@ -23,6 +23,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-ignore_xref([start_link/0]).
+
 -define(SERVER, ?MODULE).
 
 %% Timeout for which a lock can be held before it needs to release.

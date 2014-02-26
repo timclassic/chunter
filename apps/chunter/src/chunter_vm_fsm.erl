@@ -763,7 +763,7 @@ handle_info(update_services, StateName, State=#state{
                                                 }) ->
     case {chunter_smf:update(UUID, OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
-            lager:info("[~s] Initializing ~p Services.",
+            lager:debug("[~s] Initializing ~p Services.",
                        [UUID, length(Changed)]),
             libsniffle:vm_set(UUID, <<"services">>,
                               [{Srv, St}

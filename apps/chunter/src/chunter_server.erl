@@ -279,8 +279,8 @@ handle_info(update_services, State=#state{
                                                 }) ->
     case {chunter_smf:update(OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
-            lager:info("[GZ] Initializing ~p Services.",
-                       [length(Changed)]),
+            lager:debug("[GZ] Initializing ~p Services.",
+                        [length(Changed)]),
             libsniffle:hypervisor_set(Host, <<"services">>,
                                       [{Srv, St}
                                        || {Srv, _, St} <- Changed]),

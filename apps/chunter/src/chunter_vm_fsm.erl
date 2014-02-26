@@ -770,8 +770,8 @@ handle_info(update_services, StateName, State=#state{
                                || {Srv, _, St} <- Changed]),
             {next_state, StateName, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
-            lager:info("[~s] Updating ~p Services.",
-                       [UUID, length(Changed)]),
+            lager:debug("[~s] Updating ~p Services.",
+                        [UUID, length(Changed)]),
             %% Update changes which are not removes
             [libsniffle:vm_set(
                UUID, [<<"services">>, Srv], SrvState)

@@ -267,11 +267,11 @@ handle_message({machines, reboot, force, UUID}, State) when is_binary(UUID) ->
     {stop, State};
 
 handle_message({lock, UUID}, State) ->
-    {stop, chunter_server:lock(UUID), State};
+    {stop, chunter_lock:lock(UUID), State};
 
 handle_message({machines, create, UUID, PSpec, DSpec, Config}, State)
   when is_binary(UUID), is_list(PSpec), is_list(DSpec), is_list(Config) ->
-    case chunter_server:lock(UUID) of
+    case chunter_lock:lock(UUID) of
         ok ->
             chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
             {stop, ok, State};

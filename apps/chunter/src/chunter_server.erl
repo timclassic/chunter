@@ -22,6 +22,7 @@
          connect/0,
          update_mem/0,
          reserve_mem/1,
+         service_action/2,
          disconnect/0]).
 
 
@@ -74,6 +75,13 @@ reserve_mem(N) ->
 
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
+
+service_action(Action, Service)
+  when Action =:= enable;
+       Action =:= disable;
+       Action =:= clear ->
+    gen_server:call(?SERVER, {service, Action, Service}).
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -160,9 +168,17 @@ handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
 
+handle_call({service, enable, Service}, _From, State) ->
+    {reply, smurf:enable(Service, []), State};
+
+handle_call({service, disable, Service}, _From, State) ->
+    {reply, smurf:disable(Service, []), State};
+
+handle_call({service, clear, Service}, _From, State) ->
+    {reply, smurf:clear(Service, []), State};
+
 handle_call(_Request, _From, State) ->
     {reply, {error, unknwon}, State}.
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -174,6 +190,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+
 
 handle_cast(update_mem, State = #state{name = Host}) ->
     VMS = list_vms(),

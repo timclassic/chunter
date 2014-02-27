@@ -123,9 +123,9 @@ handle_call({lock, NewUUID}, _From, #state{lock = {OldUUID, Old}} = State) ->
                           "~s.", [OldUUID, NewUUID, D/(1000*1000)]),
             {reply, ok, State#state{lock = {NewUUID, now()}}};
         D ->
-            lager:info("[lock] Lock ~s rejected old lock ~p still in effect "
+            lager:info("[lock] Lock ~s rejected old lock ~s still in effect "
                        "for another ~ps.",
-                       [NewUUID, OldUUID, (D - ?LOCK_TIMEOUT)/(1000*1000)]),
+                       [NewUUID, OldUUID, (?LOCK_TIMEOUT - D)/(1000*1000)]),
             {reply, failed, State}
     end.
 

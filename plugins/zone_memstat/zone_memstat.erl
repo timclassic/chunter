@@ -14,10 +14,11 @@ zone_memstat({KStat, Acc}) ->
     {KStat, build_obj(Data2, Acc)}.
 
 build_obj([Keys | R], Data) ->
-    case list_to_binary(proplists:get_value(<<"zonename">>, Keys)) of
+    case proplists:get_value(<<"zonename">>, Keys) of
         undefined ->
             build_obj(R, Data);
-        UUID ->
+        UUIDs ->
+            UUID = list_to_binary(UUIDs),
             Statistics = lists:foldl(fun({<<"zonename">>, _}, Obj) ->
                                              Obj;
                                         ({K, V}, Obj) ->

@@ -28,6 +28,8 @@ build_obj([Keys | R], Data) ->
     case list_to_binary(proplists:get_value(<<"zonename">>, Keys)) of
         <<"global">> ->
             build_obj(R, Data);
+        undefined ->
+            build_obj(R, Data);
         UUID ->
             Statistics = lists:foldl(fun({<<"zonename">>, _}, Obj) ->
                                              Obj;

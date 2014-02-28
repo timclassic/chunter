@@ -207,7 +207,7 @@ init([UUID]) ->
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
     timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
-    timer:send_interval(1000, init_zeondoor),  % Check Zonedoor status every second
+    timer:send_interval(1000, init_zonedoor),  % Check Zonedoor status every second
     snapshot_sizes(UUID),
     NSQ = case application:get_env(nsq_producer) of
               {ok, _} ->
@@ -728,55 +728,53 @@ handle_info({D, {data, {eol, Data}}}, StateName,
     {next_state, StateName, State};
 
 handle_info({_C,{exit_status, _}}, stopped,
-            State = #state{
-                       console = _C,
-                       type = zone
-                      }) ->
-    lager:warning("[console] Exited but vm in stopped"),
+            State = #state{console = _C}) ->
+    lager:warning("[console:~s] Exited but vm in stopped", [State#state.uuid]),
     {next_state, stopped, State};
 
 handle_info({_C,{exit_status, Status}}, StateName,
-            State = #state{
-                       console = _C,
-                       type = zone
-                      }) ->
-    lager:warning("[console] Exited with status: ~p", [Status]),
+            State = #state{console = _C}) ->
+    lager:warning("[console:~s] Exited with status: ~p",
+                  [State#state.uuid, Status]),
     timer:send_after(1000, init_console),
     {next_state, StateName, State};
 
+handle_info({'EXIT', _C, PosixCode}, stopped,
+            State = #state{console = _C}) ->
+    lager:warning("[console:~s] Exited with status ~p but vm in stopped.",
+                  [State#state.uuid, PosixCode]),
+    {next_state, stopped, State};
 handle_info({'EXIT', _C, PosixCode}, StateName,
-            State = #state{
-                       console = _C,
-                       type = zone
-                      }) ->
-    lager:warning("[console] Exited with code: ~p", [PosixCode]),
+            State = #state{console = _C}) ->
+    lager:warning("[console:~s] Exited with code: ~p",
+                  [State#state.uuid, PosixCode]),
     timer:send_after(1000, init_console),
     {next_state, StateName, State};
 
 handle_info({_D, {exit_status, _}}, stopped,
-            State = #state{
-                       zonedoor = _D,
-                       type = zone
-                      }) ->
+            State = #state{zonedoor = _D}) ->
     lager:warning("[zonedoor:~s] Exited but vm in stopped", [State#state.uuid]),
     {next_state, stopped, State};
 
 handle_info({_D, {exit_status, Status}}, StateName,
-            State = #state{
-                       zonedoor = _D,
-                       type = zone
-                      }) ->
+            State = #state{zonedoor = _D}) ->
     lager:warning("[zonedoor:~s] Exited with status: ~p", [State#state.uuid, Status]),
     timer:send_after(1000, init_zonedoor),
     {next_state, StateName, State};
 
+handle_info({'EXIT', _D, PosixCode}, stopped,
+            State = #state{zonedoor = _D}) ->
+    lager:warning("[zonedoor:~s] Exited ith ~p but vm in stopped",
+                  [State#state.uuid, PosixCode]),
+    {next_state, stopped, State};
+
 handle_info({'EXIT', _D, PosixCode}, StateName,
-            State = #state{
-                       zonedoor = _D,
-                       type = zone
-                      }) ->
+            State = #state{zonedoor = _D}) ->
     lager:warning("[zonedoor:~s] Exited with code: ~p", [State#state.uuid, PosixCode]),
     timer:send_after(1000, init_zonedoor),
+    {next_state, StateName, State};
+
+handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
     {next_state, StateName, State};
 
 handle_info(update_services, StateName, State=#state{

@@ -200,12 +200,14 @@ start_link(UUID) ->
 %% @end
 %%--------------------------------------------------------------------
 init([UUID]) ->
+    process_flag(trap_exit, true),
     {Hypervisor, _} = chunter_server:host_info(),
     libsniffle:vm_register(UUID, Hypervisor),
     SnapshotIVal = application:get_env(chunter, snapshot_update_interval, 900000),
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
     timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
+    timer:send_interval(1000, init_zeondoor),  % Check Zonedoor status every second
     snapshot_sizes(UUID),
     NSQ = case application:get_env(nsq_producer) of
               {ok, _} ->
@@ -756,7 +758,7 @@ handle_info({_D, {exit_status, _}}, stopped,
                        zonedoor = _D,
                        type = zone
                       }) ->
-    lager:warning("[zdoor] Exited but vm in stopped"),
+    lager:warning("[zonedoor:~s] Exited but vm in stopped", [State#state.uuid]),
     {next_state, stopped, State};
 
 handle_info({_D, {exit_status, Status}}, StateName,
@@ -764,7 +766,7 @@ handle_info({_D, {exit_status, Status}}, StateName,
                        zonedoor = _D,
                        type = zone
                       }) ->
-    lager:warning("[zdoor] Exited with status: ~p", [Status]),
+    lager:warning("[zonedoor:~s] Exited with status: ~p", [State#state.uuid, Status]),
     timer:send_after(1000, init_zonedoor),
     {next_state, StateName, State};
 
@@ -773,7 +775,7 @@ handle_info({'EXIT', _D, PosixCode}, StateName,
                        zonedoor = _D,
                        type = zone
                       }) ->
-    lager:warning("[zdoor] Exited with code: ~p", [PosixCode]),
+    lager:warning("[zonedoor:~s] Exited with code: ~p", [State#state.uuid, PosixCode]),
     timer:send_after(1000, init_zonedoor),
     {next_state, StateName, State};
 

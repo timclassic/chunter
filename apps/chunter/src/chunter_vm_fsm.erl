@@ -921,7 +921,6 @@ init_zonedoor(State) ->
                                  [{args, Args}, use_stdio, binary, {line, 1024}, exit_status]),
             State#state{zonedoor = DoorPort};
         _ ->
-            %%incinerate(State#state.zonedoor),
             State
     end.
 

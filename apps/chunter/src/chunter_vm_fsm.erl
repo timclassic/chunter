@@ -730,28 +730,50 @@ handle_info({_C,{exit_status, _}}, stopped,
                        console = _C,
                        type = zone
                       }) ->
+    lager:warning("[console] Exited but vm in stopped"),
     {next_state, stopped, State};
 
-handle_info({_C,{exit_status, _}}, StateName,
+handle_info({_C,{exit_status, Status}}, StateName,
             State = #state{
                        console = _C,
                        type = zone
                       }) ->
+    lager:warning("[console] Exited with status: ~p", [Status]),
     timer:send_after(1000, init_console),
     {next_state, StateName, State};
 
-handle_info({_D,{exit_status, _}}, stopped,
+handle_info({'EXIT', _C, PosixCode}, StateName,
+            State = #state{
+                       console = _C,
+                       type = zone
+                      }) ->
+    lager:warning("[console] Exited with code: ~p", [PosixCode]),
+    timer:send_after(1000, init_console),
+    {next_state, StateName, State};
+
+handle_info({_D, {exit_status, _}}, stopped,
             State = #state{
                        zonedoor = _D,
                        type = zone
                       }) ->
+    lager:warning("[zdoor] Exited but vm in stopped"),
     {next_state, stopped, State};
 
-handle_info({_D, {exit_status, _}}, StateName,
+handle_info({_D, {exit_status, Status}}, StateName,
             State = #state{
                        zonedoor = _D,
                        type = zone
                       }) ->
+    lager:warning("[zdoor] Exited with status: ~p", [Status]),
+    timer:send_after(1000, init_zonedoor),
+    {next_state, StateName, State};
+
+handle_info({'EXIT', _D, PosixCode}, StateName,
+            State = #state{
+                       zonedoor = _D,
+                       type = zone
+                      }) ->
+    lager:warning("[zdoor] Exited with code: ~p", [PosixCode]),
     timer:send_after(1000, init_zonedoor),
     {next_state, StateName, State};
 
@@ -899,7 +921,6 @@ init_zonedoor(State) ->
                                  [{args, Args}, use_stdio, binary, {line, 1024}, exit_status]),
             State#state{zonedoor = DoorPort};
         _ ->
-            %%incinerate(State#state.zonedoor),
             State
     end.
 

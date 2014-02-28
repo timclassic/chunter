@@ -859,18 +859,18 @@ handle_info(Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, State) ->
+terminate(_Reason, _StateName, State = #state{uuid = UUID}) ->
     lager:warning("Terminating vm fsm."),
     case erlang:port_info(State#state.console) of
         undefined ->
-            lager:warning("console not running"),
+            lager:debug("[terminate:~s] console not running", [UUID]),
             ok;
         _ ->
-            port_close(State#state.console)
+            incinerate(State#state.console)
     end,
     case erlang:port_info(State#state.zonedoor) of
         undefined ->
-            lager:warning("ssh door not running"),
+            lager:debug("[terminate:~s] ssh door not running", [UUID]),
             ok;
         _ ->
             %% Since the SSH process does not close with a exit we kill it with
@@ -902,14 +902,16 @@ incinerate(Port) ->
     lager:warning("Killing ~p with -9", [OsPid]),
     os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
 
-init_console(State = #state{console = _C}) when is_port(_C) ->
-    State;
-
 init_console(State) ->
-    [{_, Name, _, _, _, _}] = zoneadm(State#state.uuid),
-    Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -C " ++ binary_to_list(Name),
-    ConsolePort = open_port({spawn, Console}, [binary]),
-    State#state{console = ConsolePort}.
+    case erlang:port_info(State#state.console) of
+        undefined ->
+            [{_, Name, _, _, _, _}] = zoneadm(State#state.uuid),
+            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -C " ++ binary_to_list(Name),
+            ConsolePort = open_port({spawn, Console}, [binary]),
+            State#state{console = ConsolePort};
+        _ ->
+            State
+    end.
 
 init_zonedoor(State) ->
     case erlang:port_info(State#state.zonedoor) of

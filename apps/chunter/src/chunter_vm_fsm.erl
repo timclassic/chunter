@@ -727,6 +727,11 @@ handle_info({D, {data, {eol, Data}}}, StateName,
     end,
     {next_state, StateName, State};
 
+handle_info({_,{exit_status, _}}, stopped,
+            State = #state{type = kvm}) ->
+    {next_state, stopped, State};
+
+
 handle_info({_C,{exit_status, _}}, stopped,
             State = #state{console = _C}) ->
     lager:warning("[console:~s] Exited but vm in stopped", [State#state.uuid]),
@@ -859,8 +864,8 @@ handle_info(Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, State = #state{uuid = UUID}) ->
-    lager:warning("Terminating vm fsm."),
+terminate(Reason, _StateName, State = #state{uuid = UUID}) ->
+    lager:warning("[~s] Terminating vm fsm with reason: ~p.", [UUID, Reason]),
     case erlang:port_info(State#state.console) of
         undefined ->
             lager:debug("[terminate:~s] console not running", [UUID]),

@@ -207,7 +207,7 @@ init([UUID]) ->
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
     timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
-    timer:send_interval(1000, init_zonedoor),  % Check Zonedoor status every second
+    timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second
     snapshot_sizes(UUID),
     NSQ = case application:get_env(nsq_producer) of
               {ok, _} ->
@@ -741,7 +741,7 @@ handle_info({_C,{exit_status, Status}}, StateName,
             State = #state{console = _C}) ->
     lager:warning("[console:~s] Exited with status: ~p",
                   [State#state.uuid, Status]),
-    timer:send_after(1000, init_console),
+    timer:send_after(1000, {init, console}),
     {next_state, StateName, State};
 
 handle_info({'EXIT', _C, PosixCode}, stopped,
@@ -753,7 +753,7 @@ handle_info({'EXIT', _C, PosixCode}, StateName,
             State = #state{console = _C}) ->
     lager:warning("[console:~s] Exited with code: ~p",
                   [State#state.uuid, PosixCode]),
-    timer:send_after(1000, init_console),
+    timer:send_after(1000, {init, console}),
     {next_state, StateName, State};
 
 handle_info({_D, {exit_status, _}}, stopped,
@@ -764,7 +764,7 @@ handle_info({_D, {exit_status, _}}, stopped,
 handle_info({_D, {exit_status, Status}}, StateName,
             State = #state{zonedoor = _D}) ->
     lager:warning("[zonedoor:~s] Exited with status: ~p", [State#state.uuid, Status]),
-    timer:send_after(1000, init_zonedoor),
+    timer:send_after(1000, {init, zonedoor}),
     {next_state, StateName, State};
 
 handle_info({'EXIT', _D, PosixCode}, stopped,
@@ -776,7 +776,7 @@ handle_info({'EXIT', _D, PosixCode}, stopped,
 handle_info({'EXIT', _D, PosixCode}, StateName,
             State = #state{zonedoor = _D}) ->
     lager:warning("[zonedoor:~s] Exited with code: ~p", [State#state.uuid, PosixCode]),
-    timer:send_after(1000, init_zonedoor),
+    timer:send_after(1000, {init, zonedoor}),
     {next_state, StateName, State};
 
 handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
@@ -837,16 +837,16 @@ handle_info(get_info, StateName, State) ->
             {next_state, StateName, State}
     end;
 
-handle_info(init_console, StateName, State=#state{type=zone}) ->
+handle_info({init, _}, stopped, State) ->
+    {next_state, stopped, State};
+
+handle_info({init, console}, StateName, State=#state{type=zone}) ->
     {next_state, StateName, init_console(State)};
 
-handle_info(init_zonedoor, StateName, State=#state{type=zone}) ->
+handle_info({init, zonedoor}, StateName, State=#state{type=zone}) ->
     {next_state, StateName, init_zonedoor(State)};
 
-handle_info(init_console, StateName, State) ->
-    {next_state, StateName, State};
-
-handle_info(init_zonedoor, StateName, State) ->
+handle_info({init, _}, StateName, State) ->
     {next_state, StateName, State};
 
 handle_info(Info, StateName, State) ->

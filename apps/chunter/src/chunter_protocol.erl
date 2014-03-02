@@ -342,27 +342,28 @@ write_snapshot(UUID, SnapId, Img) ->
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
     libsniffle:dataset_set(Img, <<"imported">>, 0),
-    write_snapshot(Port, Img, <<>>, 0).
+    write_snapshot(Port, Img, <<>>, 0, undefined).
 
-write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx) ->
+write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx, Ref) ->
     lager:debug("<IMG> ~s[~p]", [Img, Idx]),
-    libsniffle:img_create(Img, Idx, binary:copy(MB)),
-    write_snapshot(Port, Img, Acc, Idx+1);
+    {ok, Ref1} = libsniffle:img_create(Img, Idx, binary:copy(MB), Ref),
+    write_snapshot(Port, Img, Acc, Idx+1, Ref1);
 
-write_snapshot(Port, Img, Acc, Idx) ->
+write_snapshot(Port, Img, Acc, Idx, Ref) ->
     receive
         {Port, {data, Data}} ->
-            write_snapshot(Port, Img, <<Acc/binary, Data/binary>>, Idx);
+            write_snapshot(Port, Img, <<Acc/binary, Data/binary>>, Idx, Ref);
         {Port,{exit_status, 0}} ->
-            case Acc of
-                <<>> ->
-                    ok;
-                _ ->
-                    lager:debug("<IMG> ~s[~p]", [Img, Idx]),
-                    libsniffle:img_create(Img, Idx, binary:copy(Acc))
-            end,
+            Ref1 = case Acc of
+                       <<>> ->
+                           Ref;
+                       _ ->
+                           lager:debug("<IMG> ~s[~p]", [Img, Idx]),
+                           {ok, RefX} = libsniffle:img_create(Img, Idx, binary:copy(Acc), Ref),
+                           RefX
+                   end,
             lager:info("Writing image ~s finished with ~p parts.", [Img, Idx]),
-            libsniffle:dataset_set(Img, <<"imported">>, 1),
+            libsniffle:dataset_set(Img, <<"imported">>, 1, Ref1),
             ok;
         {Port,{exit_status, S}} ->
             lager:error("Writing image ~s failed after ~p parts with exit "

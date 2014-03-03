@@ -897,8 +897,8 @@ handle_info(Info, StateName, State) ->
 terminate(normal, creating, #state{uuid = UUID}) ->
     lager:error("[BAD:~s] This is bad this VM is deleted while it "
                 "still exists.", [UUID]),
-    timer:sleep(1000),
-    load(UUID);
+    timer:apply_after(1000, chunter_vm_fsm, load, [UUID]);
+
 
 terminate(Reason, StateName, State = #state{uuid = UUID}) ->
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",

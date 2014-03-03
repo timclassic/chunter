@@ -335,13 +335,7 @@ creating({transition, NextState}, State = #state{uuid=UUID}) ->
     lager:debug("[creating:~s] Log released with: ~p.",
                 [UUID, R]),
     {next_state, binary_to_atom(NextState),
-     State#state{public_state = change_state(State#state.uuid, NextState)}};
-
-creating(M, State) ->
-    lager:debug("[creating:~s] got unknown message: ~p.",
-                [State#state.uuid, M]),
-    {next_state, creating, State}.
-
+     State#state{public_state = change_state(State#state.uuid, NextState)}}.
 
 -spec loading({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.
@@ -893,11 +887,6 @@ handle_info(Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(normal, creating, #state{uuid = UUID}) ->
-    lager:error("[BAD:~s] This is bad this VM is deleted while it "
-                "still exists.", [UUID]),
-    timer:apply_after(5000, chunter_vm_fsm, load, [UUID]);
-
 
 terminate(Reason, StateName, State = #state{uuid = UUID}) ->
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",

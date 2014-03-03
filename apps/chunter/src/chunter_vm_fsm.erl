@@ -821,7 +821,7 @@ handle_info(update_services, StateName, State=#state{
     case {chunter_smf:update(UUID, OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[~s] Initializing ~p Services.",
-                       [UUID, length(Changed)]),
+                        [UUID, length(Changed)]),
             libsniffle:vm_set(UUID, <<"services">>,
                               [{Srv, St}
                                || {Srv, _, St} <- Changed]),
@@ -894,6 +894,12 @@ handle_info(Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+terminate(normal, creating, #state{uuid = UUID}) ->
+    lager:error("[BAD:~s] This is bad this VM is deleted while it "
+                "still exists.", [UUID]),
+    timer:sleep(1000),
+    load(UUID);
+
 terminate(Reason, StateName, State = #state{uuid = UUID}) ->
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
                   [UUID, StateName, Reason]),
@@ -915,7 +921,6 @@ terminate(Reason, StateName, State = #state{uuid = UUID}) ->
             incinerate(State#state.zonedoor)
     end,
     ok.
-
 
 %%--------------------------------------------------------------------
 %% @private

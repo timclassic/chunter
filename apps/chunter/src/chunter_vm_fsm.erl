@@ -1311,24 +1311,28 @@ change_state(UUID, State) ->
 -spec change_state(UUID::binary(), State::fifo:vm_state(), true | false) -> ok.
 
 change_state(UUID, State, true) ->
-    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
-                 true ->
-                     <<"provisioning (", State/binary, ")">>;
-                 false ->
-                     State
-             end,
+    %% State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
+    %%              true ->
+    %%                  <<"provisioning (", State/binary, ")">>;
+    %%              false ->
+    %%                  State
+    %%          end,
+    %% This will stay out untill someone provides a propper solution
+    State1 = State,
     libsniffle:vm_log(UUID, <<"Transitioning ", State1/binary>>),
     libsniffle:vm_set(UUID, <<"state">>, State1),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1;
 
 change_state(UUID, State, false) ->
-    State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
-                 true ->
-                     <<"provisioning (", State/binary, ")">>;
-                 false ->
-                     State
-             end,
+    %% State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
+    %%              true ->
+    %%                  <<"provisioning (", State/binary, ")">>;
+    %%              false ->
+    %%                  State
+    %%          end,
+    %% This will stay out untill someone provides a propper solution
+    State1 = State,
     libsniffle:vm_set(UUID, <<"state">>, State1),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1.

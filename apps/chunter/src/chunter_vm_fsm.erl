@@ -1351,6 +1351,8 @@ backup_update(VM, SnapID, K, V) ->
                    [{<<"action">>, <<"update">>},
                     {<<"data">>, [{K, V}]},
                     {<<"uuid">>, SnapID}]}]).
+update_services(_, [], _) ->
+    ok;
 
 update_services(UUID, Changed, true) ->
     Changed1 = [{Srv, [{<<"old">>, Old},
@@ -1360,5 +1362,9 @@ update_services(UUID, Changed, true) ->
     update_services(UUID, Changed, false);
 
 update_services(UUID, Changed, false) ->
-    Changed1 = [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New],
-    libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}]).
+    case [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New] of
+        [] ->
+            ok;
+        Changed1 ->
+            libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}])
+    end.

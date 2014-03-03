@@ -323,8 +323,12 @@ initialized(_, State) ->
 -spec creating({transition, NextState::fifo:vm_state()}, State::term()) ->
                       {next_state, atom(), State::term()}.
 
-creating({transition, NextState}, State) ->
-    chunter_lock:release(State#state.uuid),
+creating({transition, NextState}, State = #state{uuid=UUID}) ->
+    lager:debug("[creating:~s] Transitioning to state ~s.",
+                [UUID, NextState]),
+    R = chunter_lock:release(UUID),
+    lager:debug("[creating:~s] Log released with: ~p.",
+                [UUID, R]),
     {next_state, binary_to_atom(NextState),
      State#state{public_state = change_state(State#state.uuid, NextState)}};
 

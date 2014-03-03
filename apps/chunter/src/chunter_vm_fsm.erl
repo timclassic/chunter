@@ -509,6 +509,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
     %%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(UUID) of
         {error, not_found} ->
+            lager:debug("[~s] Stopping in load, notfound.", [State#state.uuid]),
             {stop, not_found, State};
         VMData ->
             snapshot_sizes(UUID),
@@ -532,12 +533,16 @@ handle_event({update, Package, Config}, StateName,
              State = #state{uuid = UUID}) ->
     case load_vm(UUID) of
         {error, not_found} ->
+            lager:debug("[~s] Stopping in update, notfound.",
+                        [State#state.uuid]),
             {stop, not_found, State};
         VMData ->
             Update = chunter_spec:create_update(VMData, Package, Config),
             chunter_vmadm:update(UUID, Update),
             case load_vm(UUID) of
                 {error, not_found} ->
+                    lager:debug("[~s] Stopping in load, notfound.",
+                                [State#state.uuid]),
                     {stop, not_found, State};
                 VMData1 ->
                     chunter_server:update_mem(),
@@ -553,10 +558,12 @@ handle_event({update, Package, Config}, StateName,
     end;
 
 handle_event(remove, _StateName, State) ->
+    lager:debug("[~s] Calling remove.", [State#state.uuid]),
     libsniffle:vm_unregister(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
+    lager:debug("[~s] Calling delete.", [State#state.uuid]),
     case load_vm(UUID) of
         {error, not_found} ->
             ok;
@@ -659,6 +666,7 @@ handle_sync_event({snapshot, rollback, SnapID}, _From, StateName, State) ->
 handle_sync_event(delete, _From, StateName, State) ->
     case load_vm(State#state.uuid) of
         {error, not_found} ->
+            lager:debug("[~s] Delete sync event.", [State#state.uuid]),
             {stop, not_found, State};
         _VM ->
             spawn(chunter_vmadm, delete, [State#state.uuid]),
@@ -749,6 +757,7 @@ handle_info({'EXIT', _C, PosixCode}, stopped,
     lager:warning("[console:~s] Exited with status ~p but vm in stopped.",
                   [State#state.uuid, PosixCode]),
     {next_state, stopped, State};
+
 handle_info({'EXIT', _C, PosixCode}, StateName,
             State = #state{console = _C}) ->
     lager:warning("[console:~s] Exited with code: ~p",

@@ -69,7 +69,6 @@
          deleting_snapshot/2
         ]).
 
--define(SERVER, ?MODULE).
 -define(WRITE_RETRY, 10).
 
 -record(state, {hypervisor,
@@ -93,7 +92,7 @@
                     ok.
 
 create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
-    start_debug_link(UUID),
+    chunter_vm_sup:start_child(UUID),
     gen_fsm:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
 
 update(UUID, Package, Config) ->
@@ -104,7 +103,7 @@ update(UUID, Package, Config) ->
 load(UUID) ->
     case global:whereis_name({vm, UUID}) of
         undefined ->
-            start_link(UUID),
+            chunter_vm_sup:start_child(UUID),
             gen_fsm:send_event({global, {vm, UUID}}, load);
         _ ->
             register(UUID)
@@ -133,7 +132,7 @@ register(UUID) ->
 restore_backup(UUID, SnapID, Options) ->
     case global:whereis_name({vm, UUID}) of
         undefined ->
-            start_link(UUID),
+            chunter_vm_sup:start_child(UUID),
             gen_fsm:send_event({global, {vm, UUID}},
                                {restore, SnapID, Options});
         _ ->
@@ -182,11 +181,11 @@ console_link(UUID, Pid) ->
 start_link(UUID) ->
     gen_fsm:start_link({global, {vm, UUID}}, ?MODULE, [UUID], []).
 
-start_debug_link(UUID) ->
-    F = <<"/var/db/chunter/trace.", UUID/binary, ".log">>,
-    FileName = binary_to_list(F),
-    gen_fsm:start_link({global, {vm, UUID}}, ?MODULE, [UUID],
-                       [{debug,[trace, log, {log_to_file, FileName}]}]).
+%% start_debug_link(UUID) ->
+%%     F = <<"/var/db/chunter/trace.", UUID/binary, ".log">>,
+%%     FileName = binary_to_list(F),
+%%     gen_fsm:start_link({global, {vm, UUID}}, ?MODULE, [UUID],
+%%                        [{debug,[trace, log, {log_to_file, FileName}]}]).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -897,7 +896,7 @@ handle_info(Info, StateName, State) ->
 terminate(normal, creating, #state{uuid = UUID}) ->
     lager:error("[BAD:~s] This is bad this VM is deleted while it "
                 "still exists.", [UUID]),
-    timer:apply_after(1000, chunter_vm_fsm, load, [UUID]);
+    timer:apply_after(5000, chunter_vm_fsm, load, [UUID]);
 
 
 terminate(Reason, StateName, State = #state{uuid = UUID}) ->

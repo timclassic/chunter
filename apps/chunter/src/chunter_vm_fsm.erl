@@ -878,10 +878,10 @@ handle_info(Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(Reason, _StateName, State = #state{uuid = UUID}) ->
-    lager:warning("[terminate:~s] Terminating with reason ~p after state ~p.",
-                  [UUID, Reason]),
-    lager:warning("[terminate:~s] The state: ~p .", [UUID, Reason]),
+terminate(Reason, StateName, State = #state{uuid = UUID}) ->
+    lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
+                  [UUID, StateName, Reason]),
+    lager:warning("[terminate:~s] The state: ~p .", [State]),
     case erlang:port_info(State#state.console) of
         undefined ->
             lager:debug("[terminate:~s] console not running.", [UUID]),

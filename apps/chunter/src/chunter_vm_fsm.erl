@@ -93,7 +93,7 @@
                     ok.
 
 create(UUID, PackageSpec, DatasetSpec, VMSpec) ->
-    start_link(UUID),
+    start_debug_link(UUID),
     gen_fsm:send_event({global, {vm, UUID}}, {create, PackageSpec, DatasetSpec, VMSpec}).
 
 update(UUID, Package, Config) ->
@@ -181,6 +181,12 @@ console_link(UUID, Pid) ->
 %%--------------------------------------------------------------------
 start_link(UUID) ->
     gen_fsm:start_link({global, {vm, UUID}}, ?MODULE, [UUID], []).
+
+start_debug_link(UUID) ->
+    F = <<"/var/db/chunter/trace.", UUID/binary, ".log">>,
+    FileName = binary_to_list(F),
+    gen_fsm:start_link({global, {vm, UUID}}, ?MODULE, [UUID],
+                       [{debug,[trace, log, {log_to_file, FileName}]}]).
 
 %%%===================================================================
 %%% gen_fsm callbacks

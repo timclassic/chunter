@@ -326,7 +326,13 @@ initialized(_, State) ->
 creating({transition, NextState}, State) ->
     chunter_lock:release(State#state.uuid),
     {next_state, binary_to_atom(NextState),
-     State#state{public_state = change_state(State#state.uuid, NextState)}}.
+     State#state{public_state = change_state(State#state.uuid, NextState)}};
+
+creating(M, State) ->
+    lager:debug("[creating:~s] got unknown message: ~p.",
+                [State#state.uuid, M]),
+    {next_state, creating, State}.
+
 
 -spec loading({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.
@@ -881,7 +887,7 @@ handle_info(Info, StateName, State) ->
 terminate(Reason, StateName, State = #state{uuid = UUID}) ->
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
                   [UUID, StateName, Reason]),
-    lager:warning("[terminate:~s] The state: ~p .", [State]),
+    lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
     case erlang:port_info(State#state.console) of
         undefined ->
             lager:debug("[terminate:~s] console not running.", [UUID]),

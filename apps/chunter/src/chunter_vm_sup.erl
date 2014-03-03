@@ -56,7 +56,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    Element = {chunter_vm_fsm, {chunter_vm_fms, start_link, []},
+    Element = {chunter_vm_fsm, {chunter_vm_fsm, start_link, []},
                transient, infinity, worker, [chunter_vm_fsm]},
     Children = [Element],
     RestartStrategy = {simple_one_for_one, 5, 10},

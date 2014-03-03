@@ -41,11 +41,11 @@
 -record(state, {name,
                 port,
                 sysinfo,
-
                 connected = false,
                 services = [],
                 capabilities = [],
                 total_memory = 0,
+                reserved_memory = 0,
                 nsq = false,
                 provisioned_memory = 0}).
 
@@ -138,7 +138,15 @@ init([]) ->
               _ ->
                   false
           end,
+    ReservedMem = case application:get_env(reserved_memory) of
+                      undefined ->
+                          0;
+                      {ok, Mem} ->
+                          Mem / (1024*1024)
+                  end,
+
     {ok, #state{
+            reserved_memory = ReservedMem,
             sysinfo = SysInfo,
             name = Host,
             capabilities = Capabilities,
@@ -192,7 +200,10 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 
-handle_cast(update_mem, State = #state{name = Host}) ->
+handle_cast(update_mem, State = #state{
+                                   reserved_memory = ReservedMom,
+                                   name = Host
+                                  }) ->
     VMS = list_vms(),
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
@@ -204,7 +215,8 @@ handle_cast(update_mem, State = #state{name = Host}) ->
           os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
-    libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ProvMem},
+    libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ReservedMom - ProvMem},
+                                     {<<"resources.reserved-memory">>, ReservedMom},
                                      {<<"resources.provisioned-memory">>, ProvMem},
                                      {<<"resources.total-memory">>, TotalMem}]),
     {noreply, State#state{
@@ -215,11 +227,12 @@ handle_cast(update_mem, State = #state{name = Host}) ->
 handle_cast({reserve_mem, N}, State =
                 #state{
                    name = Host,
+                   reserved_memory = ReservedMom,
                    total_memory = TotalMem,
                    provisioned_memory = ProvMem
                   }) ->
     ProvMem1 = ProvMem + N,
-    Free = TotalMem - ProvMem1,
+    Free = TotalMem - ReservedMom - ProvMem1,
     libsniffle:hypervisor_set(Host,
                               [{<<"resources.free-memory">>, Free},
                                {<<"resources.provisioned-memory">>, ProvMem1}]),
@@ -228,6 +241,7 @@ handle_cast({reserve_mem, N}, State =
                }};
 
 handle_cast(connect, #state{name = Host,
+                            reserved_memory = ReservedMom,
                             capabilities = Caps} = State) ->
     %%    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
     %%    application:set_env(s59tatsderl, hostname, Host),
@@ -259,7 +273,8 @@ handle_cast(connect, #state{name = Host,
       [{<<"sysinfo">>, State#state.sysinfo},
        {<<"version">>, ?VERSION},
        {<<"networks">>, Networks1},
-       {<<"resources.free-memory">>, TotalMem - ProvMem},
+       {<<"resources.free-memory">>, TotalMem - ReservedMom - ProvMem},
+       {<<"resources.reserved-memory">>, ReservedMom},
        {<<"etherstubs">>, Etherstub1},
        {<<"resources.provisioned-memory">>, ProvMem},
        {<<"resources.total-memory">>, TotalMem},

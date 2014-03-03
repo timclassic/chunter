@@ -1,5 +1,11 @@
 %% -*- erlang -*-
 
+
+%% @doc Memory reserved on the hypervisor.
+{mapping, "reserved_memory", "chunter.reserved_memory",
+ [{default, "0MB"},
+  {datatype, bytesize}]}.
+
 %% @doc Size of the chunks for uploading to the s3 storage.
 {mapping, "s3_upload_chunk_size", "chunter.upload_chunk",
  [{default, "1MB"},

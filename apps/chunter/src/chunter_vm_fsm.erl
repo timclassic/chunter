@@ -879,17 +879,19 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(Reason, _StateName, State = #state{uuid = UUID}) ->
-    lager:warning("[~s] Terminating vm fsm with reason: ~p.", [UUID, Reason]),
+    lager:warning("[terminate:~s] Terminating with reason ~p after state ~p.",
+                  [UUID, Reason]),
+    lager:warning("[terminate:~s] The state: ~p .", [UUID, Reason]),
     case erlang:port_info(State#state.console) of
         undefined ->
-            lager:debug("[terminate:~s] console not running", [UUID]),
+            lager:debug("[terminate:~s] console not running.", [UUID]),
             ok;
         _ ->
             incinerate(State#state.console)
     end,
     case erlang:port_info(State#state.zonedoor) of
         undefined ->
-            lager:debug("[terminate:~s] ssh door not running", [UUID]),
+            lager:debug("[terminate:~s] ssh door not running.", [UUID]),
             ok;
         _ ->
             %% Since the SSH process does not close with a exit we kill it with

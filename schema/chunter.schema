@@ -1,6 +1,5 @@
 %% -*- erlang -*-
 
-
 %% @doc Memory reserved on the hypervisor.
 {mapping, "reserved_memory", "chunter.reserved_memory",
  [{default, "0MB"},

@@ -7,7 +7,7 @@
 -export([
          describe_restore/1,
          download/4,
-         download_to_port/3,
+         download_to_port/4,
          upload/4,
          get/1,
          get_all/2,
@@ -149,9 +149,15 @@ download(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
     Prt = open_port({spawn_executable, Cmd},
                     [{args, [P, SnapID]}, use_stdio, binary,
                      stderr_to_stdout, exit_status, stream]),
-    download_to_port(Prt, Download, 0).
+    download_to_port(Prt, Download, undefined, 0).
 
-download_to_port(Prt, Download, I) ->
+download_to_port(Prt, Download, Lock, I) ->
+    case Lock of
+        undefined ->
+            ok;
+        _ ->
+            chunter_lock:lock(Lock)
+    end,
     case fifo_s3_download:get(Download) of
         {ok, done} ->
             lager:debug("Download complete: ~p.", [I]),
@@ -160,7 +166,7 @@ download_to_port(Prt, Download, I) ->
         {ok, Data} ->
             lager:debug("Download part: ~p.", [I]),
             port_command(Prt, Data),
-            download_to_port(Prt, Download, I+1);
+            download_to_port(Prt, Download, Lock, I+1);
         {error, E} ->
             port_close(Prt),
             lager:error("Import error: ~p", [I, E]),
@@ -280,4 +286,3 @@ restore_path_test() ->
     ok.
 
 -endif.
-

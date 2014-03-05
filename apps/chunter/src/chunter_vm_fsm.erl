@@ -270,7 +270,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
     lager:debug("[create:~s] Done generating config, handing to img install.",
                 [UUID]),
-    install_image(DatasetUUID),
+    install_image(DatasetUUID, UUID),
     lager:debug("[create:~s] Done installing image going to create now.",
                 [UUID]),
     chunter_vmadm:create(VMData),
@@ -956,9 +956,9 @@ init_zonedoor(State) ->
             State
     end.
 
--spec install_image(DatasetUUID::fifo:uuid()) -> ok | string().
+-spec install_image(DatasetUUID::fifo:uuid(), VM::fifo:uuid()) -> ok | string().
 
-install_image(DatasetUUID) ->
+install_image(DatasetUUID, VM) ->
     lager:debug("Installing dataset ~s.", [DatasetUUID]),
     Path = filename:join(<<"/zones">>, DatasetUUID),
     lager:debug("Checking path ~s.", [Path]),
@@ -982,7 +982,7 @@ install_image(DatasetUUID) ->
                                       stderr_to_stdout, exit_status]),
                     port_command(Port, B),
                     lager:debug("We have the following parts: ~p.", [Parts1]),
-                    write_image(Port, DatasetUUID, Parts1, 0);
+                    write_image(Port, DatasetUUID, Parts1, VM, 0);
                 {ok, AKey, SKey, S3Host, S3Port, Bucket, Target} ->
                     Chunk = case application:get_env(chunter, download_chunk) of
                                 undefined ->
@@ -1003,7 +1003,7 @@ install_image(DatasetUUID) ->
                                      [{args, [DatasetUUID]}, use_stdio, binary,
                                       stderr_to_stdout, exit_status]),
                     port_command(Port, B),
-                    case chunter_snap:download_to_port(Port, Download, 1) of
+                    case chunter_snap:download_to_port(Port, Download, VM, 1) of
                         {ok, done} ->
                             finish_image(DatasetUUID);
                         E ->
@@ -1012,25 +1012,26 @@ install_image(DatasetUUID) ->
             end
     end.
 
-write_image(Port, UUID, [Idx|_], ?WRITE_RETRY) ->
+write_image(Port, UUID, [Idx|_], _Lock, ?WRITE_RETRY) ->
     lager:debug("<IMG> ~p import failed at chunk ~p.", [UUID, Idx]),
     port_close(Port),
     {error, retries_exceeded};
 
-write_image(Port, UUID, [Idx|R], Retry) ->
+write_image(Port, UUID, [Idx|R], Lock, Retry) ->
     lager:debug("<IMG> ~s[~p]: fetching", [UUID, Idx]),
+    chunter_lock:lock(Lock),
     case libsniffle:img_get(UUID, Idx) of
         {ok, B} ->
             lager:debug("<IMG> ~s[~p]: writing", [UUID, Idx]),
             port_command(Port, B),
-            write_image(Port, UUID, R, 0);
+            write_image(Port, UUID, R, Lock, 0);
         E ->
             lager:warning("<IMG> ~p[~p]: retry! -> ~p", [UUID, Idx, E]),
             timer:sleep(1000),
-            write_image(Port, UUID, [Idx|R], Retry+1)
+            write_image(Port, UUID, [Idx|R], Lock, Retry+1)
     end;
 
-write_image(Port, UUID, [], _) ->
+write_image(Port, UUID, [], _Lock, _) ->
     lager:debug("<IMG> done, going to wait for zfs to finish now.", []),
     port_close(Port),
     finish_image(UUID).

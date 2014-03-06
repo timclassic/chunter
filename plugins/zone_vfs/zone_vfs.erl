@@ -8,7 +8,7 @@ zone_vfs({KStat, Acc}) ->
     {KStat, build_obj(Data1, Acc)}.
 
 build_obj([Keys | R], Data) ->
-    case proplists:get_value(<<"zonename">>, Keys) of
+    case proplists:get_value("zonename", Keys) of
         undefined ->
             build_obj(R, Data);
         UUIDs ->

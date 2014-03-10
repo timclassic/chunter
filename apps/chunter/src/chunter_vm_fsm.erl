@@ -563,10 +563,15 @@ handle_event({update, Package, Config}, StateName,
                     SniffleData = chunter_spec:to_sniffle(VMData1),
                     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
                     libsniffle:vm_log(UUID, <<"Update complete.">>),
+                    UodateData =  case jsxd:get(<<"uuid">>, Package) of
+                                      {ok, PUUID} ->
+                                          [{<<"package">>, PUUID},
+                                           {<<"config">>, SniffleData}];
+                                      _ ->
+                                          [{<<"config">>, SniffleData}]
+                                  end,
                     libhowl:send(UUID, [{<<"event">>, <<"update">>},
-                                        {<<"data">>,
-                                         [{<<"package">>, jsxd:get(<<"uuid">>, <<"-">>, Package)},
-                                          {<<"config">>, SniffleData}]}]),
+                                        {<<"data">>, UodateData}]),
                     {next_state, StateName, State}
             end
     end;

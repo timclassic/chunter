@@ -211,9 +211,11 @@ update(UUID, Data) ->
 wait_for_text(Port) ->
     receive
         {Port, {data, {eol, Data}}} ->
-            lager:debug("[vmadm] ~s", [Data]);
+            lager:debug("[vmadm] ~s", [Data]),
+            wait_for_text(Port);
         {Port, {data, Data}} ->
-            lager:debug("[vmadm] ~s", [Data]);
+            lager:debug("[vmadm] ~s", [Data]),
+            wait_for_text(Port);
         {Port,{exit_status, 0}} ->
             ok;
         {Port,{exit_status, S}} ->

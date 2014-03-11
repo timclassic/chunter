@@ -192,10 +192,14 @@ update(UUID, Data) ->
         {Port, {data, {eol, Data}}} ->
             lager:debug("[vmadm] ~s", [Data]);
         {Port, {data, Data}} ->
-            lager:debug("vmadm output: ~s", [Data]);
-        {Port, {exit_status, _}} ->
+            lager:debug("[vmadm] ~s", [Data]);
+        {Port, {exit_status, 0}} ->
             chunter_server:update_mem(),
-            chunter_vm_fsm:load(UUID)
+            chunter_vm_fsm:load(UUID);
+        {Port, {exit_status, E}} ->
+            chunter_server:update_mem(),
+            chunter_vm_fsm:load(UUID),
+            {error, E}
     after
         60000 ->
             chunter_server:update_mem(),

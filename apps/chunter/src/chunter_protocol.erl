@@ -341,7 +341,7 @@ write_snapshot(UUID, SnapId, Img) ->
     Port = open_port({spawn_executable, Cmd},
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
-    libsniffle:dataset_set(Img, <<"imported">>, 0),
+    libsniffle:dataset_set(Img, <<"imported">>, <<"pending">>),
     write_snapshot(Port, Img, <<>>, 0, undefined).
 
 write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx, Ref) ->

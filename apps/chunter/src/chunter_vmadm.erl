@@ -156,7 +156,7 @@ create(Data) ->
     lager:info([{fifi_component, chunter}],
                "vmadm:create - handed to vmadm, waiting ...", []),
     timer:apply_after(5000, chunter_server, update_mem, []),
-    Res = case wait_for_text(Port) of
+    Res = case wait_for_text(Port, UUID, 60*10) of
               ok ->
                   lager:info([{fifi_component, chunter}],
                              "vmadm:create - vmadm returned sucessfully.", []),
@@ -170,7 +170,7 @@ create(Data) ->
                   delete(UUID),
                   lager:error([{fifi_component, chunter}],
                               "vmad:create - Failed: ~p.", [E]),
-                  E
+                  {error, E}
           end,
     lager:info([{fifi_component, chunter}],
                "vmadm:create - updating memory.", []),
@@ -207,27 +207,51 @@ update(UUID, Data) ->
     end.
 
 %% This function reads the process's input untill it knows that the vm was created or failed.
--spec wait_for_text(Port::any()) ->
-                           {ok, UUID::fifo:uuid()} |
-                           {error, Text::binary() |
-                                         timeout |
-                                         unknown}.
-wait_for_text(Port) ->
+%%-spec wait_for_text(Port::any()) ->
+%%                           {ok, UUID::fifo:uuid()} |
+%%                           {error, Text::binary() |
+%%                                         timeout |
+%%                                         unknown}.
+%%wait_for_text(Port) ->
+%%    wait_for_text(Port, undefined).
+
+%%wait_for_text(Port, Lock) ->
+%%    wait_for_text(Port, Lock, 60*10).
+
+wait_for_text(Port, Lock, Max) ->
+    wait_for_text(Port, Lock, Max, now()).
+
+wait_for_text(Port, Lock, Max, Timeout) ->
     receive
         {Port, {data, {eol, Data}}} ->
             lager:debug("[vmadm] ~s", [Data]),
-            wait_for_text(Port);
+            relock(Lock),
+            wait_for_text(Port, Lock, Max, Timeout);
         {Port, {data, Data}} ->
             lager:debug("[vmadm] ~s", [Data]),
-            wait_for_text(Port);
+            relock(Lock),
+            wait_for_text(Port, Lock, Max, Timeout);
         {Port,{exit_status, 0}} ->
             ok;
         {Port,{exit_status, S}} ->
             {error, S}
     after
-        60000 ->
-            lager:debug("[vmadm] timeout after 10m")
+        3000 ->
+            case timer:now_diff(now(), Timeout) of
+                _To when _To  > (Max*1000000) ->
+                    lager:debug("[vmadm] timeout after ~ps", [Max]);
+                _ ->
+                    relock(Lock),
+                    wait_for_text(Port, Lock, Max, Timeout)
+            end
     end.
+
+relock(undefined) ->
+    ok;
+relock(Lock) ->
+    chunter_lock:lock(Lock).
+
+
 
 %%%===================================================================
 %%% Internal functions

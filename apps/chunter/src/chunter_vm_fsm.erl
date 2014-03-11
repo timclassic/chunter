@@ -262,7 +262,8 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                         {<<"data">>,
                          [{<<"hypervisor">>, Hypervisor},
-                          {<<"config">>, SniffleData1}]}]),
+                          {<<"config">>, SniffleData1},
+                          {<<"package">>, jsxd:get(<<"uuid">>, <<>>, PackageSpec)}]}]),
     Type = case jsxd:get(<<"type">>, SniffleData1) of
                {ok, <<"kvm">>} -> kvm;
                _ -> zone
@@ -273,11 +274,18 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     install_image(DatasetUUID, UUID),
     lager:debug("[create:~s] Done installing image going to create now.",
                 [UUID]),
-    chunter_vmadm:create(VMData),
-    lager:debug("[create:~s] Done creating continuing on.", [UUID]),
-    {next_state, creating,
-     State#state{type = Type,
-                 public_state = change_state(UUID, <<"creating">>)}};
+    case chunter_vmadm:create(VMData) of
+        ok ->
+            lager:debug("[create:~s] Done creating continuing on.", [UUID]),
+            {next_state, creating,
+             State#state{type = Type,
+                         public_state = change_state(UUID, <<"creating">>)}};
+        {error, E} ->
+            lager:error("[create:~s] Failed to create with error: ~p",
+                        [UUID, E]),
+            change_state(UUID, <<"failed">>),
+            {stop, normal, State}
+    end;
 
 initialized({restore, SnapID, Options},
             State=#state{uuid=VM}) ->
@@ -552,26 +560,32 @@ handle_event({update, Package, Config}, StateName,
             {stop, not_found, State};
         VMData ->
             Update = chunter_spec:create_update(VMData, Package, Config),
-            chunter_vmadm:update(UUID, Update),
-            case load_vm(UUID) of
-                {error, not_found} ->
-                    lager:debug("[~s] Stopping in load, notfound.",
-                                [State#state.uuid]),
-                    {stop, not_found, State};
-                VMData1 ->
-                    chunter_server:update_mem(),
-                    SniffleData = chunter_spec:to_sniffle(VMData1),
-                    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
-                    libsniffle:vm_log(UUID, <<"Update complete.">>),
-                    UodateData =  case jsxd:get(<<"uuid">>, Package) of
-                                      {ok, PUUID} ->
-                                          [{<<"package">>, PUUID},
-                                           {<<"config">>, SniffleData}];
-                                      _ ->
-                                          [{<<"config">>, SniffleData}]
-                                  end,
-                    libhowl:send(UUID, [{<<"event">>, <<"update">>},
-                                        {<<"data">>, UodateData}]),
+            case chunter_vmadm:update(UUID, Update) of
+                ok ->
+                    case load_vm(UUID) of
+                        {error, not_found} ->
+                            lager:debug("[~s] Stopping in load, notfound.",
+                                        [State#state.uuid]),
+                            {stop, not_found, State};
+                        VMData1 ->
+                            chunter_server:update_mem(),
+                            SniffleData = chunter_spec:to_sniffle(VMData1),
+                            libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
+                            libsniffle:vm_log(UUID, <<"Update complete.">>),
+                            UodateData =  case jsxd:get(<<"uuid">>, Package) of
+                                              {ok, PUUID} ->
+                                                  [{<<"package">>, PUUID},
+                                                   {<<"config">>, SniffleData}];
+                                              _ ->
+                                                  [{<<"config">>, SniffleData}]
+                                          end,
+                            libhowl:send(UUID, [{<<"event">>, <<"update">>},
+                                                {<<"data">>, UodateData}]),
+                            {next_state, StateName, State}
+                    end;
+                {error, E} ->
+                    lager:error("[~s] updated failed with ~p", [UUID, E]),
+                    libsniffle:vm_log(UUID, <<"Update failed.">>),
                     {next_state, StateName, State}
             end
     end;

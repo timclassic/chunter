@@ -72,7 +72,7 @@
 -define(WRITE_RETRY, 10).
 
 -record(state, {hypervisor,
-                type = zone,
+                type = unknown,
                 uuid,
                 console,
                 zonedoor,
@@ -768,55 +768,52 @@ handle_info({D, {data, {eol, Data}}}, StateName,
     end,
     {next_state, StateName, State};
 
-handle_info({_,{exit_status, _}}, stopped,
-            State = #state{type = kvm}) ->
-    {next_state, stopped, State};
 
 
 handle_info({_C,{exit_status, _}}, stopped,
-            State = #state{console = _C}) ->
+            State = #state{console = _C, type=zone}) ->
     lager:warning("[console:~s] Exited but vm in stopped", [State#state.uuid]),
     {next_state, stopped, State};
 
 handle_info({_C,{exit_status, Status}}, StateName,
-            State = #state{console = _C}) ->
+            State = #state{console = _C, type=zone}) ->
     lager:warning("[console:~s] Exited with status: ~p",
                   [State#state.uuid, Status]),
     timer:send_after(1000, {init, console}),
     {next_state, StateName, State};
 
 handle_info({'EXIT', _C, PosixCode}, stopped,
-            State = #state{console = _C}) ->
+            State = #state{console = _C, type=zone}) ->
     lager:warning("[console:~s] Exited with status ~p but vm in stopped.",
                   [State#state.uuid, PosixCode]),
     {next_state, stopped, State};
 
 handle_info({'EXIT', _C, PosixCode}, StateName,
-            State = #state{console = _C}) ->
+            State = #state{console = _C, type=zone}) ->
     lager:warning("[console:~s] Exited with code: ~p",
                   [State#state.uuid, PosixCode]),
     timer:send_after(1000, {init, console}),
     {next_state, StateName, State};
 
 handle_info({_D, {exit_status, _}}, stopped,
-            State = #state{zonedoor = _D}) ->
+            State = #state{zonedoor = _D, type=zone}) ->
     lager:warning("[zonedoor:~s] Exited but vm in stopped", [State#state.uuid]),
     {next_state, stopped, State};
 
 handle_info({_D, {exit_status, Status}}, StateName,
-            State = #state{zonedoor = _D}) ->
+            State = #state{zonedoor = _D, type=zone}) ->
     lager:warning("[zonedoor:~s] Exited with status: ~p", [State#state.uuid, Status]),
     timer:send_after(1000, {init, zonedoor}),
     {next_state, StateName, State};
 
 handle_info({'EXIT', _D, PosixCode}, stopped,
-            State = #state{zonedoor = _D}) ->
+            State = #state{zonedoor = _D, type=zone}) ->
     lager:warning("[zonedoor:~s] Exited ith ~p but vm in stopped",
                   [State#state.uuid, PosixCode]),
     {next_state, stopped, State};
 
 handle_info({'EXIT', _D, PosixCode}, StateName,
-            State = #state{zonedoor = _D}) ->
+            State = #state{zonedoor = _D, type=zone}) ->
     lager:warning("[zonedoor:~s] Exited with code: ~p", [State#state.uuid, PosixCode]),
     timer:send_after(1000, {init, zonedoor}),
     {next_state, StateName, State};
@@ -857,7 +854,6 @@ handle_info(update_services, StateName, State=#state{
     end;
 
 handle_info(update_services, StateName, State) ->
-    lager:debug("[~s] Ignoring service update for KVM.", [State#state.uuid]),
     {next_state, StateName, State};
 
 handle_info(get_info, stopped, State) ->
@@ -869,7 +865,7 @@ handle_info(get_info, StateName, State=#state{type=zone}) ->
     State2 = init_zonedoor(State1),
     {next_state, StateName, State2};
 
-handle_info(get_info, StateName, State) ->
+handle_info(get_info, StateName, State=#state{type=kvm}) ->
     case chunter_vmadm:info(State#state.uuid) of
         {error, no_info} ->
             timer:send_after(1000, get_info),

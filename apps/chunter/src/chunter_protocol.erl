@@ -28,11 +28,11 @@ init([ListenerPid, Socket, Transport, _Opts]) ->
     ok = Transport:setopts(Socket, [{active, true}, {packet,4}, {nodelay, true}]),
     {OK, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #state{
-                                     ok = OK,
-                                     closed = Closed,
-                                     error = Error,
-                                     socket = Socket,
-                                     transport = Transport}).
+                                          ok = OK,
+                                          closed = Closed,
+                                          error = Error,
+                                          socket = Socket,
+                                          transport = Transport}).
 
 handle_info({data,Data}, State = #state{socket = Socket,
                                         transport = Transport}) ->
@@ -40,14 +40,14 @@ handle_info({data,Data}, State = #state{socket = Socket,
     {noreply, State};
 
 handle_info({_Closed, _Socket}, State = #state{
-                                  type = mornal,
-                                  closed = _Closed}) ->
+                                           type = mornal,
+                                           closed = _Closed}) ->
     {stop, normal, State};
 
 handle_info({_OK, Socket, BinData}, State = #state{
-                                      type = normal,
-                                      transport = Transport,
-                                      ok = _OK}) ->
+                                               type = normal,
+                                               transport = Transport,
+                                               ok = _OK}) ->
     Msg = binary_to_term(BinData),
     case Msg of
         {dtrace, Script} ->
@@ -81,10 +81,10 @@ handle_info({_OK, Socket, BinData}, State = #state{
     end;
 
 handle_info({_OK, Socket, BinData},  State = #state{
-                                       state = Handle,
-                                       type = dtrace,
-                                       transport = Transport,
-                                       ok = _OK}) ->
+                                                state = Handle,
+                                                type = dtrace,
+                                                transport = Transport,
+                                                ok = _OK}) ->
     case binary_to_term(BinData) of
         stop ->
             erltrace:stop(Handle);
@@ -121,9 +121,9 @@ handle_info({_OK, Socket, BinData},  State = #state{
     {noreply, State};
 
 handle_info({_OK, _S, Data}, State = #state{
-                               type = console,
-                               state = UUID,
-                               ok = _OK}) ->
+                                        type = console,
+                                        state = UUID,
+                                        ok = _OK}) ->
     chunter_vm_fsm:console_send(UUID, Data),
     {noreply, State};
 
@@ -162,12 +162,6 @@ handle_message({machines, backup, restore, UUID, SnapId, Options}, State)
     chunter_vm_fsm:restore_backup(UUID, SnapId, Options),
     {stop, State};
 
-handle_message({machines, snapshot, UUID, SnapId}, State)
-  when is_binary(UUID),
-       is_binary(SnapId) ->
-    chunter_vm_fsm:snapshot(UUID, SnapId),
-    {stop, State};
-
 handle_message({machines, backup, delete, UUID, SnapId}, State)
   when is_binary(UUID),
        is_binary(SnapId) ->
@@ -188,6 +182,12 @@ handle_message({machines, service, clear, UUID, Service}, State)
        is_binary(Service) ->
     {stop, chunter_vm_fsm:service_action(UUID, clear, Service), State};
 
+handle_message({machines, snapshot, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    chunter_vm_fsm:snapshot(UUID, SnapId),
+    {stop, State};
+
 handle_message({machines, snapshot, delete, UUID, SnapId}, State)
   when is_binary(UUID),
        is_binary(SnapId) ->
@@ -198,45 +198,28 @@ handle_message({machines, snapshot, rollback, UUID, SnapId}, State)
        is_binary(SnapId) ->
     {stop, chunter_vm_fsm:rollback_snapshot(UUID, SnapId), State};
 
-handle_message({machines, snapshot, upload,
-                UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket}, State)
-  when is_binary(UUID),
-       is_binary(SnapId) ->
-    spawn(fun() ->
-                  upload_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
-                                  SKey, Bucket, [])
-          end),
-    {stop, ok, State};
-
-handle_message({machines, snapshot, upload,
-                UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket, Options},
+handle_message({machines, snapshot, store,
+                UUID, SnapId, Img, Host, Port, Bucket, AKey, SKey, Opts},
                State)
   when is_binary(UUID),
        is_binary(SnapId) ->
     spawn(fun() ->
-                  upload_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
-                                  SKey, Bucket, Options)
-          end),
-    {stop, ok, State};
-
-handle_message({machines, snapshot, download,
-                UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket, Options},
-               State)
-  when is_binary(UUID),
-       is_binary(SnapId) ->
-    spawn(fun() ->
-                  download_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
-                                    SKey, Bucket, Options)
-          end),
-    {stop, ok, State};
-
-handle_message({machines, snapshot, download,
-                UUID, SnapId, Host, Port, Bucket, AKey, SKey, Bucket}, State)
-  when is_binary(UUID),
-       is_binary(SnapId) ->
-    spawn(fun() ->
-                  download_snapshot(UUID, SnapId, Host, Port, Bucket, AKey,
-                                    SKey, Bucket, [])
+                  Opts1 = [{target, Img},
+                           {access_key, AKey},
+                           {secret_key, SKey},
+                           {s3_host, Host},
+                           {s3_port, Port},
+                           {s3_bucket, Bucket},
+                           {quiet, true} | Opts],
+                  libsniffle:dataset_set(Img, <<"imported">>, <<"pending">>),
+                  R = chunter_snap:upload(<<"/zones/", UUID/binary>>,
+                                          UUID, SnapId, Opts1),
+                  case R of
+                      {ok, _} ->
+                          libsniffle:dataset_set(Img, <<"imported">>, 1);
+                      {error, _, _} ->
+                          libsniffle:dataset_set(Img, <<"imported">>, <<"failed">>)
+                  end
           end),
     {stop, ok, State};
 
@@ -367,127 +350,5 @@ write_snapshot(Port, Img, Acc, Idx, Ref) ->
         {Port,{exit_status, S}} ->
             lager:error("Writing image ~s failed after ~p parts with exit "
                         "status ~p.", [Img, Idx, S]),
-            ok
-    end.
-
-upload_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, Options) ->
-    Conf = fifo_s3:make_config(AKey, SKey, Host, Port),
-    {ok, Upload} = fifo_s3:new_upload(Bucket, binary_to_list(SnapID), Conf),
-    Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
-    SnapID1 = case proplists:is_defined(create, Options) of
-                  true ->
-                      uuid:uuid4s();
-                  false ->
-                      SnapID
-              end,
-    Prt = case proplists:get_value(parent, Options) of
-              undefined ->
-                  lager:debug("Running ZFS command: ~p ~s ~s",
-                              [Cmd, UUID, SnapID1]),
-                  open_port({spawn_executable, Cmd},
-                            [{args, [UUID, SnapID1]}, use_stdio, binary,
-                             stderr_to_stdout, exit_status, stream]);
-              Inc ->
-                  libsniffle:vm_set(
-                    UUID, [<<"snapshots">>, SnapID1, <<"parent">>], Inc),
-                  lager:debug("Running ZFS command: ~p ~s ~s ~s",
-                              [Cmd, UUID, SnapID1, Inc]),
-                  open_port({spawn_executable, Cmd},
-                            [{args, [UUID, SnapID1, Inc]}, use_stdio, binary,
-                             stderr_to_stdout, exit_status, stream])
-          end,
-    libsniffle:vm_set(
-      UUID, [<<"snapshots">>, SnapID, <<"state">>], <<"uploading">>),
-    upload_snapshot(UUID, SnapID, Prt, Upload, <<>>, 0,
-                    proplists:is_defined(delete, Options)).
-
-
-upload_snapshot(UUID, SnapID, Port, Upload, <<MB:1048576/binary, Acc/binary>>,
-                Size, Delete) ->
-    case fifo_s3:put_upload(binary:copy(MB), Upload) of
-        {ok, Upload1} ->
-            lager:debug("Uploading part: ~p.", [Size]),
-            upload_snapshot(UUID, SnapID, Port, Upload1, Acc, Size, Delete);
-        {error, E} ->
-            fifo_s3:abort_upload(Upload),
-            lager:error("Upload error: ~p", [E]),
-            libsniffle:vm_set(
-              UUID, [<<"snapshots">>, SnapID, <<"state">>],
-              <<"upload failed">>),
-            ok
-    end;
-
-upload_snapshot(UUID, SnapID, Port, Upload, Acc, Size, Delete) ->
-    receive
-        {Port, {data, Data}} ->
-            Size1 = Size + byte_size(Data),
-            upload_snapshot(UUID, SnapID, Port, Upload,
-                            <<Acc/binary, Data/binary>>, Size1, Delete);
-        {Port, {exit_status, 0}} ->
-            case Acc of
-                <<>> ->
-                    ok;
-                _ ->
-                    case fifo_s3:put_upload(binary:copy(Acc), Upload) of
-                        {ok, Upload1} ->
-                            fifo_s3:complete_upload(Upload1),
-                            lager:debug("Upload complete: ~p.", [Size]),
-                            libsniffle:vm_set(
-                              UUID, [<<"snapshots">>, SnapID, <<"state">>],
-                              <<"uploaded">>),
-                            libsniffle:vm_set(
-                              UUID, [<<"snapshots">>, SnapID, <<"location">>],
-                              <<"cloud">>),
-                            case Delete of
-                                true ->
-                                    chunter_vm_fsm:delete_snapshot(UUID, SnapID);
-                                false ->
-                                    ok
-                            end;
-                        {error, E} ->
-                            fifo_s3:abort_upload(Upload),
-                            lager:error("Upload error: ~p", [E]),
-                            libsniffle:vm_set(
-                              UUID, [<<"snapshots">>, SnapID, <<"state">>],
-                              <<"upload failed">>),
-                            ok
-                    end
-            end;
-        {Port, {exit_status, S}} ->
-            fifo_s3:abort_upload(Upload),
-            lager:error("Upload error: ~p", [S]),
-            libsniffle:vm_set(
-              UUID, [<<"snapshots">>, SnapID, <<"state">>],
-              <<"upload failed">>),
-            ok
-    end.
-
-
-download_snapshot(UUID, SnapID, Host, Port, Bucket, AKey, SKey, Bucket, _Options) ->
-    Conf = fifo_s3:make_config(AKey, SKey, Host, Port),
-    {ok, Download} = fifo_s3:new_stream(Bucket, SnapID, Conf,
-                                        [{chunk_size, 10485760}]),
-    Cmd = code:priv_dir(chunter) ++ "/zfs_import.gzip.sh",
-    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapID]),
-    Prt = open_port({spawn_executable, Cmd},
-                    [{args, [UUID, SnapID]}, use_stdio, binary,
-                     stderr_to_stdout, exit_status, stream]),
-    libsniffle:vm_set(
-      UUID, [<<"snapshots">>, SnapID, <<"state">>], <<"downloading">>),
-    download_snapshot(Prt, Download, 0).
-
-download_snapshot(Prt, Download, I) ->
-    case fifo_s3:get_stream(Download) of
-        {ok, Data, Download1} ->
-            lager:debug("Download part: ~p.", [I]),
-            port_command(Prt, Data),
-            download_snapshot(Prt, Download1, I+1);
-        {error, E} ->
-            port_close(Prt),
-            lager:error("Import error: ~p", [I, E]),
-            ok;
-        {ok, done} ->
-            lager:debug("Download complete: ~p.", [I]),
-            port_close(Prt),
             ok
     end.

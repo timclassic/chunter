@@ -23,7 +23,6 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                _ ->
                    <<>>
            end,
-    Target = <<VM/binary, "/", SnapID/binary, Disk/binary>>,
     Chunk = case application:get_env(chunter, upload_chunk) of
                 undefined ->
                     1048576;
@@ -31,6 +30,8 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                     S
             end,
     lager:debug("Starting upload wiht chunk size: ~p.", [Chunk]),
+    DfltTarget = <<VM/binary, "/", SnapID/binary, Disk/binary>>,
+    Target = proplists:get_value(target, Options, DfltTarget),
     AKey = proplists:get_value(access_key, Options),
     SKey = proplists:get_value(secret_key, Options),
     S3Host = proplists:get_value(s3_host, Options),
@@ -46,18 +47,18 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                             [{args, [P, SnapID]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream]);
               Inc ->
-                  backup_update(VM, SnapID, <<"parent">>, Inc),
+                  backup_update(VM, SnapID, <<"parent">>, Inc, Options),
                   lager:debug("Running ZFS command: ~p ~s ~s ~s",
                               [Cmd, P, SnapID, Inc]),
                   open_port({spawn_executable, Cmd},
                             [{args, [P, SnapID, Inc]}, use_stdio, binary,
                              stderr_to_stdout, exit_status, stream])
           end,
-    backup_update(VM, SnapID, <<"state">>, <<"uploading">>),
+    backup_update(VM, SnapID, <<"state">>, <<"uploading">>, Options),
     {ok, VMObj} = libsniffle:vm_get(VM),
     Size = jsxd:get([<<"backups">>, SnapID, <<"size">>], 0, VMObj),
     Fs = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
-    backup_update(VM, SnapID, <<"files">>, [Target | Fs]),
+    backup_update(VM, SnapID, <<"files">>, [Target | Fs], Options),
     upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Options).
 
 
@@ -67,13 +68,13 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
             case fifo_s3_upload:part(Upload, binary:copy(MB)) of
                 ok ->
                     lager:debug("Uploading: ~p MB.", [round(Size/1024/1024)]),
-                    backup_update(UUID, SnapID, <<"size">>, Size),
+                    backup_update(UUID, SnapID, <<"size">>, Size, Options),
                     upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk, Size,
                                     Options);
                 {error, E} ->
                     fifo_s3_upload:abort(Upload),
                     lager:error("Upload error: ~p", [E]),
-                    backup_update(UUID, SnapID, <<"state">>, <<"upload failed">>),
+                    backup_update(UUID, SnapID, <<"state">>, <<"upload failed">>, Options),
                     {error, 3, E}
             end;
         Acc ->
@@ -101,7 +102,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
                     case R of
                         ok ->
                             lager:debug("Upload complete: ~p MB.", [round(Size/1024/1024)]),
-                            backup_update(UUID, SnapID, <<"size">>, Size),
+                            backup_update(UUID, SnapID, <<"size">>, Size, Options),
                             M = io_lib:format("Uploaded ~s with a total size of done: "
                                               "~p", [UUID, Size]),
 
@@ -109,14 +110,14 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
                         {error, E} ->
                             fifo_s3_upload:abort(Upload),
                             backup_update(UUID, SnapID, <<"state">>,
-                                          <<"upload failed">>),
+                                          <<"upload failed">>, Options),
                             {error, 2, E}
                     end;
                 {Port, {exit_status, S}} ->
                     fifo_s3_upload:abort(Upload),
                     lager:error("Upload error: ~p", [S]),
                     backup_update(UUID, SnapID, <<"state">>,
-                                  <<"upload failed">>),
+                                  <<"upload failed">>, Options),
                     {error, S, <<"upload failed">>}
             end
     end.
@@ -255,14 +256,21 @@ mk_s3_conf(Options) ->
     S3Port = proplists:get_value(s3_port, Options),
     fifo_s3:make_config(AKey, SKey, S3Host, S3Port).
 
-backup_update(VM, SnapID, K, V) ->
-    libsniffle:vm_set(VM, [<<"backups">>, SnapID, K], V),
-    libhowl:send(VM,
-                 [{<<"event">>, <<"backup">>},
-                  {<<"data">>,
-                   [{<<"action">>, <<"update">>},
-                    {<<"data">>, [{K, V}]},
-                    {<<"uuid">>, SnapID}]}]).
+backup_update(VM, SnapID, K, V, Opts) ->
+    case proplists:get_value(quiet, Opts, false) of
+        false ->
+            Root = proplists:get_value(root, Opts, [<<"backups">>, SnapID]),
+            Event = proplists:get_value(event, Opts, <<"backup">>),
+            libsniffle:vm_set(VM, Root ++ [K], V),
+            libhowl:send(VM,
+                         [{<<"event">>, Event},
+                          {<<"data">>,
+                           [{<<"action">>, <<"update">>},
+                            {<<"data">>, [{K, V}]},
+                            {<<"uuid">>, SnapID}]}]);
+        true ->
+            ok
+    end.
 
 -ifdef(TEST).
 restore_path_test() ->

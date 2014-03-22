@@ -13,6 +13,11 @@
 %% @doc Initial number of paralel uploads to s3.
 {mapping, "paralell_uploads", "fifo_s3.upload_pool_size",
  [{default, 5},
+  {level, advanced},
+  {datatype, integer}]}.
+
+{mapping, "parallel_uploads", "fifo_s3.upload_pool_size",
+ [{default, 5},
   {datatype, integer}]}.
 
 %% @doc Maximal number of paralel uploads to s3.

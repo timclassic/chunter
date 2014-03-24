@@ -54,6 +54,28 @@
  [{commented, {"127.0.0.1", 4150}},
   {datatype, ip}]}.
 
+%% @doc Configures weather kstat should be used to perform periodic
+%% performance measurements on zones and the hypervisor.
+%%
+%% Disabeling it will also disable all metrics from this server and
+%% ARC statistics.
+
+{mapping, "kstat", "chunter.kstat_metrics"
+ [{default, enabled},
+  {datatype, {enum, [enabled, disabled]}}]}.
+
+{translation,
+ "chunter.kstat_metrics",
+ fun(Conf) ->
+         case cuttlefish_util:conf_get_value("kstat", Conf) of
+             enabled ->
+                 true;
+             disabled ->
+                 false;
+         end
+ end
+}.
+
 %% @doc The interval services for a zone are checked, the default is 10s
 %% changes are noted even when the state is the same at least for the nsq
 %% logging.

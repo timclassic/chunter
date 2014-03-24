@@ -60,7 +60,7 @@
 %% Disabeling it will also disable all metrics from this server and
 %% ARC statistics.
 
-{mapping, "kstat", "chunter.kstat_metrics"
+{mapping, "kstat", "chunter.kstat_metrics",
  [{default, enabled},
   {datatype, {enum, [enabled, disabled]}}]}.
 

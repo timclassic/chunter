@@ -71,7 +71,7 @@
              enabled ->
                  true;
              disabled ->
-                 false;
+                 false
          end
  end
 }.

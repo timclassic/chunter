@@ -24,13 +24,18 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    KStatServers = case application:get_env(chunter, kstat_metrics) of
-                       {ok, false} ->
-                           [];
-                       _ ->
-                           [?CHILD(chunter_kstat_arc, worker),
-                            ?CHILD(chunter_perf_plugin, worker)]
+    PerfSrvs = case application:get_env(chunter, kstat_metrics) of
+                   {ok, false} ->
+                       [];
+                   _ ->
+                       [?CHILD(chunter_perf_plugin, worker)]
                    end,
+    ArkSrvs = case application:get_env(chunter, kstat_arc) of
+                  {ok, false} ->
+                      PerfSrvs;
+                  _ ->
+                      [?CHILD(chunter_kstat_arc, worker) | PerfSrvs]
+              end,
     {ok, {{one_for_one, 5, 10},
           [
            ?CHILD(chunter_lock, worker),
@@ -38,4 +43,4 @@ init([]) ->
            ?CHILD(chunter_server, worker),
            ?CHILD(chunter_zpool_monitor, worker),
            ?CHILD(chunter_zonemon, worker)
-          ] ++ KStatServers}}.
+          ] ++ ArkSrvs}}.

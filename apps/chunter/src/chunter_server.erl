@@ -12,12 +12,17 @@
 
 -include("chunter_version.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 %% API
 -export([start_link/0,
          host_info/0,
          connect/0,
          update_mem/0,
          reserve_mem/1,
+         service_action/2,
          disconnect/0]).
 
 
@@ -37,8 +42,11 @@
                 port,
                 sysinfo,
                 connected = false,
+                services = [],
                 capabilities = [],
                 total_memory = 0,
+                reserved_memory = 0,
+                nsq = false,
                 provisioned_memory = 0}).
 
 %%%===================================================================
@@ -68,6 +76,13 @@ reserve_mem(N) ->
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
 
+service_action(Action, Service)
+  when Action =:= enable;
+       Action =:= disable;
+       Action =:= clear ->
+    gen_server:call(?SERVER, {service, Action, Service}).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -88,6 +103,8 @@ init([]) ->
                "chunter:init.", []),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
+    ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
+    timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
     register_hypervisor(),
     lists:foldl(
       fun (VM, _) ->
@@ -108,11 +125,32 @@ init([]) ->
     libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, SysInfo},
                                      {<<"version">>, ?VERSION},
                                      {<<"virtualisation">>, Capabilities}]),
+    case application:get_env(nsq_producer) of
+        {ok, {NSQHost, NSQPort}} ->
+            ensq:producer(services, NSQHost, NSQPort),
+            true;
+        _ ->
+            false
+    end,
+    NSQ = case application:get_env(nsq_producer) of
+              {ok, _} ->
+                  true;
+              _ ->
+                  false
+          end,
+    ReservedMem = case application:get_env(reserved_memory) of
+                      undefined ->
+                          0;
+                      {ok, Mem} ->
+                          Mem / (1024*1024)
+                  end,
 
     {ok, #state{
+            reserved_memory = ReservedMem,
             sysinfo = SysInfo,
             name = Host,
-            capabilities = Capabilities
+            capabilities = Capabilities,
+            nsq = NSQ
            }}.
 
 
@@ -138,9 +176,17 @@ handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
 
+handle_call({service, enable, Service}, _From, State) ->
+    {reply, smurf:enable(Service, []), State};
+
+handle_call({service, disable, Service}, _From, State) ->
+    {reply, smurf:disable(Service, []), State};
+
+handle_call({service, clear, Service}, _From, State) ->
+    {reply, smurf:clear(Service, []), State};
+
 handle_call(_Request, _From, State) ->
     {reply, {error, unknwon}, State}.
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -153,7 +199,11 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast(update_mem, State = #state{name = Host}) ->
+
+handle_cast(update_mem, State = #state{
+                                   reserved_memory = ReservedMem,
+                                   name = Host
+                                  }) ->
     VMS = list_vms(),
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
@@ -165,7 +215,8 @@ handle_cast(update_mem, State = #state{name = Host}) ->
           os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
-    libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ProvMem},
+    libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ReservedMem - ProvMem},
+                                     {<<"resources.reserved-memory">>, ReservedMem},
                                      {<<"resources.provisioned-memory">>, ProvMem},
                                      {<<"resources.total-memory">>, TotalMem}]),
     {noreply, State#state{
@@ -176,11 +227,12 @@ handle_cast(update_mem, State = #state{name = Host}) ->
 handle_cast({reserve_mem, N}, State =
                 #state{
                    name = Host,
+                   reserved_memory = ReservedMem,
                    total_memory = TotalMem,
                    provisioned_memory = ProvMem
                   }) ->
     ProvMem1 = ProvMem + N,
-    Free = TotalMem - ProvMem1,
+    Free = TotalMem - ReservedMem - ProvMem1,
     libsniffle:hypervisor_set(Host,
                               [{<<"resources.free-memory">>, Free},
                                {<<"resources.provisioned-memory">>, ProvMem1}]),
@@ -189,6 +241,7 @@ handle_cast({reserve_mem, N}, State =
                }};
 
 handle_cast(connect, #state{name = Host,
+                            reserved_memory = ReservedMem,
                             capabilities = Caps} = State) ->
     %%    {ok, Host} = libsnarl:option_get(system, statsd, hostname),
     %%    application:set_env(s59tatsderl, hostname, Host),
@@ -220,7 +273,8 @@ handle_cast(connect, #state{name = Host,
       [{<<"sysinfo">>, State#state.sysinfo},
        {<<"version">>, ?VERSION},
        {<<"networks">>, Networks1},
-       {<<"resources.free-memory">>, TotalMem - ProvMem},
+       {<<"resources.free-memory">>, TotalMem - ReservedMem - ProvMem},
+       {<<"resources.reserved-memory">>, ReservedMem},
        {<<"etherstubs">>, Etherstub1},
        {<<"resources.provisioned-memory">>, ProvMem},
        {<<"resources.total-memory">>, TotalMem},
@@ -250,6 +304,37 @@ handle_cast(Msg, #state{name = Name} = State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info(update_services, State=#state{
+                                                 name=Host,
+                                                 nsq=NSQ,
+                                                 services = OldServices
+                                                }) ->
+    case {chunter_smf:update(OldServices), OldServices} of
+        {{ok, ServiceSet, Changed}, []} ->
+            lager:debug("[GZ] Initializing ~p Services.",
+                        [length(Changed)]),
+            libsniffle:hypervisor_set(Host, <<"services">>,
+                                      [{Srv, St}
+                                       || {Srv, _, St} <- Changed]),
+            {noreply, State#state{services = ServiceSet}};
+        {{ok, ServiceSet, Changed}, _} ->
+            lager:debug("[GZ] Updating ~p Services.",
+                        [length(Changed)]),
+            %% Update changes which are not removes
+            [libsniffle:hypervisor_set(
+               Host, [<<"services">>, Srv], SrvState)
+             || {Srv, _, SrvState} <- Changed,
+                SrvState =/= <<"removed">>],
+            %% Delete services that were changed.
+            [libsniffle:hypervisor_set(
+               Host, [<<"services">>, Srv], delete)
+             || {Srv, _, <<"removed">>} <- Changed],
+            update_services(Host, Changed, NSQ),
+            {noreply, State#state{services = ServiceSet}};
+        _ ->
+            {noreply, State}
+    end;
+
 handle_info(timeout, State) ->
     {noreply, State};
 
@@ -327,16 +412,17 @@ host_info() ->
 
 
 register_hypervisor() ->
+    Port = application:get_env(chunter, port, 4200),
     {Host, IPStr} = host_info(),
     lager:info([{fifi_component, chunter}],
                "chunter:init - Host: ~s(~s)", [Host, IPStr]),
     [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
     case libsniffle:hypervisor_get(Host) of
         not_found ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_register(Host, IPStr, Port),
             libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
         {ok, H} ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_register(Host, IPStr, Port),
             case jsxd:get(<<"alias">>, H) of
                 undefined ->
                     libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
@@ -344,6 +430,24 @@ register_hypervisor() ->
                     ok
             end;
         _ ->
-            libsniffle:hypervisor_register(Host, IPStr, 4200),
+            libsniffle:hypervisor_register(Host, IPStr, Port),
             ok
+    end.
+
+update_services(_, [], _) ->
+    ok;
+
+update_services(UUID, Changed, true) ->
+    Changed1 = [{Srv, [{<<"old">>, Old},
+                       {<<"new">>, New}]} || {Srv, Old, New} <- Changed],
+    JSON = jsx:encode([{hypervisor, UUID}, {data, Changed1}]),
+    ensq:send(services, JSON),
+    update_services(UUID, Changed, false);
+
+update_services(UUID, Changed, false) ->
+    case [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New] of
+        [] ->
+            ok;
+        Changed1 ->
+            libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}])
     end.

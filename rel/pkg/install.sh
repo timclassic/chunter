@@ -2,7 +2,7 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=20130530T224720Z\|20130419T073558Z\|20130629T040542Z\|20130808T195337Z\|20131003T221245Z
+TESTED_VERSIONS=20130530T224720Z\|20130419T073558Z\|20130629T040542Z\|20130808T195337Z\|20131003T221245Z\|20140124T065835Z\|20140221T042147Z
 
 if [ -z $DST ]
 then
@@ -13,7 +13,7 @@ fi
 #IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`
 
 DIR=`dirname $0`;
-if [[ "x$DIR" = "x." ]]
+if [[ "$DIR" = "." ]]
 then
     DIR=`pwd`
 fi
@@ -40,10 +40,10 @@ else
     read SKIP
     if [[ "$SKIP" = "yes" ]]
     then
-	echo "Okay we go on, but it might not work!"
+        echo "Okay we go on, but it might not work!"
     else
-	echo "Exiting."
-	exit 1
+        echo "Exiting."
+        exit 1
     fi
 fi
 
@@ -54,14 +54,24 @@ fi
 (cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
 mkdir -p /var/log/chunter
 
-if [ ! -f $DST/chunter/etc/app.config ]
+if [ ! -f $DST/chunter/etc/chunter.conf ]
 then
-    cp $DST/chunter/etc/app.config.example $DST/chunter/etc/app.config
-fi
+    conf_admin_mac=$(grep '^admin_nic=' /usbkey/config | awk -F= '{print $2}')
+    conf_admin_nic=$(dladm show-phys -m -o LINK,ADDRESS | grep "$conf_admin_mac" | awk '{print $1}')
+    conf_admin_ip=$(ipadm show-addr -o ADDROBJ,ADDR  | grep "^$conf_admin_nic" | awk '{print $2}' | awk -F/ '{print $1}')
+    conf_fifo_nic=fifo0
+    if ipadm show-addr -o ADDROBJ | grep "^$conf_fifo_nic" > /dev/null
+    then
+        conf_fifo_ip=$(ipadm show-addr -o ADDROBJ,ADDR  | grep "^$conf_fifo_nic" | awk '{print $2}' | awk -F/ '{print $1}')
+        conf_admin_ip=$conf_fifo_ip
+    fi
+    if [[ "$conf_admin_ip" = "" ]]
+    then
+        cp $DST/chunter/etc/chunter.conf.example $DST/chunter/etc/chunter.conf
+    else
+        sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" $DST/chunter/etc/chunter.conf.example > $DST/chunter/etc/chunter.conf
+    fi
 
-if [ ! -f $DST/chunter/etc/vm.args ]
-then
-    cp $DST/chunter/etc/vm.args.example $DST/chunter/etc/vm.args
 fi
 
 mkdir -p $DST/custom/smf

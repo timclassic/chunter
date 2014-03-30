@@ -8,15 +8,20 @@ zone_vfs({KStat, Acc}) ->
     {KStat, build_obj(Data1, Acc)}.
 
 build_obj([Keys | R], Data) ->
-    UUID = list_to_binary(proplists:get_value("zonename", Keys)),
-    Statistics = lists:foldl(fun({"zonename", _}, Obj) ->
-                                     Obj;
-                                ({K, V}, Obj) ->
-                                     jsxd:set([list_to_binary(K)], V, Obj)
-                             end, [], Keys),
-    Data1 = [{UUID, [{<<"data">>, Statistics},
-                     {<<"event">>, <<"vfs">>}]} | Data],
-    build_obj(R, Data1);
+    case proplists:get_value("zonename", Keys) of
+        undefined ->
+            build_obj(R, Data);
+        UUIDs ->
+            UUID = list_to_binary(UUIDs),
+            Statistics = lists:foldl(fun({"zonename", _}, Obj) ->
+                                             Obj;
+                                        ({K, V}, Obj) ->
+                                             jsxd:set([list_to_binary(K)], V, Obj)
+                                     end, [], Keys),
+            Data1 = [{UUID, [{<<"data">>, Statistics},
+                             {<<"event">>, <<"vfs">>}]} | Data],
+            build_obj(R, Data1)
+    end;
 
 build_obj([], Data) ->
     Data.

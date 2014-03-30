@@ -28,11 +28,11 @@ init([ListenerPid, Socket, Transport, _Opts]) ->
     ok = Transport:setopts(Socket, [{active, true}, {packet,4}, {nodelay, true}]),
     {OK, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #state{
-                                     ok = OK,
-                                     closed = Closed,
-                                     error = Error,
-                                     socket = Socket,
-                                     transport = Transport}).
+                                          ok = OK,
+                                          closed = Closed,
+                                          error = Error,
+                                          socket = Socket,
+                                          transport = Transport}).
 
 handle_info({data,Data}, State = #state{socket = Socket,
                                         transport = Transport}) ->
@@ -40,14 +40,14 @@ handle_info({data,Data}, State = #state{socket = Socket,
     {noreply, State};
 
 handle_info({_Closed, _Socket}, State = #state{
-                                  type = mornal,
-                                  closed = _Closed}) ->
+                                           type = mornal,
+                                           closed = _Closed}) ->
     {stop, normal, State};
 
 handle_info({_OK, Socket, BinData}, State = #state{
-                                      type = normal,
-                                      transport = Transport,
-                                      ok = _OK}) ->
+                                               type = normal,
+                                               transport = Transport,
+                                               ok = _OK}) ->
     Msg = binary_to_term(BinData),
     case Msg of
         {dtrace, Script} ->
@@ -64,7 +64,7 @@ handle_info({_OK, Socket, BinData}, State = #state{
             {noreply, State#state{state = UUID,
                                   type = console}};
         ping ->
-            lager:info("Ping."),
+            lager:debug("Ping."),
             Transport:send(Socket, term_to_binary(pong)),
             ok = Transport:close(Socket),
             {stop, normal, State};
@@ -81,10 +81,10 @@ handle_info({_OK, Socket, BinData}, State = #state{
     end;
 
 handle_info({_OK, Socket, BinData},  State = #state{
-                                       state = Handle,
-                                       type = dtrace,
-                                       transport = Transport,
-                                       ok = _OK}) ->
+                                                state = Handle,
+                                                type = dtrace,
+                                                transport = Transport,
+                                                ok = _OK}) ->
     case binary_to_term(BinData) of
         stop ->
             erltrace:stop(Handle);
@@ -121,9 +121,9 @@ handle_info({_OK, Socket, BinData},  State = #state{
     {noreply, State};
 
 handle_info({_OK, _S, Data}, State = #state{
-                               type = console,
-                               state = UUID,
-                               ok = _OK}) ->
+                                        type = console,
+                                        state = UUID,
+                                        ok = _OK}) ->
     chunter_vm_fsm:console_send(UUID, Data),
     {noreply, State};
 
@@ -140,7 +140,8 @@ handle_message({machines, start, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:start(UUID),
     {stop, State};
 
-handle_message({machines, update, UUID, Package, Config}, State) when is_binary(UUID) ->
+handle_message({machines, update, UUID, Package, Config}, State)
+  when is_binary(UUID) ->
     chunter_vm_fsm:update(UUID, Package, Config),
     {stop, State};
 
@@ -149,20 +150,82 @@ handle_message({machines, start, UUID, Image}, State) when is_binary(UUID),
     chunter_vmadm:start(UUID, Image),
     {stop, State};
 
-handle_message({machines, snapshot, UUID, SnapId}, State) when is_binary(UUID),
-                                                               is_binary(SnapId) ->
-    {stop, chunter_vm_fsm:snapshot(UUID, SnapId), State};
+handle_message({machines, backup, UUID, SnapId, Options}, State)
+  when is_binary(UUID),
+       is_binary(SnapId)->
+    chunter_vm_fsm:backup(UUID, SnapId, Options),
+    {stop, State};
 
-handle_message({machines, snapshot, delete, UUID, SnapId}, State) when is_binary(UUID),
-                                                                       is_binary(SnapId) ->
+handle_message({machines, backup, restore, UUID, SnapId, Options}, State)
+  when is_binary(UUID),
+       is_binary(SnapId)->
+    chunter_vm_fsm:restore_backup(UUID, SnapId, Options),
+    {stop, State};
+
+handle_message({machines, backup, delete, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    {stop, chunter_vm_fsm:delete_backup(UUID, SnapId), State};
+
+handle_message({machines, service, enable, UUID, Service}, State)
+  when is_binary(UUID),
+       is_binary(Service) ->
+    {stop, chunter_vm_fsm:service_action(UUID, enable, Service), State};
+
+handle_message({machines, service, disable, UUID, Service}, State)
+  when is_binary(UUID),
+       is_binary(Service) ->
+    {stop, chunter_vm_fsm:service_action(UUID, disable, Service), State};
+
+handle_message({machines, service, clear, UUID, Service}, State)
+  when is_binary(UUID),
+       is_binary(Service) ->
+    {stop, chunter_vm_fsm:service_action(UUID, clear, Service), State};
+
+handle_message({machines, snapshot, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    chunter_vm_fsm:snapshot(UUID, SnapId),
+    {stop, State};
+
+handle_message({machines, snapshot, delete, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
     {stop, chunter_vm_fsm:delete_snapshot(UUID, SnapId), State};
 
-handle_message({machines, snapshot, rollback, UUID, SnapId}, State) when is_binary(UUID),
-                                                                         is_binary(SnapId) ->
+handle_message({machines, snapshot, rollback, UUID, SnapId}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
     {stop, chunter_vm_fsm:rollback_snapshot(UUID, SnapId), State};
 
-handle_message({machines, snapshot, store, UUID, SnapId, Img}, State) when is_binary(UUID),
-                                                                           is_binary(SnapId) ->
+handle_message({machines, snapshot, store,
+                UUID, SnapId, Img, Host, Port, Bucket, AKey, SKey, Opts},
+               State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
+    spawn(fun() ->
+                  Opts1 = [{target, Img},
+                           {access_key, AKey},
+                           {secret_key, SKey},
+                           {s3_host, Host},
+                           {s3_port, Port},
+                           {s3_bucket, Bucket},
+                           {quiet, true} | Opts],
+                  libsniffle:dataset_set(Img, <<"imported">>, <<"pending">>),
+                  R = chunter_snap:upload(<<"/zones/", UUID/binary>>,
+                                          UUID, SnapId, Opts1),
+                  case R of
+                      {ok, _} ->
+                          libsniffle:dataset_set(Img, <<"imported">>, 1);
+                      {error, _, _} ->
+                          libsniffle:dataset_set(Img, <<"imported">>, <<"failed">>)
+                  end
+          end),
+    {stop, ok, State};
+
+handle_message({machines, snapshot, store, UUID, SnapId, Img}, State)
+  when is_binary(UUID),
+       is_binary(SnapId) ->
     spawn(fun() ->
                   write_snapshot(UUID, SnapId, Img)
           end),
@@ -185,19 +248,46 @@ handle_message({machines, reboot, force, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:force_reboot(UUID),
     {stop, State};
 
-handle_message({machines, create, UUID, PSpec, DSpec, Config}, State) when is_binary(UUID),
-                                                                           is_list(PSpec),
-                                                                           is_list(DSpec),
-                                                                           is_list(Config) ->
-    chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
-    {stop, State};
+handle_message({lock, UUID}, State) ->
+    {stop, chunter_lock:lock(UUID), State};
+
+handle_message({release, UUID}, State) ->
+    {stop, chunter_lock:release(UUID), State};
+
+handle_message({machines, create, UUID, PSpec, DSpec, Config}, State)
+  when is_binary(UUID), is_list(PSpec), is_list(DSpec), is_list(Config) ->
+    case chunter_lock:lock(UUID) of
+        ok ->
+            chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
+            {stop, ok, State};
+        _ ->
+            {stop, {error, lock}, State}
+    end;
 
 handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
     chunter_vm_fsm:delete(UUID),
     {stop, State};
 
+handle_message({service, enable, Service}, State)
+  when is_binary(Service) ->
+    {stop, chunter_server:service_action(enable, Service), State};
+
+handle_message({service, disable, Service}, State)
+  when is_binary(Service) ->
+    {stop, chunter_server:service_action(disable, Service), State};
+
+handle_message({service, clear, Service}, State)
+  when is_binary(Service) ->
+    {stop, chunter_server:service_action(clear, Service), State};
+
+
+handle_message(update, State) ->
+    lager:info("updating chunter", []),
+    os:cmd("/opt/chunter/bin/update"),
+    {stop, State};
+
 handle_message(Oops, State) ->
-    io:format("oops: ~p~n", [Oops]),
+    lager:info("oops: ~p~n", [Oops]),
     {stop, State}.
 
 handle_call(_Request, _From, State) ->
@@ -211,7 +301,6 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
 
 llquantize(Data) ->
     lists:foldr(fun ({_, Path, Vals}, Obj) ->
@@ -235,30 +324,31 @@ write_snapshot(UUID, SnapId, Img) ->
     Port = open_port({spawn_executable, Cmd},
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
-    libsniffle:dataset_set(Img, <<"imported">>, 0),
-    write_snapshot(Port, Img, <<>>, 0).
+    libsniffle:dataset_set(Img, <<"imported">>, <<"pending">>),
+    write_snapshot(Port, Img, <<>>, 0, undefined).
 
-write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx) ->
+write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx, Ref) ->
     lager:debug("<IMG> ~s[~p]", [Img, Idx]),
-    libsniffle:img_create(Img, Idx, binary:copy(MB)),
-    write_snapshot(Port, Img, Acc, Idx+1);
+    {ok, Ref1} = libsniffle:img_create(Img, Idx, binary:copy(MB), Ref),
+    write_snapshot(Port, Img, Acc, Idx+1, Ref1);
 
-write_snapshot(Port, Img, Acc, Idx) ->
+write_snapshot(Port, Img, Acc, Idx, Ref) ->
     receive
         {Port, {data, Data}} ->
-            write_snapshot(Port, Img, <<Acc/binary, Data/binary>>, Idx);
+            write_snapshot(Port, Img, <<Acc/binary, Data/binary>>, Idx, Ref);
         {Port,{exit_status, 0}} ->
             case Acc of
                 <<>> ->
                     ok;
                 _ ->
                     lager:debug("<IMG> ~s[~p]", [Img, Idx]),
-                    libsniffle:img_create(Img, Idx, binary:copy(Acc))
+                    libsniffle:img_create(Img, Idx, binary:copy(Acc), Ref)
             end,
             lager:info("Writing image ~s finished with ~p parts.", [Img, Idx]),
             libsniffle:dataset_set(Img, <<"imported">>, 1),
             ok;
         {Port,{exit_status, S}} ->
-            lager:error("Writing image ~s failed after ~p parts with exit status ~p.", [Img, Idx, S]),
+            lager:error("Writing image ~s failed after ~p parts with exit "
+                        "status ~p.", [Img, Idx, S]),
             ok
     end.

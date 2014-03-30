@@ -62,12 +62,10 @@ delete(UUID) ->
     Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    os:cmd(binary_to_list(Cmd)),
     R = os:cmd(binary_to_list(Cmd)),
     lager:debug("[vmadm] ~s", [R]),
 
-    chunter_server:update_mem(),
-    chunter_vm_fsm:remove(UUID).
+    chunter_server:update_mem().
 
 -spec info(UUID::fifo:uuid()) -> fifo:config_list().
 
@@ -79,13 +77,13 @@ info(UUID) ->
                 "vmadm:cmd - ~s.", [Cmd]),
     case os:cmd(binary_to_list(Cmd)) of
         "Unable" ++ _ ->
-            [];
+            {error, no_info};
         JSON ->
             case jsx:to_term(list_to_binary(JSON)) of
                 {incomplete, _} ->
-                    [];
+                    {error, no_info};
                 R ->
-                    R
+                    {ok, R}
             end
     end.
 
@@ -144,29 +142,35 @@ force_reboot(UUID) ->
                                          unknown}.
 
 create(Data) ->
+    lager:info("New Create: ~p", [Data]),
     {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, Data),
-    lager:info("~p", [<<"Creation of VM '", UUID/binary, "' started.">>]),
-    %%    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
+    lager:info("Creation of VM '~s' started.", [UUID]),
     lager:info([{fifi_component, chunter}],
                "vmadm:create", []),
     Cmd = "/usr/sbin/vmadm create",
     lager:debug([{fifi_component, chunter}],
                 "vmadm:cmd - ~s.", [Cmd]),
-    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000}, stderr_to_stdout, exit_status]),
+    Port = open_port({spawn, Cmd}, [use_stdio, binary, {line, 1000},
+                                    stderr_to_stdout, exit_status]),
     port_command(Port, jsx:to_json(Data)),
     lager:info([{fifi_component, chunter}],
                "vmadm:create - handed to vmadm, waiting ...", []),
     timer:apply_after(5000, chunter_server, update_mem, []),
-    Res = case wait_for_text(Port) of
+    Res = case wait_for_text(Port, UUID, 60*10) of
               ok ->
                   lager:info([{fifi_component, chunter}],
                              "vmadm:create - vmadm returned sucessfully.", []),
+                  libhowl:send(<<"command">>,
+                               [{<<"event">>, <<"vm-create">>},
+                                {<<"uuid">>, uuid:uuid4s()},
+                                {<<"data">>,
+                                 [{<<"uuid">>, UUID}]}]),
                   chunter_vm_fsm:load(UUID);
               {error, E} ->
                   delete(UUID),
                   lager:error([{fifi_component, chunter}],
                               "vmad:create - Failed: ~p.", [E]),
-                  E
+                  {error, E}
           end,
     lager:info([{fifi_component, chunter}],
                "vmadm:create - updating memory.", []),
@@ -188,10 +192,14 @@ update(UUID, Data) ->
         {Port, {data, {eol, Data}}} ->
             lager:debug("[vmadm] ~s", [Data]);
         {Port, {data, Data}} ->
-            lager:debug("vmadm output: ~s", [Data]);
-        {Port, {exit_status, _}} ->
+            lager:debug("[vmadm] ~s", [Data]);
+        {Port, {exit_status, 0}} ->
             chunter_server:update_mem(),
-            chunter_vm_fsm:load(UUID)
+            chunter_vm_fsm:load(UUID);
+        {Port, {exit_status, E}} ->
+            chunter_server:update_mem(),
+            chunter_vm_fsm:load(UUID),
+            {error, E}
     after
         60000 ->
             chunter_server:update_mem(),
@@ -199,25 +207,51 @@ update(UUID, Data) ->
     end.
 
 %% This function reads the process's input untill it knows that the vm was created or failed.
--spec wait_for_text(Port::any()) ->
-                          {ok, UUID::fifo:uuid()} |
-                          {error, Text::binary() |
-                                        timeout |
-                                        unknown}.
-wait_for_text(Port) ->
+%%-spec wait_for_text(Port::any()) ->
+%%                           {ok, UUID::fifo:uuid()} |
+%%                           {error, Text::binary() |
+%%                                         timeout |
+%%                                         unknown}.
+%%wait_for_text(Port) ->
+%%    wait_for_text(Port, undefined).
+
+%%wait_for_text(Port, Lock) ->
+%%    wait_for_text(Port, Lock, 60*10).
+
+wait_for_text(Port, Lock, Max) ->
+    wait_for_text(Port, Lock, Max, now()).
+
+wait_for_text(Port, Lock, Max, Timeout) ->
     receive
         {Port, {data, {eol, Data}}} ->
-            lager:debug("[vmadm] ~s", [Data]);
+            lager:debug("[vmadm] ~s", [Data]),
+            relock(Lock),
+            wait_for_text(Port, Lock, Max, Timeout);
         {Port, {data, Data}} ->
-            lager:debug("[vmadm] ~s", [Data]);
+            lager:debug("[vmadm] ~s", [Data]),
+            relock(Lock),
+            wait_for_text(Port, Lock, Max, Timeout);
         {Port,{exit_status, 0}} ->
             ok;
         {Port,{exit_status, S}} ->
             {error, S}
     after
-        60000 ->
-            lager:debug("[vmadm] timeout after 10m")
+        3000 ->
+            case timer:now_diff(now(), Timeout) of
+                _To when _To  > (Max*1000000) ->
+                    lager:debug("[vmadm] timeout after ~ps", [Max]);
+                _ ->
+                    relock(Lock),
+                    wait_for_text(Port, Lock, Max, Timeout)
+            end
     end.
+
+relock(undefined) ->
+    ok;
+relock(Lock) ->
+    chunter_lock:lock(Lock).
+
+
 
 %%%===================================================================
 %%% Internal functions

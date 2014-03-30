@@ -6,7 +6,7 @@ RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd)
 
 RUNNER_BASE_DIR=${RUNNER_SCRIPT_DIR%/*}
 RUNNER_ETC_DIR=$RUNNER_BASE_DIR/etc
-RUNNER_LOG_DIR=/var/log/chunter
+RUNNER_LOG_DIR={{log_path}}
 # Note the trailing slash on $PIPE_DIR/
 PIPE_DIR=/tmp/chunter
 RUNNER_USER=
@@ -43,14 +43,38 @@ fi
 if [ -e "$RUNNER_BASE_DIR/releases/$APP_VSN/sys.config" ]; then
     CONFIG_PATH="$RUNNER_BASE_DIR/releases/$APP_VSN/sys.config"
 else
-    CONFIG_PATH="$RUNNER_ETC_DIR/app.config"
+    CONFIG_PATH="$RUNNER_ETC_DIR/app.config"x
 fi
 
-# Extract the target node name from node.args
-NAME_ARG=`egrep '^-s?name' $VMARGS_PATH`
-if [ -z "$NAME_ARG" ]; then
-    echo "vm.args needs to have either -name or -sname parameter."
-    exit 1
+# Extract the target node name and cookie from vm.args
+if [ ! -f "$RUNNER_ETC_DIR/vm.args" ]; then
+    NODENAME=`egrep '^[ \t]*nodename[ \t]*=[ \t]*' $RUNNER_ETC_DIR/{{cuttlefish_conf}} 2> /dev/null | tail -n 1 | cut -d = -f 2`
+    if [ -z "$NODENAME" ]; then
+        echo "vm.args needs to have a -name parameter."
+        echo "  -sname is not supported."
+        exit 1
+    else
+        NAME_ARG="-name ${NODENAME# *}"
+    fi
+    COOKIE=`egrep '^[ \t]*distributed_cookie[ \t]*=[ \t]*' $RUNNER_ETC_DIR/{{cuttlefish_conf}} 2> /dev/null | cut -d = -f 2`
+    if [ -z "$COOKIE" ]; then
+        echo "vm.args needs to have a -setcookie parameter."
+        exit 1
+    else
+        COOKIE_ARG="-setcookie $COOKIE"
+    fi
+else
+    NAME_ARG=`egrep '^\-name' $RUNNER_ETC_DIR/vm.args 2> /dev/null`
+    if [ -z "$NAME_ARG" ]; then
+        echo "vm.args needs to have a -name parameter."
+        echo "  -sname is not supported."
+        exit 1
+    fi
+    COOKIE_ARG=`egrep '-setcookie' $RUNNER_ETC_DIR/vm.args 2> /dev/null`
+    if [ -z "$COOKIE" ]; then
+        echo "vm.args needs to have a -setcookie parameter."
+        exit 1
+    fi
 fi
 
 # Extract the name type and name from the NAME_ARG for REMSH
@@ -60,13 +84,6 @@ REMSH_NAME=`echo $NAME_ARG | awk '{print $2}'`
 # Note the `date +%s`, used to allow multiple remsh to the same node transparently
 REMSH_NAME_ARG="$REMSH_TYPE remsh`date +%s`@`echo $REMSH_NAME | awk -F@ '{print $2}'`"
 REMSH_REMSH_ARG="-remsh $REMSH_NAME"
-
-# Extract the target cookie
-COOKIE_ARG=`grep '^-setcookie' $VMARGS_PATH`
-if [ -z "$COOKIE_ARG" ]; then
-    echo "vm.args needs to have a -setcookie parameter."
-    exit 1
-fi
 
 # Add ERTS bin dir to our path
 ERTS_PATH=$RUNNER_BASE_DIR/erts-$ERTS_VSN/bin
@@ -115,7 +132,8 @@ case "$1" in
         $NODETOOL stop
         ES=$?
         if [ "$ES" -ne 0 ]; then
-            exit $ES
+            echo "We died with exit code $ES but still exit properly"
+            #exit $ES
         fi
         pkill -z0 zonedoor
         while `kill -0 $PID 2>/dev/null`;
@@ -213,7 +231,14 @@ case "$1" in
         BINDIR=$ROOTDIR/erts-$ERTS_VSN/bin
         EMU=beam
         PROGNAME=`echo $0 | sed 's/.*\\///'`
-        CMD="$BINDIR/erlexec -boot $RUNNER_BASE_DIR/releases/$APP_VSN/$BOOTFILE -embedded -config $CONFIG_PATH -args_file $VMARGS_PATH"
+        if CUTTLEFISH_CONFIG=$($ERTS_PATH/escript $RUNNER_BASE_DIR/bin/cuttlefish -e $RUNNER_ETC_DIR -d {{db_path}}/generated.configs -s $RUNNER_BASE_DIR/share/schema/ -c $RUNNER_ETC_DIR/{{cuttlefish_conf}})
+        then
+            CONFIG_FILES="$CUTTLEFISH_CONFIG"
+        else
+            echo "Cuttlefish failed! Oh no!: $CUTTLEFISH_CONFIG"
+            CONFIG_FILES="-config $RUNNER_ETC_DIR/app.config -args_file $RUNNER_ETC_DIR/vm.args"
+        fi
+        CMD="$BINDIR/erlexec -boot $RUNNER_BASE_DIR/releases/$APP_VSN/$BOOTFILE -embedded $CONFIG_FILES -- ${1+"$@"}"
         export EMU
         export ROOTDIR
         export BINDIR
@@ -242,7 +267,14 @@ case "$1" in
         BINDIR=$ROOTDIR/erts-$ERTS_VSN/bin
         EMU=beam
         PROGNAME=`echo $0 | sed 's/.*\///'`
-        CMD="$BINDIR/erlexec $FOREGROUNDOPTIONS -boot $RUNNER_BASE_DIR/releases/$APP_VSN/$BOOTFILE -config $CONFIG_PATH -args_file $VMARGS_PATH"
+        if CUTTLEFISH_CONFIG=$($RUNNER_BASE_DIR/bin/cuttlefish -e $RUNNER_ETC_DIR -d {{db_path}}/generated.configs -s $RUNNER_BASE_DIR/share/schema/ -c $RUNNER_ETC_DIR/{{cuttlefish_conf}})
+        then
+            CONFIG_FILES="$CUTTLEFISH_CONFIG"
+        else
+            echo "Cuttlefish failed! Oh no!: $CUTTLEFISH_CONFIG"
+            CONFIG_FILES="-config $RUNNER_ETC_DIR/app.config -args_file $RUNNER_ETC_DIR/vm.args"
+        fi
+        CMD="$BINDIR/erlexec -boot $RUNNER_BASE_DIR/releases/$APP_VSN/$BOOTFILE -embedded $CONFIG_FILES -- ${1+"$@"}"
         export EMU
         export ROOTDIR
         export BINDIR

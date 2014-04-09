@@ -25,7 +25,6 @@ compile: zonedoor version_header
 	$(REBAR) compile
 
 deps:
-	$(REBAR) update-deps
 	$(REBAR) get-deps
 
 clean:

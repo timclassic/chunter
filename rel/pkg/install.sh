@@ -2,22 +2,22 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=20130530T224720Z\|20130419T073558Z\|20130629T040542Z\|20130808T195337Z\|20131003T221245Z\|20140124T065835Z\|20140221T042147Z
+TESTED_VERSIONS=20130530T224720Z\|20130419T073558Z\|20130629T040542Z\|20130808T195337Z\|20131003T221245Z\|20140124T065835Z\|20140221T042147Z\|20140404T041131Z\|20140404T041131Z
 
-if [ -z $DST ]
+if [ -z "$DST" ]
 then
-    DST=/opt
+    DST="/opt"
 fi
 
 #IFACE=`dladm show-phys -m | grep $admin_nic | awk '{print $1}'`
 #IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`
 
-DIR=`dirname $0`;
+DIR=$(dirname "$0");
 if [[ "$DIR" = "." ]]
 then
-    DIR=`pwd`
+    DIR=$(pwd)
 fi
-BASE=`basename $0`;
+BASE=$(basename "$0");
 
 
 if uname -a | egrep 20130627T201726Z
@@ -51,14 +51,22 @@ fi
 [ -d /var/imgadm ] || imgadm update
 [ -d /var/imgadm/images ] || mkdir -p /var/imgadm/images
 
-(cd $DST; uudecode -p $DIR/$BASE|tar xzf -)
+(cd "$DST"; uudecode -p "$DIR/$BASE"|tar xzf -)
 mkdir -p /var/log/chunter
 
-if [ ! -f $DST/chunter/etc/chunter.conf ]
+if [ ! -f "$DST/chunter/etc/chunter.conf" ]
 then
     conf_admin_mac=$(grep '^admin_nic=' /usbkey/config | awk -F= '{print $2}')
-    conf_admin_nic=$(dladm show-phys -m -o LINK,ADDRESS | grep "$conf_admin_mac" | awk '{print $1}')
+    case "$conf_admin_mac" in
+        aggr*)
+            conf_admin_nic="$conf_admin_mac"
+            ;;
+        *)
+            conf_admin_nic=$(dladm show-phys -m -o LINK,ADDRESS | grep "$conf_admin_mac" | awk '{print $1}')
+            ;;
+    esac
     conf_admin_ip=$(ipadm show-addr -o ADDROBJ,ADDR  | grep "^$conf_admin_nic" | awk '{print $2}' | awk -F/ '{print $1}')
+
     conf_fifo_nic=fifo0
     if ipadm show-addr -o ADDROBJ | grep "^$conf_fifo_nic" > /dev/null
     then
@@ -74,11 +82,11 @@ then
 
 fi
 
-mkdir -p $DST/custom/smf
-cp $DST/chunter/share/epmd.xml $DST/custom/smf
-cp $DST/chunter/share/chunter.xml $DST/custom/smf
+mkdir -p "$DST/custom/smf"
+cp "$DST/chunter/share/epmd.xml" "$DST/custom/smf"
+cp "$DST/chunter/share/chunter.xml" "$DST/custom/smf"
 
-svccfg import $DST/custom/smf/epmd.xml
-svccfg import $DST/custom/smf/chunter.xml
+svccfg import "$DST/custom/smf/epmd.xml"
+svccfg import "$DST/custom/smf/chunter.xml"
 
 exit 0;

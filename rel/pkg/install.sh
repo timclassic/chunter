@@ -56,7 +56,7 @@ mkdir -p /var/log/chunter
 
 if [ ! -f "$DST/chunter/etc/chunter.conf" ]
 then
-    conf_admin_mac=$(grep '^admin_nic=' /usbkey/config | awk -F= '{print $2}')
+    conf_admin_mac="$admin_nic"
     case "$conf_admin_mac" in
         aggr*)
             conf_admin_nic="$conf_admin_mac"

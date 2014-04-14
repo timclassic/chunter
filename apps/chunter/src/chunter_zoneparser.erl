@@ -97,7 +97,16 @@
 
 load(VM) ->
     Name = proplists:get_value(<<"name">>, VM),
-    convert(<<"/etc/zones/", Name/binary, ".xml">>, VM).
+    Res = convert(<<"/etc/zones/", Name/binary, ".xml">>, VM),
+    RouteFile = ["/zones/", Name, "/config/routes.json"],
+    case filelib:is_file(["/zones/", Name, "/config/routes.json"]) of
+        false ->
+            Res;
+        true ->
+            {ok, Routes} = file:read_file(RouteFile),
+            RoutesJSON = jsx:decode(Routes),
+            jsxd:set(<<"routes">>, RoutesJSON, Res)
+    end.
 
 -spec convert(Name::binary(), VM::fifo:vm_config()) -> fifo:vm_config().
 

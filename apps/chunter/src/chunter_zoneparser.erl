@@ -98,8 +98,8 @@
 load(VM) ->
     Name = proplists:get_value(<<"name">>, VM),
     Res = convert(<<"/etc/zones/", Name/binary, ".xml">>, VM),
-    RouteFile = ["/zones/", Name, "/config/routes.json"],
-    case filelib:is_file(<<"/zones/", Name/binary, "/config/routes.json">>) of
+    RouteFile = <<"/zones/", Name/binary, "/config/routes.json">>,
+    case filelib:is_file(RouteFile) of
         false ->
             Res;
         true ->

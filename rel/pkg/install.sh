@@ -83,10 +83,10 @@ then
     else
         sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
     fi
-    md5sum ${CONFFILE} > ${CONFFILE}.md5
+    digest-a md5 ${CONFFILE} > ${CONFFILE}.md5
 elif [ -f ${CONFFILE}.md5 ]
 then
-    if md5sum --quiet --strict -c ${CONFFILE}.md5 2&> /dev/null
+    if [ "$(digest -a md5 ${CONFFILE})" = "$(cat ${CONFFILE}.md5)" ]
     then
         if [[ "$conf_admin_ip" = "" ]]
         then
@@ -94,7 +94,7 @@ then
         else
             sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
         fi
-        md5sum ${CONFFILE} > ${CONFFILE}.md5
+        digest-a md5 ${CONFFILE} > ${CONFFILE}.md5
     fi
 else
     mv ${CONFFILE} ${CONFFILE}.old

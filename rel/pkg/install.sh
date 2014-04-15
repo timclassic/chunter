@@ -54,32 +54,51 @@ fi
 (cd "$DST"; uudecode -p "$DIR/$BASE"|tar xzf -)
 mkdir -p /var/log/chunter
 
-if [ ! -f "$DST/chunter/etc/chunter.conf" ]
-then
-    conf_admin_mac="$admin_nic"
-    case "$conf_admin_mac" in
-        aggr*)
-            conf_admin_nic="$conf_admin_mac"
-            ;;
-        *)
-            conf_admin_nic=$(dladm show-phys -m -o LINK,ADDRESS | grep "$conf_admin_mac" | awk '{print $1}')
-            ;;
-    esac
-    conf_admin_ip=$(ipadm show-addr -o ADDROBJ,ADDR  | grep "^$conf_admin_nic" | awk '{print $2}' | awk -F/ '{print $1}')
 
-    conf_fifo_nic=fifo0
-    if ipadm show-addr -o ADDROBJ | grep "^$conf_fifo_nic" > /dev/null
-    then
-        conf_fifo_ip=$(ipadm show-addr -o ADDROBJ,ADDR  | grep "^$conf_fifo_nic" | awk '{print $2}' | awk -F/ '{print $1}')
-        conf_admin_ip=$conf_fifo_ip
-    fi
+## Generate all the needed values
+conf_admin_mac="$admin_nic"
+case "$conf_admin_mac" in
+    aggr*)
+        conf_admin_nic="$conf_admin_mac"
+        ;;
+    *)
+        conf_admin_nic=$(dladm show-phys -m -o LINK,ADDRESS | grep "$conf_admin_mac" | awk '{print $1}')
+        ;;
+esac
+conf_admin_ip=$(ipadm show-addr -o ADDROBJ,ADDR  | grep "^$conf_admin_nic" | awk '{print $2}' | awk -F/ '{print $1}')
+
+conf_fifo_nic=fifo0
+if ipadm show-addr -o ADDROBJ | grep "^$conf_fifo_nic" > /dev/null
+then
+    conf_fifo_ip=$(ipadm show-addr -o ADDROBJ,ADDR  | grep "^$conf_fifo_nic" | awk '{print $2}' | awk -F/ '{print $1}')
+    conf_admin_ip=$conf_fifo_ip
+fi
+
+CONFFILE="$DST/chunter/etc/chunter.conf"
+if [ ! -f $CONFFILE ]
+then
     if [[ "$conf_admin_ip" = "" ]]
     then
-        cp $DST/chunter/etc/chunter.conf.example $DST/chunter/etc/chunter.conf
+        cp ${CONFFILE}.example ${CONFFILE}
     else
-        sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" $DST/chunter/etc/chunter.conf.example > $DST/chunter/etc/chunter.conf
+        sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
     fi
-
+    md5sum ${CONFFILE} > ${CONFFILE}.md5
+elif [ -f ${CONFFILE}.md5 ]
+then
+    if md5sum --quiet --strict -c ${CONFFILE}.md5 2&> /dev/null
+    then
+        if [[ "$conf_admin_ip" = "" ]]
+        then
+            cp ${CONFFILE}.example ${CONFFILE}
+        else
+            sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
+        fi
+        md5sum ${CONFFILE} > ${CONFFILE}.md5
+    fi
+else
+    mv ${CONFFILE} ${CONFFILE}.old
+    cat ${CONFFILE}.old | grep -v dump_dir > ${CONFFILE}
 fi
 
 mkdir -p "$DST/custom/smf"

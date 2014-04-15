@@ -142,6 +142,3 @@
          end
  end
 }.
-
-{mapping, "dump_dir", "vm_args.-env ERL_CRASH_DUMP",
- [{default, "{{log_path}}"}]}.

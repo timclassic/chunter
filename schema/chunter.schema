@@ -64,7 +64,7 @@
 {translation,
  "chunter.kstat_arc",
  fun(Conf) ->
-         case cuttlefish_util:conf_get_value("kstat.arc", Conf) of
+         case cuttlefish:conf_get("kstat.arc", Conf) of
              enabled ->
                  true;
              disabled ->
@@ -130,35 +130,9 @@
   {datatype, ip}]}.
 
 {translation,
- "chunter.ip",
- fun(Conf) ->
-         case cuttlefish_util:conf_get_value("ip", Conf) of
-             {IP, _Port} ->
-                 [A, B, C, D] = [list_to_integer(O) ||
-                                    O <- re:split(IP, "\\.", [{return, list}])],
-                 {ok, {A, B, C, D}};
-             _ ->
-                 undefined
-         end
- end
-}.
-
-{translation,
- "chunter.port",
- fun(Conf) ->
-         case cuttlefish_util:conf_get_value("ip", Conf) of
-             {_IP, Port} ->
-                 {ok, Port};
-             _ ->
-                 undefined
-         end
- end
-}.
-
-{translation,
  "mdns_client_lib.interface",
  fun(Conf) ->
-         case cuttlefish_util:conf_get_value("ip", Conf) of
+         case cuttlefish:conf_get("ip", Conf) of
              {IP, _Port} ->
                  [A, B, C, D] = [list_to_integer(O) ||
                                     O <- re:split(IP, "\\.", [{return, list}])],

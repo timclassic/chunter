@@ -10,7 +10,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    {ok, Port} = application:get_env(chunter, port),
+    {ok, {_, Port}} = application:get_env(chunter, endpoint),
     {ok, _} = ranch:start_listener(chunter_server, 1,
                                    ranch_tcp, [{port, Port}], chunter_protocol, []),
 

@@ -389,14 +389,14 @@ host_info() ->
                {ok, H} when is_list(H) ->
                    list_to_binary(H)
            end,
-    {{A,B,C,D}, Port} = case application:get_env(chunter, endpoint) of
-                            undefined ->
-                                {ok, R} = inet:getaddr(binary_to_list(Host), inet),
-                                {R, 4200};
-                            {ok, R} ->
-                                R
-                        end,
-    IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
+    {IPStr, Port} = case application:get_env(chunter, endpoint) of
+                        undefined ->
+                            {ok, {A, B, C, D}} = inet:getaddr(binary_to_list(Host), inet),
+                            {io_lib:format("~p.~p.~p.~p", [A,B,C,D]), 4200};
+                        {ok, R} ->
+                            R
+                    end,
+    IPBib = list_to_binary(IPStr),
     HostID = case filelib:is_file([code:root_dir(), "/etc/host_id"]) of
                  true ->
                      F = os:cmd(["cat ", Path]),
@@ -408,7 +408,7 @@ host_info() ->
                      UUID
              end,
 
-    {HostID, IPStr, Port}.
+    {HostID, IPBib, Port}.
 
 
 register_hypervisor() ->

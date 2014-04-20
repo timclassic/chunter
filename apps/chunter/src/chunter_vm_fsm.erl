@@ -206,7 +206,7 @@ start_link(UUID) ->
 %%--------------------------------------------------------------------
 init([UUID]) ->
     process_flag(trap_exit, true),
-    {Hypervisor, _} = chunter_server:host_info(),
+    {Hypervisor, _, _} = chunter_server:host_info(),
     libsniffle:vm_register(UUID, Hypervisor),
     SnapshotIVal = application:get_env(chunter, snapshot_update_interval, 900000),
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),

@@ -58,7 +58,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     timer:send_interval(dflt_env(zpool_interval, ?INTERVAL), tick),
-    {Host, _} = chunter_server:host_info(),
+    {Host, _, _} = chunter_server:host_info(),
     {ok, #state{host = Host}}.
 
 %%--------------------------------------------------------------------

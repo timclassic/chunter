@@ -61,7 +61,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     timer:send_interval(dflt_env(arc_interval, ?INTERVAL), tick),
-    {Host, _} = chunter_server:host_info(),
+    {Host, _, _} = chunter_server:host_info(),
     {ok, H} = ekstat:open(),
     {ok, #state{host = Host,
                 kstat = H}}.

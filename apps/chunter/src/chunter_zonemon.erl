@@ -58,7 +58,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {Name, _} = chunter_server:host_info(),
+    {Name, _, _} = chunter_server:host_info(),
     lager:info("chunter:zonemon - initializing: ~s", [Name]),
     Zonemon = code:priv_dir(chunter) ++ "/zonemon.sh",
     timer:send_interval(dflt_env(zonemon_interval, ?INTERVAL), zonecheck),

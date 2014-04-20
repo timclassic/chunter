@@ -99,7 +99,7 @@ service_action(Action, Service)
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    lager:info([{fifi_component, chunter}],
+    lager:info([{fifo_component, chunter}],
                "chunter:init.", []),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
@@ -121,7 +121,7 @@ init([]) ->
                        _ ->
                            [<<"zone">>]
                    end,
-    {Host, _IPStr} = host_info(),
+    {Host, _IPStr, _Port} = host_info(),
     libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, SysInfo},
                                      {<<"version">>, ?VERSION},
                                      {<<"virtualisation">>, Capabilities}]),
@@ -171,7 +171,7 @@ init([]) ->
 
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
     %%    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
-    lager:info([{fifi_component, chunter}],
+    lager:info([{fifo_component, chunter}],
                "unsupported call - ~p", [Call]),
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
@@ -305,10 +305,10 @@ handle_cast(Msg, #state{name = Name} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(update_services, State=#state{
-                                                 name=Host,
-                                                 nsq=NSQ,
-                                                 services = OldServices
-                                                }) ->
+                                      name=Host,
+                                      nsq=NSQ,
+                                      services = OldServices
+                                     }) ->
     case {chunter_smf:update(OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[GZ] Initializing ~p Services.",
@@ -389,13 +389,13 @@ host_info() ->
                {ok, H} when is_list(H) ->
                    list_to_binary(H)
            end,
-    {A,B,C,D} = case application:get_env(chunter, ip) of
-                    undefined ->
-                        {ok, R} = inet:getaddr(binary_to_list(Host), inet),
-                        R;
-                    {ok, R} ->
-                        R
-                end,
+    {{A,B,C,D}, Port} = case application:get_env(chunter, endpoint) of
+                            undefined ->
+                                {ok, R} = inet:getaddr(binary_to_list(Host), inet),
+                                {R, 4200};
+                            {ok, R} ->
+                                R
+                        end,
     IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
     HostID = case filelib:is_file([code:root_dir(), "/etc/host_id"]) of
                  true ->
@@ -408,13 +408,12 @@ host_info() ->
                      UUID
              end,
 
-    {HostID, IPStr}.
+    {HostID, IPStr, Port}.
 
 
 register_hypervisor() ->
-    Port = application:get_env(chunter, port, 4200),
-    {Host, IPStr} = host_info(),
-    lager:info([{fifi_component, chunter}],
+    {Host, IPStr, Port} = host_info(),
+    lager:info([{fifo_component, chunter}],
                "chunter:init - Host: ~s(~s)", [Host, IPStr]),
     [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
     case libsniffle:hypervisor_get(Host) of

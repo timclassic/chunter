@@ -99,6 +99,7 @@ service_action(Action, Service)
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    random:seed(now()),
     lager:info([{fifo_component, chunter}],
                "chunter:init.", []),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
@@ -252,11 +253,14 @@ handle_cast(connect, #state{name = Host,
                   os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
                   ",\\s*|\n"),
     Etherstub1 = lists:delete(<<>>, Etherstub),
+    register_hypervisor(),
     VMS = list_vms(),
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
                               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
-                              chunter_vm_fsm:load(UUID),
+                              Delay = random:uniform(1000),
+                              timer:apply_after(
+                                Delay, chunter_vm_fsm, load, [UUID]),
                               {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
                               Mem + M
                       end, 0, VMS) / (1024*1024)),
@@ -269,8 +273,6 @@ handle_cast(connect, #state{name = Host,
 
     %%    statsderl:increment([Name, ".net.join"], 1, 1.0),
     %%    libsniffle:join_client_channel(),
-
-    register_hypervisor(),
     libsniffle:hypervisor_set(
       Host,
       [{<<"sysinfo">>, State#state.sysinfo},

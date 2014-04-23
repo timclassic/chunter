@@ -234,8 +234,8 @@ handle_cast({reserve_mem, N}, State =
     ProvMem1 = ProvMem + N,
     Free = TotalMem - ReservedMem - ProvMem1,
     libsniffle:hypervisor_set(Host,
-                              [{<<"resources.free-memory">>, Free},
-                               {<<"resources.provisioned-memory">>, ProvMem1}]),
+                              [{[<<"resources">>, <<"free-memory">>], Free},
+                               {[<<"resources">>, <<"provisioned-memory">>], ProvMem1}]),
     {noreply, State#state{
                 provisioned_memory = ProvMem1
                }};
@@ -261,6 +261,9 @@ handle_cast(connect, #state{name = Host,
                               Mem + M
                       end, 0, VMS) / (1024*1024)),
 
+    lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
+               [Host, ProvMem, TotalMem]),
+
     %%    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
     %%    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
 
@@ -273,11 +276,11 @@ handle_cast(connect, #state{name = Host,
       [{<<"sysinfo">>, State#state.sysinfo},
        {<<"version">>, ?VERSION},
        {<<"networks">>, Networks1},
-       {<<"resources.free-memory">>, TotalMem - ReservedMem - ProvMem},
-       {<<"resources.reserved-memory">>, ReservedMem},
+       {[<<"resources">>, <<"free-memory">>], TotalMem - ReservedMem - ProvMem},
+       {[<<"resources">>, <<"reserved-memory">>], ReservedMem},
        {<<"etherstubs">>, Etherstub1},
-       {<<"resources.provisioned-memory">>, ProvMem},
-       {<<"resources.total-memory">>, TotalMem},
+       {[<<"resources">>, <<"provisioned-memory">>], ProvMem},
+       {[<<"resources">>, <<"total-memory">>], TotalMem},
        {<<"virtualisation">>, Caps}]),
     {noreply, State#state{
                 total_memory = TotalMem,

@@ -255,16 +255,16 @@ handle_cast(connect, #state{name = Host,
     Etherstub1 = lists:delete(<<>>, Etherstub),
     register_hypervisor(),
     VMS = list_vms(),
-    ProvMem = round(lists:foldl(
-                      fun (VM, Mem) ->
-                              {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
-                              Delay = random:uniform(1000),
-                              timer:apply_after(
-                                Delay, chunter_vm_fsm, load, [UUID]),
-                              {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
-                              Mem + M
-                      end, 0, VMS) / (1024*1024)),
 
+    {ProvMemA, _} = lists:foldl(
+                      fun (VM, {Mem, Delay}) ->
+                              {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
+                              timer:apply_after(
+                                500 + Delay, chunter_vm_fsm, load, [UUID]),
+                              {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+                              {Mem + M, Delay + 100}
+                      end, {0, 300}, VMS),
+    ProvMem = round(ProvMemA / (1024*1024)),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
 

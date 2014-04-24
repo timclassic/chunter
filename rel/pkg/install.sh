@@ -98,7 +98,7 @@ then
     fi
 else
     mv ${CONFFILE} ${CONFFILE}.old
-    cat ${CONFFILE}.old | grep -v dump_dir > ${CONFFILE}
+    cat ${CONFFILE}.old | grep -v dump_dir | sed 's/paralell_uploads/parallel_uploads/' > ${CONFFILE}
 fi
 
 mkdir -p "$DST/custom/smf"

@@ -7,7 +7,7 @@
 
 %% @doc Size of the chunks for uploading to the s3 storage.
 {mapping, "s3_upload_chunk_size", "chunter.upload_chunk",
- [{default, "1MB"},
+ [{default, "5MB"},
   {datatype, bytesize}]}.
 
 %% @doc Initial number of paralel uploads to s3.
@@ -32,7 +32,7 @@
 
 %% @doc Size of the chunks for downloading fomr the s3 storage.
 {mapping, "s3_download_chunk_size", "chunter.download_chunk",
- [{default, "1MB"},
+ [{default, "5MB"},
   {datatype, bytesize}]}.
 
 %% @doc Initial number of paralel downloads from s3.

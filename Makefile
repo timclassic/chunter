@@ -12,7 +12,7 @@ apps/chunter/priv/zonedoor: utils/zonedoor.c
 zonedoor: apps/chunter/priv/zonedoor
 
 version:
-	echo "$(shell git symbolic-ref HEAD 2> /dev/null | cut -b 12-)-$(shell git log --pretty=format:'%h, %ad' -1)" > chunter.version
+	git describe > chunter.version
 
 version_header: version
 	cp chunter.version rel/files/chunter.version

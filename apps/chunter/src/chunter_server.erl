@@ -99,7 +99,8 @@ service_action(Action, Service)
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    lager:info([{fifi_component, chunter}],
+    random:seed(now()),
+    lager:info([{fifo_component, chunter}],
                "chunter:init.", []),
     %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
@@ -121,7 +122,7 @@ init([]) ->
                        _ ->
                            [<<"zone">>]
                    end,
-    {Host, _IPStr} = host_info(),
+    {Host, _IPStr, _Port} = host_info(),
     libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, SysInfo},
                                      {<<"version">>, ?VERSION},
                                      {<<"virtualisation">>, Capabilities}]),
@@ -171,7 +172,7 @@ init([]) ->
 
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
     %%    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
-    lager:info([{fifi_component, chunter}],
+    lager:info([{fifo_component, chunter}],
                "unsupported call - ~p", [Call]),
     Reply = {error, {unsupported, Call}},
     {reply, Reply, State};
@@ -234,8 +235,8 @@ handle_cast({reserve_mem, N}, State =
     ProvMem1 = ProvMem + N,
     Free = TotalMem - ReservedMem - ProvMem1,
     libsniffle:hypervisor_set(Host,
-                              [{<<"resources.free-memory">>, Free},
-                               {<<"resources.provisioned-memory">>, ProvMem1}]),
+                              [{[<<"resources">>, <<"free-memory">>], Free},
+                               {[<<"resources">>, <<"provisioned-memory">>], ProvMem1}]),
     {noreply, State#state{
                 provisioned_memory = ProvMem1
                }};
@@ -252,32 +253,36 @@ handle_cast(connect, #state{name = Host,
                   os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
                   ",\\s*|\n"),
     Etherstub1 = lists:delete(<<>>, Etherstub),
+    register_hypervisor(),
     VMS = list_vms(),
-    ProvMem = round(lists:foldl(
-                      fun (VM, Mem) ->
+
+    {ProvMemA, _} = lists:foldl(
+                      fun (VM, {Mem, Delay}) ->
                               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
-                              chunter_vm_fsm:load(UUID),
+                              timer:apply_after(
+                                500 + Delay, chunter_vm_fsm, load, [UUID]),
                               {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
-                              Mem + M
-                      end, 0, VMS) / (1024*1024)),
+                              {Mem + M, Delay + 100}
+                      end, {0, 300}, VMS),
+    ProvMem = round(ProvMemA / (1024*1024)),
+    lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
+               [Host, ProvMem, TotalMem]),
 
     %%    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
     %%    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
 
     %%    statsderl:increment([Name, ".net.join"], 1, 1.0),
     %%    libsniffle:join_client_channel(),
-
-    register_hypervisor(),
     libsniffle:hypervisor_set(
       Host,
       [{<<"sysinfo">>, State#state.sysinfo},
        {<<"version">>, ?VERSION},
        {<<"networks">>, Networks1},
-       {<<"resources.free-memory">>, TotalMem - ReservedMem - ProvMem},
-       {<<"resources.reserved-memory">>, ReservedMem},
+       {[<<"resources">>, <<"free-memory">>], TotalMem - ReservedMem - ProvMem},
+       {[<<"resources">>, <<"reserved-memory">>], ReservedMem},
        {<<"etherstubs">>, Etherstub1},
-       {<<"resources.provisioned-memory">>, ProvMem},
-       {<<"resources.total-memory">>, TotalMem},
+       {[<<"resources">>, <<"provisioned-memory">>], ProvMem},
+       {[<<"resources">>, <<"total-memory">>], TotalMem},
        {<<"virtualisation">>, Caps}]),
     {noreply, State#state{
                 total_memory = TotalMem,
@@ -305,10 +310,10 @@ handle_cast(Msg, #state{name = Name} = State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(update_services, State=#state{
-                                                 name=Host,
-                                                 nsq=NSQ,
-                                                 services = OldServices
-                                                }) ->
+                                      name=Host,
+                                      nsq=NSQ,
+                                      services = OldServices
+                                     }) ->
     case {chunter_smf:update(OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[GZ] Initializing ~p Services.",
@@ -389,14 +394,14 @@ host_info() ->
                {ok, H} when is_list(H) ->
                    list_to_binary(H)
            end,
-    {A,B,C,D} = case application:get_env(chunter, ip) of
-                    undefined ->
-                        {ok, R} = inet:getaddr(binary_to_list(Host), inet),
-                        R;
-                    {ok, R} ->
-                        R
-                end,
-    IPStr = list_to_binary(io_lib:format("~p.~p.~p.~p", [A,B,C,D])),
+    {IPStr, Port} = case application:get_env(chunter, endpoint) of
+                        undefined ->
+                            {ok, {A, B, C, D}} = inet:getaddr(binary_to_list(Host), inet),
+                            {io_lib:format("~p.~p.~p.~p", [A,B,C,D]), 4200};
+                        {ok, R} ->
+                            R
+                    end,
+    IPBib = list_to_binary(IPStr),
     HostID = case filelib:is_file([code:root_dir(), "/etc/host_id"]) of
                  true ->
                      F = os:cmd(["cat ", Path]),
@@ -408,13 +413,12 @@ host_info() ->
                      UUID
              end,
 
-    {HostID, IPStr}.
+    {HostID, IPBib, Port}.
 
 
 register_hypervisor() ->
-    Port = application:get_env(chunter, port, 4200),
-    {Host, IPStr} = host_info(),
-    lager:info([{fifi_component, chunter}],
+    {Host, IPStr, Port} = host_info(),
+    lager:info([{fifo_component, chunter}],
                "chunter:init - Host: ~s(~s)", [Host, IPStr]),
     [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
     case libsniffle:hypervisor_get(Host) of

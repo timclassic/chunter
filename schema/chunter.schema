@@ -7,11 +7,11 @@
 
 %% @doc Size of the chunks for uploading to the s3 storage.
 {mapping, "s3_upload_chunk_size", "chunter.upload_chunk",
- [{default, "1MB"},
+ [{default, "5MB"},
   {datatype, bytesize}]}.
 
 %% @doc Initial number of paralel uploads to s3.
-{mapping, "paralell_uploads", "fifo_s3.upload_pool_size",
+{mapping, "parallel_uploads", "fifo_s3.upload_pool_size",
  [{default, 5},
   {level, advanced},
   {datatype, integer}]}.
@@ -32,7 +32,7 @@
 
 %% @doc Size of the chunks for downloading fomr the s3 storage.
 {mapping, "s3_download_chunk_size", "chunter.download_chunk",
- [{default, "1MB"},
+ [{default, "5MB"},
   {datatype, bytesize}]}.
 
 %% @doc Initial number of paralel downloads from s3.
@@ -64,7 +64,7 @@
 {translation,
  "chunter.kstat_arc",
  fun(Conf) ->
-         case cuttlefish_util:conf_get_value("kstat.arc", Conf) of
+         case cuttlefish:conf_get("kstat.arc", Conf) of
              enabled ->
                  true;
              disabled ->
@@ -130,35 +130,9 @@
   {datatype, ip}]}.
 
 {translation,
- "chunter.ip",
- fun(Conf) ->
-         case cuttlefish_util:conf_get_value("ip", Conf) of
-             {IP, _Port} ->
-                 [A, B, C, D] = [list_to_integer(O) ||
-                                    O <- re:split(IP, "\\.", [{return, list}])],
-                 {ok, {A, B, C, D}};
-             _ ->
-                 undefined
-         end
- end
-}.
-
-{translation,
- "chunter.port",
- fun(Conf) ->
-         case cuttlefish_util:conf_get_value("ip", Conf) of
-             {_IP, Port} ->
-                 {ok, Port};
-             _ ->
-                 undefined
-         end
- end
-}.
-
-{translation,
  "mdns_client_lib.interface",
  fun(Conf) ->
-         case cuttlefish_util:conf_get_value("ip", Conf) of
+         case cuttlefish:conf_get("ip", Conf) of
              {IP, _Port} ->
                  [A, B, C, D] = [list_to_integer(O) ||
                                     O <- re:split(IP, "\\.", [{return, list}])],
@@ -168,6 +142,3 @@
          end
  end
 }.
-
-{mapping, "dump_dir", "vm_args.-env ERL_CRASH_DUMP",
- [{default, "{{log_path}}"}]}.

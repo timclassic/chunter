@@ -13,15 +13,10 @@
 %% @doc Initial number of paralel uploads to s3.
 {mapping, "parallel_uploads", "fifo_s3.upload_pool_size",
  [{default, 5},
-  {level, advanced},
-  {datatype, integer}]}.
-
-{mapping, "parallel_uploads", "fifo_s3.upload_pool_size",
- [{default, 5},
   {datatype, integer}]}.
 
 %% @doc Maximal number of paralel uploads to s3.
-{mapping, "max_paralell_uploads", "fifo_s3.upload_pool_max",
+{mapping, "max_parallel_uploads", "fifo_s3.upload_pool_max",
  [{default, 10},
   {datatype, integer}]}.
 
@@ -36,12 +31,12 @@
   {datatype, bytesize}]}.
 
 %% @doc Initial number of paralel downloads from s3.
-{mapping, "paralell_downloads", "fifo_s3.download_pool_size",
+{mapping, "parallel_downloads", "fifo_s3.download_pool_size",
  [{default, 5},
   {datatype, integer}]}.
 
 %% @doc Maximal number of paralel downloads from s3.
-{mapping, "max_paralell_downloads", "fifo_s3.download_pool_max",
+{mapping, "max_parallel_downloads", "fifo_s3.download_pool_max",
  [{default, 10},
   {datatype, integer}]}.
 

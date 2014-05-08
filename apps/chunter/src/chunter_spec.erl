@@ -158,10 +158,16 @@ generate_spec(Package, Dataset, OwnerData) ->
                         0 ->
                             Base02;
                         Q ->
-                            jsxd:thread([{set, [<<"disks">>, 1, <<"boot">>], false},
-                                         {set, [<<"disks">>, 1, <<"size">>],
-                                          Q * 1024}],
-                                        Base02)
+                            Base03 = jsxd:thread([{set, [<<"disks">>, 1, <<"boot">>], false},
+                                                 {set, [<<"disks">>, 1, <<"size">>],
+                                                  Q * 1024}],
+                                                Base02),
+                            case jsxd:get(<<"blocksize">>, Package) of
+                                {ok, BS} ->
+                                    jsxd:set([<<"disks">>, 1, <<"boot">>], BS, Base03);
+                                _ ->
+                                    Base03
+                            end
                     end;
                 {ok, <<"zone">>} ->
                     jsxd:thread([{set, <<"max_physical_memory">>, Ram},

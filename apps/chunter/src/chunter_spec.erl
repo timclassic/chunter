@@ -162,21 +162,33 @@ generate_spec(Package, Dataset, OwnerData) ->
                                                  {set, [<<"disks">>, 1, <<"size">>],
                                                   Q * 1024}],
                                                 Base02),
-                            case jsxd:get(<<"blocksize">>, Package) of
-                                {ok, BS} ->
-                                    jsxd:set([<<"disks">>, 1, <<"boot">>], BS, Base03);
+                            Base04 = case jsxd:get(<<"blocksize">>, Package) of
+                                         {ok, BS} ->
+                                             jsxd:set([<<"disks">>, 1, <<"boot">>], BS, Base03);
+                                         _ ->
+                                             Base03
+                                     end,
+                            case jsxd:get(<<"compression">>, Package) of
+                                {ok, Compression} ->
+                                    jsxd:set([<<"disks">>, 1, <<"compression">>], Compression, Base04);
                                 _ ->
-                                    Base03
+                                    Base04
                             end
                     end;
                 {ok, <<"zone">>} ->
-                    jsxd:thread([{set, <<"max_physical_memory">>, Ram},
-                                 {set, <<"brand">>, <<"joyent">>},
-                                 {set, <<"quota">>,
-                                  jsxd:get(<<"quota">>, 0, Package)},
-                                 {set, <<"image_uuid">>,
-                                  jsxd:get(<<"dataset">>, <<"">>, Dataset)}],
-                                Base0)
+                    Base11 = jsxd:thread([{set, <<"max_physical_memory">>, Ram},
+                                          {set, <<"brand">>, <<"joyent">>},
+                                          {set, <<"quota">>,
+                                           jsxd:get(<<"quota">>, 0, Package)},
+                                          {set, <<"image_uuid">>,
+                                           jsxd:get(<<"dataset">>, <<"">>, Dataset)}],
+                                         Base0),
+                    case jsxd:get(<<"compression">>, Package) of
+                        {ok, Compression} ->
+                            jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
+                        _ ->
+                            Base11
+                    end
             end,
     Base2 = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                               jsxd:set([<<"customer_metadata">>, <<"root_authorized_keys">>], V, Obj);

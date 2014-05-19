@@ -821,7 +821,7 @@ handle_info({'EXIT', _D, PosixCode}, StateName,
 handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
     {next_state, StateName, State};
 
-handle_info(update_services, StateName, State=#state{
+handle_info(update_services, running, State=#state{
                                                  uuid=UUID,
                                                  nsq=NSQ,
                                                  services = OldServices,
@@ -834,7 +834,7 @@ handle_info(update_services, StateName, State=#state{
             libsniffle:vm_set(UUID, <<"services">>,
                               [{Srv, St}
                                || {Srv, _, St} <- Changed]),
-            {next_state, StateName, State#state{services = ServiceSet}};
+            {next_state, running, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
             lager:debug("[~s] Updating ~p Services.",
                         [UUID, length(Changed)]),
@@ -848,9 +848,9 @@ handle_info(update_services, StateName, State=#state{
                UUID, [<<"services">>, Srv], delete)
              || {Srv, _, <<"removed">>} <- Changed],
             update_services(UUID, Changed, NSQ),
-            {next_state, StateName, State#state{services = ServiceSet}};
+            {next_state, running, State#state{services = ServiceSet}};
         _ ->
-            {next_state, StateName, State}
+            {next_state, running, State}
     end;
 
 handle_info(update_services, StateName, State) ->

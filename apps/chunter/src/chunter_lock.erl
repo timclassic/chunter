@@ -120,7 +120,7 @@ handle_call({lock, NewUUID}, _From, #state{lock = {OldUUID, Old}} = State) ->
         D when D > ?LOCK_TIMEOUT ->
             io:format("~p > ~p ~n.", [D, ?LOCK_TIMEOUT]),
             lager:warning("[lock] Lock ~s timed out after ~ps and replaced by "
-                          "~s.", [OldUUID, NewUUID, D/(1000*1000)]),
+                          "~s.", [OldUUID, D/(1000*1000), NewUUID]),
             {reply, ok, State#state{lock = {NewUUID, now()}}};
         D ->
             lager:info("[lock] Lock ~s rejected old lock ~s still in effect "

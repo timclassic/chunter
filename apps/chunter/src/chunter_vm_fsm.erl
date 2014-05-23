@@ -252,9 +252,10 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
             State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
     {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
-    lager:debug("Creating with spec: ~p", [VMData]),
-    eplugin:call('vm:create', UUID, VMData),
-    SniffleData  = chunter_spec:to_sniffle(VMData),
+    VMData1 = eplugin:fold('vm:create_json', VMData),
+    lager:debug("Creating with spec: ~p", [VMData1]),
+    eplugin:call('vm:create', UUID, VMData1),
+    SniffleData  = chunter_spec:to_sniffle(VMData1),
     {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
     chunter_server:reserve_mem(Ram),
     SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
@@ -274,7 +275,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     install_image(DatasetUUID, UUID),
     lager:debug("[create:~s] Done installing image going to create now.",
                 [UUID]),
-    case chunter_vmadm:create(VMData) of
+    case chunter_vmadm:create(VMData1) of
         ok ->
             lager:debug("[create:~s] Done creating continuing on.", [UUID]),
             {next_state, creating,

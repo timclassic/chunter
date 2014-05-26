@@ -159,12 +159,12 @@ generate_spec(Package, Dataset, OwnerData) ->
                             Base02;
                         Q ->
                             Base03 = jsxd:thread([{set, [<<"disks">>, 1, <<"boot">>], false},
-                                                 {set, [<<"disks">>, 1, <<"size">>],
-                                                  Q * 1024}],
-                                                Base02),
+                                                  {set, [<<"disks">>, 1, <<"size">>],
+                                                   Q * 1024}],
+                                                 Base02),
                             Base04 = case jsxd:get(<<"blocksize">>, Package) of
                                          {ok, BS} ->
-                                             jsxd:set([<<"disks">>, 1, <<"boot">>], BS, Base03);
+                                             jsxd:set([<<"disks">>, 1, <<"blocksize">>], BS, Base03);
                                          _ ->
                                              Base03
                                      end,

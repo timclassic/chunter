@@ -19,6 +19,14 @@ then
 fi
 BASE=$(basename "$0");
 
+FORCE=false
+while getopts ":f" opt; do
+    case $opt in
+        f)
+            FORCE=true
+            ;;
+    esac
+done
 
 if uname -a | egrep 20130627T201726Z
 then
@@ -31,19 +39,20 @@ then
     exit 1
 fi
 
-
-if uname -a | egrep $TESTED_VERSIONS
-then
-    echo "This SmartOS release is tested!"
-else
-    echo "This SmartOS release WAS NOT tested! Are you sure you want to go on? [yes|NO] "
-    read SKIP
-    if [[ "$SKIP" = "yes" ]]
+if [ "$FORCE" = false ] ; then
+    if uname -a | egrep $TESTED_VERSIONS
     then
-        echo "Okay we go on, but it might not work!"
+        echo "This SmartOS release is tested!"
     else
-        echo "Exiting."
-        exit 1
+        echo "This SmartOS release WAS NOT tested! Are you sure you want to go on? [yes|NO] "
+        read SKIP
+        if [[ "$SKIP" = "yes" ]]
+        then
+            echo "Okay we go on, but it might not work!"
+        else
+            echo "Exiting."
+            exit 1
+        fi
     fi
 fi
 

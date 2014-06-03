@@ -137,3 +137,9 @@
          end
  end
 }.
+
+%% @doc cpu_type used for creating VM's. This only applies to KVM machines,
+%% 'default' will not set the option at all. Please see 'man vmadm' for details.
+{mapping, "cpu_type", "chunter.cpu_type",
+ [{default, default},
+  {datatype, {enum, [default, qemu64, host]}}]}.

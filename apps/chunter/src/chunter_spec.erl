@@ -154,26 +154,34 @@ generate_spec(Package, Dataset, OwnerData) ->
                                           {set, [<<"disks">>, 0, <<"image_uuid">>],
                                            jsxd:get(<<"dataset">>, <<"">>, Dataset)}],
                                          Base01),
-                    case jsxd:get(<<"quota">>, 0, Package) of
-                        0 ->
-                            Base02;
-                        Q ->
-                            Base03 = jsxd:thread([{set, [<<"disks">>, 1, <<"boot">>], false},
-                                                  {set, [<<"disks">>, 1, <<"size">>],
-                                                   Q * 1024}],
-                                                 Base02),
-                            Base04 = case jsxd:get(<<"blocksize">>, Package) of
-                                         {ok, BS} ->
-                                             jsxd:set([<<"disks">>, 1, <<"blocksize">>], BS, Base03);
+                    Base05 = case jsxd:get(<<"quota">>, 0, Package) of
+                                 0 ->
+                                     Base02;
+                                 Q ->
+                                     Base03 = jsxd:thread([{set, [<<"disks">>, 1, <<"boot">>], false},
+                                                           {set, [<<"disks">>, 1, <<"size">>],
+                                                            Q * 1024}],
+                                                          Base02),
+                                     Base04 = case jsxd:get(<<"blocksize">>, Package) of
+                                                  {ok, BS} ->
+                                                      jsxd:set([<<"disks">>, 1, <<"blocksize">>], BS, Base03);
+                                                  _ ->
+                                                      Base03
+                                              end,
+                                     case jsxd:get(<<"compression">>, Package) of
+                                         {ok, Compression} ->
+                                             jsxd:set([<<"disks">>, 1, <<"compression">>], Compression, Base04);
                                          _ ->
-                                             Base03
-                                     end,
-                            case jsxd:get(<<"compression">>, Package) of
-                                {ok, Compression} ->
-                                    jsxd:set([<<"disks">>, 1, <<"compression">>], Compression, Base04);
-                                _ ->
-                                    Base04
-                            end
+                                             Base04
+                                     end
+                             end,
+                    case application:get_env(cpu_type) of
+                        {ok, qemu64} ->
+                            jsxd:set([<<"cpu_type">>], <<"qemu64">>, Base05);
+                        {ok, host} ->
+                            jsxd:set([<<"cpu_type">>], <<"host">>, Base05);
+                        _ ->
+                            Base05
                     end;
                 {ok, <<"zone">>} ->
                     Base11 = jsxd:thread([{set, <<"max_physical_memory">>, Ram},

@@ -69,8 +69,6 @@
          deleting_snapshot/2
         ]).
 
--define(WRITE_RETRY, 10).
-
 -record(state, {hypervisor,
                 type = unknown,
                 uuid,
@@ -272,7 +270,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
     libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
     lager:debug("[create:~s] Done generating config, handing to img install.",
                 [UUID]),
-    install_image(DatasetUUID, UUID),
+    chunter_dataset_srv:install(DatasetUUID, UUID),
     lager:debug("[create:~s] Done installing image going to create now.",
                 [UUID]),
     case chunter_vmadm:create(VMData1) of
@@ -972,111 +970,6 @@ init_zonedoor(State) ->
             State
     end.
 
--spec install_image(DatasetUUID::fifo:uuid(), VM::fifo:uuid()) -> ok | string().
-
-install_image(DatasetUUID, VM) ->
-    lager:debug("Installing dataset ~s.", [DatasetUUID]),
-    Path = filename:join(<<"/zones">>, DatasetUUID),
-    lager:debug("Checking path ~s.", [Path]),
-    case os:cmd("zfs list zones/" ++ binary_to_list(DatasetUUID) ++">/dev/null; echo $?") of
-        "0\n" ->
-            lager:debug("found.", []),
-            ok;
-        _ ->
-            case libsniffle:img_list(DatasetUUID) of
-                {ok, Parts} ->
-                    [Idx | Parts1] = lists:sort(Parts),
-                    {Cmd, B} = case libsniffle:img_get(DatasetUUID, Idx) of
-                                   {ok, <<31:8, 139:8, _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
-                                   {ok, <<"BZh", _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
-                               end,
-                    lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
-                    Port = open_port({spawn_executable, Cmd},
-                                     [{args, [DatasetUUID]}, use_stdio, binary,
-                                      stderr_to_stdout, exit_status]),
-                    port_command(Port, B),
-                    lager:debug("We have the following parts: ~p.", [Parts1]),
-                    write_image(Port, DatasetUUID, Parts1, VM, 0);
-                {ok, AKey, SKey, S3Host, S3Port, Bucket, Target} ->
-                    Chunk = case application:get_env(chunter, download_chunk) of
-                                undefined ->
-                                    1048576;
-                                {ok, S} ->
-                                    S
-                            end,
-                    {ok, Download} = fifo_s3_download:new(AKey, SKey, S3Host, S3Port, Bucket,
-                                                          Target, [{chunk_size, Chunk}]),
-                    {Cmd, B} = case fifo_s3_download:get(Download) of
-                                   {ok, <<31:8, 139:8, _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
-                                   {ok, <<"BZh", _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
-                               end,
-                    lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
-                    Port = open_port({spawn_executable, Cmd},
-                                     [{args, [DatasetUUID]}, use_stdio, binary,
-                                      stderr_to_stdout, exit_status]),
-                    port_command(Port, B),
-                    case chunter_snap:download_to_port(Port, Download, VM, 1) of
-                        {ok, done} ->
-                            finish_image(DatasetUUID);
-                        E ->
-                            E
-                    end
-            end
-    end.
-
-write_image(Port, UUID, [Idx|_], _Lock, ?WRITE_RETRY) ->
-    lager:debug("<IMG> ~p import failed at chunk ~p.", [UUID, Idx]),
-    port_close(Port),
-    {error, retries_exceeded};
-
-write_image(Port, UUID, [Idx|R], Lock, Retry) ->
-    lager:debug("<IMG> ~s[~p]: fetching", [UUID, Idx]),
-    chunter_lock:lock(Lock),
-    case libsniffle:img_get(UUID, Idx) of
-        {ok, B} ->
-            lager:debug("<IMG> ~s[~p]: writing", [UUID, Idx]),
-            port_command(Port, B),
-            write_image(Port, UUID, R, Lock, 0);
-        E ->
-            lager:warning("<IMG> ~p[~p]: retry! -> ~p", [UUID, Idx, E]),
-            timer:sleep(1000),
-            write_image(Port, UUID, [Idx|R], Lock, Retry+1)
-    end;
-
-write_image(Port, UUID, [], _Lock, _) ->
-    lager:debug("<IMG> done, going to wait for zfs to finish now.", []),
-    port_close(Port),
-    finish_image(UUID).
-
-finish_image(UUID) ->
-    UUIDL = binary_to_list(UUID),
-    {ok, DS} = libsniffle:dataset_get(UUID),
-    Manifest = jsxd:from_list([{<<"manifest">>,
-                                [{<<"v">>, 2},
-                                 {<<"uuid">>, UUID},
-                                 {<<"disabled">>, false},
-                                 {<<"type">>, <<"zvol">>},
-                                 {<<"state">>, <<"active">>}]},
-                               {<<"zpool">>, <<"zones">>}]),
-    %% Need to set the correct type
-    Manifest1 = case jsxd:get([<<"type">>], DS) of
-                    {ok, <<"zone">>} ->
-                        jsxd:set([<<"manifest">>, <<"type">>],
-                                 <<"zone-dataset">>, Manifest);
-                    _ ->
-                        Manifest
-                end,
-    %% and write it to zoneamd's new destination folder ...
-    file:write_file("/var/imgadm/images/zones-" ++ UUIDL ++ ".json",
-                    jsx:encode(Manifest1)),
-    Cmd = "zfs list -Hp -t all -r  zones/" ++ UUIDL,
-
-    wait_image(0, Cmd).
-
 do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
     chunter_zfs:snapshot(P, SnapID).
 
@@ -1280,17 +1173,6 @@ do_destroy(<<_:1/binary, P/binary>>, _VM, _SnapID, _) ->
 %%% Utility
 %%%===================================================================
 
-wait_import(<<_:1/binary, P/binary>>) ->
-    Cmd = "zfs list -Hp -t all -r " ++ binary_to_list(P),
-    wait_image(0, Cmd).
-
-wait_image(N, Cmd) when N < 3 ->
-    timer:sleep(5000),
-    wait_image(length(re:split(os:cmd(Cmd), "\n")), Cmd);
-
-wait_image(_, _) ->
-    lager:debug("<IMG> done waiting.", []).
-
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
                                        Name::binary(),
                                        VMState::binary(),
@@ -1389,3 +1271,15 @@ update_services(UUID, Changed, false) ->
         Changed1 ->
             libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}])
     end.
+
+wait_import(<<_:1/binary, P/binary>>) ->
+    Cmd = "zfs list -Hp -t all -r " ++ binary_to_list(P),
+    wait_image(0, Cmd).
+
+wait_image(N, Cmd) when N < 3 ->
+    timer:sleep(5000),
+    wait_image(length(re:split(os:cmd(Cmd), "\n")), Cmd);
+
+wait_image(_, _) ->
+    lager:debug("<IMG> done waiting.", []),
+    ok.

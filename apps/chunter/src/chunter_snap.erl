@@ -55,7 +55,7 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                              stderr_to_stdout, exit_status, stream])
           end,
     backup_update(VM, SnapID, <<"state">>, <<"uploading">>, Options),
-    {ok, VMObj} = libsniffle:vm_get(VM),
+    {ok, VMObj} = ls_vm:get(VM),
     Size = jsxd:get([<<"backups">>, SnapID, <<"size">>], 0, VMObj),
     Fs = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
     backup_update(VM, SnapID, <<"files">>, [Target | Fs], Options),
@@ -261,7 +261,7 @@ backup_update(VM, SnapID, K, V, Opts) ->
         false ->
             Root = proplists:get_value(root, Opts, [<<"backups">>, SnapID]),
             Event = proplists:get_value(event, Opts, <<"backup">>),
-            libsniffle:vm_set(VM, Root ++ [K], V),
+            ls_vm:set(VM, Root ++ [K], V),
             libhowl:send(VM,
                          [{<<"event">>, Event},
                           {<<"data">>,

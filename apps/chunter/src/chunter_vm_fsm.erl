@@ -205,7 +205,7 @@ start_link(UUID) ->
 init([UUID]) ->
     process_flag(trap_exit, true),
     {Hypervisor, _, _} = chunter_server:host_info(),
-    libsniffle:vm_register(UUID, Hypervisor),
+    ls_vm:register(UUID, Hypervisor),
     SnapshotIVal = application:get_env(chunter, snapshot_update_interval, 900000),
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
@@ -267,7 +267,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
                {ok, <<"kvm">>} -> kvm;
                _ -> zone
            end,
-    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
+    ls_vm:set_config(UUID, SniffleData1),
     lager:debug("[create:~s] Done generating config, handing to img install.",
                 [UUID]),
     chunter_dataset_srv:install(DatasetUUID, UUID),
@@ -288,7 +288,7 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
 
 initialized({restore, SnapID, Options},
             State=#state{uuid=VM}) ->
-    {ok, VMObj} = libsniffle:vm_get(VM),
+    {ok, VMObj} = ls_vm:get(VM),
     case jsxd:get([<<"backups">>, SnapID, <<"xml">>], false, VMObj) of
         true ->
             UUIDL = binary_to_list(VM),
@@ -526,7 +526,7 @@ handle_event({force_state, NextState}, StateName, State) ->
     end;
 
 handle_event(register, StateName, State = #state{uuid = UUID}) ->
-    libsniffle:vm_register(UUID, State#state.hypervisor),
+    ls_vm:register(UUID, State#state.hypervisor),
     %%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(UUID) of
         {error, not_found} ->
@@ -544,7 +544,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                 {<<"data">>,
                                  [{<<"config">>, SniffleData}]}]),
-            libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
+            ls_vm:set_config(UUID, SniffleData),
             State1 = State#state{type = Type},
             change_state(State1#state.uuid, atom_to_binary(StateName), false),
             {next_state, StateName, State1#state{services = []}}
@@ -569,8 +569,8 @@ handle_event({update, Package, Config}, StateName,
                         VMData1 ->
                             chunter_server:update_mem(),
                             SniffleData = chunter_spec:to_sniffle(VMData1),
-                            libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
-                            libsniffle:vm_log(UUID, <<"Update complete.">>),
+                            ls_vm:set_config(UUID, SniffleData),
+                            ls_vm:log(UUID, <<"Update complete.">>),
                             UodateData =  case jsxd:get(<<"uuid">>, Package) of
                                               {ok, PUUID} ->
                                                   [{<<"package">>, PUUID},
@@ -584,14 +584,14 @@ handle_event({update, Package, Config}, StateName,
                     end;
                 {error, E} ->
                     lager:error("[~s] updated failed with ~p", [UUID, E]),
-                    libsniffle:vm_log(UUID, <<"Update failed.">>),
+                    ls_vm:log(UUID, <<"Update failed.">>),
                     {next_state, StateName, State}
             end
     end;
 
 handle_event(remove, _StateName, State) ->
     lager:debug("[~s] Calling remove.", [State#state.uuid]),
-    libsniffle:vm_unregister(State#state.uuid),
+    ls_vm:unregister(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
@@ -602,7 +602,7 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
         _VM ->
             chunter_vmadm:delete(UUID),
             lager:info("Deleting ~s successfull, letting sniffle know.", [UUID]),
-            libsniffle:vm_delete(UUID)
+            ls_vm:delete(UUID)
     end,
     {stop, normal, State};
 
@@ -641,7 +641,7 @@ handle_event(_Event, StateName, State) ->
 
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,
-    {ok, VMObj} = libsniffle:vm_get(VM),
+    {ok, VMObj} = ls_vm:get(VM),
     {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
     Local = chunter_snap:get(VM),
     case chunter_snap:restore_path(SnapID, Remote, Local) of
@@ -830,21 +830,18 @@ handle_info(update_services, running, State=#state{
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[~s] Initializing ~p Services.",
                         [UUID, length(Changed)]),
-            libsniffle:vm_set(UUID, <<"services">>,
-                              [{Srv, St}
-                               || {Srv, _, St} <- Changed]),
+            [ls_vm:set_service(UUID, Srv, St)
+             || {Srv, _, St} <- Changed],
             {next_state, running, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
             lager:debug("[~s] Updating ~p Services.",
                         [UUID, length(Changed)]),
             %% Update changes which are not removes
-            [libsniffle:vm_set(
-               UUID, [<<"services">>, Srv], SrvState)
+            [ls_vm:set_service(UUID, Srv, SrvState)
              || {Srv, _, SrvState} <- Changed,
                 SrvState =/= <<"removed">>],
             %% Delete services that were changed.
-            [libsniffle:vm_set(
-               UUID, [<<"services">>, Srv], delete)
+            [ls_vm:set_service(UUID, Srv, delete)
              || {Srv, _, <<"removed">>} <- Changed],
             update_services(UUID, Changed, NSQ),
             {next_state, running, State#state{services = ServiceSet}};
@@ -870,7 +867,8 @@ handle_info(get_info, StateName, State=#state{type=kvm}) ->
             timer:send_after(1000, get_info),
             {next_state, StateName, State};
         {ok, Info} ->
-            libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
+            [ls_vm:set_info(State#state.uuid, K, V) ||
+                {K, V} <- Info],
             {next_state, StateName, State}
     end;
 
@@ -976,8 +974,8 @@ do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
 finish_snapshot(_VM, _SnapID, [backup], ok) ->
     ok;
 finish_snapshot(VM, SnapID, _, ok) ->
-    libsniffle:vm_set(
-      VM, [<<"snapshots">>, SnapID, <<"state">>],
+    ls_vm:set_snapshot(
+      VM, [SnapID, <<"state">>],
       <<"completed">>),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
@@ -993,9 +991,8 @@ do_delete_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
     chunter_zfs:destroy_snapshot(P, SnapID, [f, r]).
 
 finish_delete_snapshot(VM, SnapID, _, ok) ->
-    SnapPath = [<<"snapshots">>, SnapID],
-    lager:debug("Deleting ~p", [SnapPath]),
-    libsniffle:vm_set(VM, SnapPath, delete),
+    lager:debug("Deleting ~p", [SnapID]),
+    ls_vm:set_snapshot(VM, [SnapID], delete),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -1015,7 +1012,7 @@ finish_rollback_snapshot(VM, SnapID, _, ok) ->
                   {<<"data">>,
                    [{<<"action">>, <<"rollback">>},
                     {<<"uuid">>, SnapID}]}]),
-    libsniffle:vm_commit_snapshot_rollback(VM, SnapID);
+    ls_vm:commit_snapshot_rollback(VM, SnapID);
 
 finish_rollback_snapshot(_VM, _SnapID, _, error) ->
     error.
@@ -1053,7 +1050,7 @@ snapshp_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
                               {S, <<Reply0/binary, "\n", Res/binary>>};
                           {error, Code, Res} ->
                               lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
-                              libsniffle:vm_log(
+                              ls_vm:log(
                                 VM,
                                 <<"Failed snapshot disk ", P1/binary, ": ", Res/binary>>),
                               {error, <<Reply0/binary, "\n", Res/binary>>}
@@ -1081,7 +1078,7 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                                 {ok, Res} ->
                                     M = io_lib:format("Snapshot done: ~p",
                                                       [Res]),
-                                    libsniffle:vm_log(VM, iolist_to_binary(M)),
+                                    ls_vm:log(VM, iolist_to_binary(M)),
                                     CompleteFun(VM, UUID, Opts, ok);
                                 {error, E} ->
                                     libhowl:send(VM,
@@ -1096,20 +1093,20 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                         {error, Code, Reply} ->
                             lager:error("Failed snapshot VM ~s ~p: ~s.",
                                         [VM, Code, Reply]),
-                            libsniffle:vm_log(VM, <<"Failed to snapshot: ",
+                            ls_vm:log(VM, <<"Failed to snapshot: ",
                                                     Reply/binary>>),
                             CompleteFun(VM, UUID, Opts, error)
                     end;
                 _ ->
                     lager:error("Failed to snapshot VM ~s.", [VM]),
-                    libsniffle:vm_log(VM, <<"Failed snapshot: can't find zonepath.">>),
+                    ls_vm:log(VM, <<"Failed snapshot: can't find zonepath.">>),
                     error
             end
     end.
 
 snapshot_sizes(VM) ->
     lager:info("[~s] Updating Snapshots.", [VM]),
-    case {libsniffle:servers(), libsniffle:vm_get(VM)} of
+    case {libsniffle:servers(), ls_vm:get(VM)} of
         {[], _} ->
             lager:warning("[~s] No Servers to update snapshots.", [VM]),
             ok;
@@ -1142,13 +1139,13 @@ snapshot_sizes(VM) ->
                          Snaps1 =lists:filter(fun ({Name, _}) ->
                                                       lists:member(Name, KnownS)
                                               end, Snaps),
-                         [{[<<"snapshots">>, Name, <<"size">>], Size}
+                         [{[Name, <<"size">>], Size}
                           || {Name, Size} <- Snaps1];
                      _ ->
                          []
                  end,
             BnS = R1 ++ R,
-            [libsniffle:vm_set(VM, K, Size) || {K, Size} <- BnS];
+            [ls_vm:set_snapshot(VM, K, Size) || {K, Size} <- BnS];
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),
             ok
@@ -1218,8 +1215,8 @@ change_state(UUID, State, true) ->
     %%          end,
     %% This will stay out untill someone provides a propper solution
     State1 = State,
-    libsniffle:vm_log(UUID, <<"Transitioning ", State1/binary>>),
-    libsniffle:vm_set(UUID, <<"state">>, State1),
+    ls_vm:log(UUID, <<"Transitioning ", State1/binary>>),
+    ls_vm:state(UUID, State1),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1;
 
@@ -1232,7 +1229,7 @@ change_state(UUID, State, false) ->
     %%          end,
     %% This will stay out untill someone provides a propper solution
     State1 = State,
-    libsniffle:vm_set(UUID, <<"state">>, State1),
+    ls_vm:state(UUID, State1),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1.
 
@@ -1247,7 +1244,7 @@ atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
 
 backup_update(VM, SnapID, K, V) ->
-    libsniffle:vm_set(VM, [<<"backups">>, SnapID, K], V),
+    ls_vm:set_backup(VM, [SnapID, K], V),
     libhowl:send(VM,
                  [{<<"event">>, <<"backup">>},
                   {<<"data">>,

@@ -830,19 +830,21 @@ handle_info(update_services, running, State=#state{
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[~s] Initializing ~p Services.",
                         [UUID, length(Changed)]),
-            [ls_vm:set_service(UUID, Srv, St)
+            [ls_vm:set_service(UUID, [{Srv, St}])
              || {Srv, _, St} <- Changed],
             {next_state, running, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
             lager:debug("[~s] Updating ~p Services.",
                         [UUID, length(Changed)]),
             %% Update changes which are not removes
-            [ls_vm:set_service(UUID, Srv, SrvState)
-             || {Srv, _, SrvState} <- Changed,
-                SrvState =/= <<"removed">>],
+            ls_vm:set_service(UUID,
+                              [{Srv, SrvState}
+                               || {Srv, _, SrvState} <- Changed,
+                                  SrvState =/= <<"removed">>]),
             %% Delete services that were changed.
-            [ls_vm:set_service(UUID, Srv, delete)
-             || {Srv, _, <<"removed">>} <- Changed],
+            ls_vm:set_service(UUID,
+                              [{Srv, delete}
+                               || {Srv, _, <<"removed">>} <- Changed]),
             update_services(UUID, Changed, NSQ),
             {next_state, running, State#state{services = ServiceSet}};
         _ ->
@@ -867,8 +869,7 @@ handle_info(get_info, StateName, State=#state{type=kvm}) ->
             timer:send_after(1000, get_info),
             {next_state, StateName, State};
         {ok, Info} ->
-            [ls_vm:set_info(State#state.uuid, K, V) ||
-                {K, V} <- Info],
+            ls_vm:set_info(State#state.uuid, Info),
             {next_state, StateName, State}
     end;
 
@@ -975,8 +976,8 @@ finish_snapshot(_VM, _SnapID, [backup], ok) ->
     ok;
 finish_snapshot(VM, SnapID, _, ok) ->
     ls_vm:set_snapshot(
-      VM, [SnapID, <<"state">>],
-      <<"completed">>),
+      VM, [{[SnapID, <<"state">>],
+            <<"completed">>}]),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -992,7 +993,7 @@ do_delete_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
 
 finish_delete_snapshot(VM, SnapID, _, ok) ->
     lager:debug("Deleting ~p", [SnapID]),
-    ls_vm:set_snapshot(VM, [SnapID], delete),
+    ls_vm:set_snapshot(VM, [{[SnapID], delete}]),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -1145,7 +1146,7 @@ snapshot_sizes(VM) ->
                          []
                  end,
             BnS = R1 ++ R,
-            [ls_vm:set_snapshot(VM, K, Size) || {K, Size} <- BnS];
+            ls_vm:set_snapshot(VM, BnS);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),
             ok
@@ -1244,7 +1245,7 @@ atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
 
 backup_update(VM, SnapID, K, V) ->
-    ls_vm:set_backup(VM, [SnapID, K], V),
+    ls_vm:set_backup(VM, [{[SnapID, K], V}]),
     libhowl:send(VM,
                  [{<<"event">>, <<"backup">>},
                   {<<"data">>,

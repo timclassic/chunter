@@ -56,8 +56,9 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
           end,
     backup_update(VM, SnapID, <<"state">>, <<"uploading">>, Options),
     {ok, VMObj} = ls_vm:get(VM),
-    Size = jsxd:get([<<"backups">>, SnapID, <<"size">>], 0, VMObj),
-    Fs = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
+    Backups = ft_vm:backups(VMObj),
+    Size = jsxd:get([SnapID, <<"size">>], 0, Backups),
+    Fs = jsxd:get([SnapID, <<"files">>], [], Backups),
     backup_update(VM, SnapID, <<"files">>, [Target | Fs], Options),
     upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Options).
 

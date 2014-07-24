@@ -289,7 +289,8 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
 initialized({restore, SnapID, Options},
             State=#state{uuid=VM}) ->
     {ok, VMObj} = ls_vm:get(VM),
-    case jsxd:get([<<"backups">>, SnapID, <<"xml">>], false, VMObj) of
+    Remote = ft_vm:backups(VMObj),
+    case jsxd:get([SnapID, <<"xml">>], false, Remote) of
         true ->
             UUIDL = binary_to_list(VM),
             Conf = chunter_snap:mk_s3_conf(Options),
@@ -300,18 +301,17 @@ initialized({restore, SnapID, Options},
         false ->
             ok
     end,
-    {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
     Local = chunter_snap:get(VM),
     case chunter_snap:restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
                 [S || {_, S} <- Path,
-                      jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
+                      jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
             backup_update(VM, SnapID, <<"local">>, true),
-            Type = case jsxd:get(<<"type">>, VMObj) of
+            Type = case jsxd:get(<<"type">>, ft_vm:config(VMObj)) of
                        {ok, <<"kvm">>} -> kvm;
                        _ -> zone
                    end,
@@ -642,7 +642,7 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,
     {ok, VMObj} = ls_vm:get(VM),
-    {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
+    {ok, Remote} = ft_vm:backups(VMObj),
     Local = chunter_snap:get(VM),
     case chunter_snap:restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
@@ -830,8 +830,9 @@ handle_info(update_services, running, State=#state{
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[~s] Initializing ~p Services.",
                         [UUID, length(Changed)]),
-            [ls_vm:set_service(UUID, [{Srv, St}])
-             || {Srv, _, St} <- Changed],
+            ls_vm:set_service(UUID,
+                              [{Srv, St}
+                               || {Srv, _, St} <- Changed]),
             {next_state, running, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
             lager:debug("[~s] Updating ~p Services.",
@@ -1119,33 +1120,25 @@ snapshot_sizes(VM) ->
                             Spec = chunter_spec:to_sniffle(VMData),
                             chunter_snap:get_all(VM, Spec)
                     end,
-            R = case jsxd:get([<<"backups">>], V) of
-                    {ok, Bs} ->
-                        KnownB = [ ID || {ID, _} <- Bs],
-                        Backups1 =lists:filter(fun ({Name, _}) ->
-                                                       lists:member(Name, KnownB)
-                                               end, Snaps),
-                        Local = [N || {N, _ } <- Backups1],
-                        NonLocal = lists:subtract(KnownB, Local),
-                        [{[<<"backups">>, Name, <<"local_size">>], Size}
-                         || {Name, Size} <- Backups1] ++
-                            [{[<<"backups">>, Name, <<"local_size">>], 0}
-                             || Name <- NonLocal];
-                    _ ->
-                        []
-                end,
-            R1 = case jsxd:get([<<"snapshots">>], V) of
-                     {ok, Ss} ->
-                         KnownS = [ ID || {ID, _} <- Ss],
-                         Snaps1 =lists:filter(fun ({Name, _}) ->
-                                                      lists:member(Name, KnownS)
-                                              end, Snaps),
-                         [{[Name, <<"size">>], Size}
-                          || {Name, Size} <- Snaps1];
-                     _ ->
-                         []
-                 end,
-            BnS = R1 ++ R,
+            Bs = ft_vm:backups(V),
+            KnownB = [ ID || {ID, _} <- Bs],
+            Backups1 =lists:filter(fun ({Name, _}) ->
+                                           lists:member(Name, KnownB)
+                                   end, Snaps),
+            Local = [N || {N, _ } <- Backups1],
+            NonLocal = lists:subtract(KnownB, Local),
+            R = [{[<<"backups">>, Name, <<"local_size">>], Size}
+                 || {Name, Size} <- Backups1] ++
+                [{[<<"backups">>, Name, <<"local_size">>], 0}
+                 || Name <- NonLocal],
+
+            Ss = ft_vm:snapshots(V),
+            KnownS = [ ID || {ID, _} <- Ss],
+            Snaps1 =lists:filter(fun ({Name, _}) ->
+                                         lists:member(Name, KnownS)
+                                 end, Snaps),
+            BnS = [{[Name, <<"size">>], Size}
+                  || {Name, Size} <- Snaps1] ++ R,
             ls_vm:set_snapshot(VM, BnS);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),

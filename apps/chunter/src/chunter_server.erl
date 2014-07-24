@@ -123,7 +123,7 @@ init([]) ->
                            [<<"zone">>]
                    end,
     {Host, _IPStr, _Port} = host_info(),
-    ls_hypervisor:set_sysinfo(Host, SysInfo),
+    ls_hypervisor:sysinfo(Host, SysInfo),
     ls_hypervisor:version(Host, ?VERSION),
     ls_hypervisor:virtualisation(Host, Capabilities),
     case application:get_env(nsq_producer) of

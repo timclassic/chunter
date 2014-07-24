@@ -216,7 +216,7 @@ handle_cast(update_mem, State = #state{
           os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
-    ls_hypervisor:set_resources(Host, [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
+    ls_hypervisor:set_resource(Host, [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
                                        {[<<"reserved-memory">>], ReservedMem},
                                        {[<<"provisioned-memory">>], ProvMem},
                                        {[<<"total-memory">>], TotalMem}]),
@@ -234,7 +234,7 @@ handle_cast({reserve_mem, N}, State =
                   }) ->
     ProvMem1 = ProvMem + N,
     Free = TotalMem - ReservedMem - ProvMem1,
-    ls_hypervisor:set_resources(Host,
+    ls_hypervisor:set_resource(Host,
                               [{[<<"free-memory">>], Free},
                                {[<<"provisioned-memory">>], ProvMem1}]),
     {noreply, State#state{

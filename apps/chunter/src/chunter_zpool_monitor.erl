@@ -108,7 +108,7 @@ handle_info(tick, State = #state{last = Last,
         Last when Skipped < 120 ->
             {noreply, State};
         Pools ->
-            libsniffle:hypervisor_set(State#state.host, Pools),
+            ls_hypervisor:set_pool(State#state.host, Pools),
             {noreply, State#state{skipped = 0, last = Pools}}
     end;
 
@@ -151,18 +151,15 @@ get_stats(Cmd) ->
     lists:foldl(
       fun (Line, Acc) ->
               [Name, Size, Alloc, Free, _Expand, _Cap, Dedup, Health, _Altroot] = re:split(Line, "\t"),
-              [{<<"pools.", Name/binary, ".size">>, bin_to_gb(Size)},
-               {<<"pools.", Name/binary, ".used">>, bin_to_gb(Alloc)},
-               {<<"pools.", Name/binary, ".free">>, bin_to_gb(Free)},
-               {<<"pools.", Name/binary, ".dedup">>, bin_to_int(Dedup)},
-               {<<"pools.", Name/binary, ".health">>, Health} | Acc]
+              [{[Name, <<"size">>], bin_to_gb(Size)},
+               {[Name, <<"used">>], bin_to_gb(Alloc)},
+               {[Name, <<"free">>], bin_to_gb(Free)},
+               {[Name, <<"dedup">>], binary_to_integer(Dedup)},
+               {[Name, <<"health">>], Health} | Acc]
       end, [], re:split(os:cmd(Cmd), "\n", [trim])).
 
-bin_to_int(B) ->
-        list_to_integer(binary_to_list(B)).
-
 bin_to_gb(B) ->
-    round(bin_to_int(B)/(1024*1024)).
+    round(binary_to_integer(B)/(1024*1024)).
 
 dflt_env(N, D) ->
     case application:get_env(N) of

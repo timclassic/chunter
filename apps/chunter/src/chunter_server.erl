@@ -123,9 +123,9 @@ init([]) ->
                            [<<"zone">>]
                    end,
     {Host, _IPStr, _Port} = host_info(),
-    libsniffle:hypervisor_set(Host, [{<<"sysinfo">>, SysInfo},
-                                     {<<"version">>, ?VERSION},
-                                     {<<"virtualisation">>, Capabilities}]),
+    ls_hypervisor:set_sysinfo(Host, SysInfo),
+    ls_hypervisor:version(Host, ?VERSION),
+    ls_hypervisor:virtualisation(Host, Capabilities),
     case application:get_env(nsq_producer) of
         {ok, {NSQHost, NSQPort}} ->
             ensq:producer(services, NSQHost, NSQPort),
@@ -216,10 +216,10 @@ handle_cast(update_mem, State = #state{
           os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
-    libsniffle:hypervisor_set(Host, [{<<"resources.free-memory">>, TotalMem - ReservedMem - ProvMem},
-                                     {<<"resources.reserved-memory">>, ReservedMem},
-                                     {<<"resources.provisioned-memory">>, ProvMem},
-                                     {<<"resources.total-memory">>, TotalMem}]),
+    ls_hypervisor:set_resources(Host, [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
+                                       {[<<"reserved-memory">>], ReservedMem},
+                                       {[<<"provisioned-memory">>], ProvMem},
+                                       {[<<"total-memory">>], TotalMem}]),
     {noreply, State#state{
                 total_memory = TotalMem,
                 provisioned_memory = ProvMem
@@ -234,9 +234,9 @@ handle_cast({reserve_mem, N}, State =
                   }) ->
     ProvMem1 = ProvMem + N,
     Free = TotalMem - ReservedMem - ProvMem1,
-    libsniffle:hypervisor_set(Host,
-                              [{[<<"resources">>, <<"free-memory">>], Free},
-                               {[<<"resources">>, <<"provisioned-memory">>], ProvMem1}]),
+    ls_hypervisor:set_resources(Host,
+                              [{[<<"free-memory">>], Free},
+                               {[<<"provisioned-memory">>], ProvMem1}]),
     {noreply, State#state{
                 provisioned_memory = ProvMem1
                }};
@@ -265,23 +265,17 @@ handle_cast(connect, #state{name = Host,
     ProvMem = round(ProvMemA / (1024*1024)),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
-
-    %%    statsderl:gauge([Name, ".hypervisor.memory.total"], TotalMem, 1),
-    %%    statsderl:gauge([Name, ".hypervisor.memory.provisioned"], ProvMem, 1),
-
-    %%    statsderl:increment([Name, ".net.join"], 1, 1.0),
-    %%    libsniffle:join_client_channel(),
-    libsniffle:hypervisor_set(
+    ls_hypervisor:sysinfo(Host, State#state.sysinfo),
+    ls_hypervisor:version(Host, ?VERSION),
+    ls_hypervisor:networks(Host, Networks1),
+    ls_hypervisor:set_resource(
       Host,
-      [{<<"sysinfo">>, State#state.sysinfo},
-       {<<"version">>, ?VERSION},
-       {<<"networks">>, Networks1},
-       {[<<"resources">>, <<"free-memory">>], TotalMem - ReservedMem - ProvMem},
-       {[<<"resources">>, <<"reserved-memory">>], ReservedMem},
-       {<<"etherstubs">>, Etherstub1},
-       {[<<"resources">>, <<"provisioned-memory">>], ProvMem},
-       {[<<"resources">>, <<"total-memory">>], TotalMem},
-       {<<"virtualisation">>, Caps}]),
+      [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
+       {[<<"reserved-memory">>], ReservedMem},
+       {[<<"provisioned-memory">>], ProvMem},
+       {[<<"total-memory">>], TotalMem}]),
+    ls_hypervisor:etherstubs(Host, Etherstub1),
+    ls_hypervisor:virtualisation(Host, Caps),
     {noreply, State#state{
                 total_memory = TotalMem,
                 provisioned_memory = ProvMem,
@@ -316,22 +310,24 @@ handle_info(update_services, State=#state{
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[GZ] Initializing ~p Services.",
                         [length(Changed)]),
-            libsniffle:hypervisor_set(Host, <<"services">>,
-                                      [{Srv, St}
-                                       || {Srv, _, St} <- Changed]),
+            ls_hypervisor:set_service(
+              Host,
+              [{[Srv], St}
+               || {Srv, _, St} <- Changed]),
             {noreply, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
             lager:debug("[GZ] Updating ~p Services.",
                         [length(Changed)]),
             %% Update changes which are not removes
-            [libsniffle:hypervisor_set(
-               Host, [<<"services">>, Srv], SrvState)
-             || {Srv, _, SrvState} <- Changed,
-                SrvState =/= <<"removed">>],
-            %% Delete services that were changed.
-            [libsniffle:hypervisor_set(
-               Host, [<<"services">>, Srv], delete)
-             || {Srv, _, <<"removed">>} <- Changed],
+            ls_hypervisor:set_service(
+               Host,
+              [{[Srv], case SrvState of
+                           <<"removed">> ->
+                               delete;
+                            _ ->
+                               SrvState
+                       end}
+               || {Srv, _, SrvState} <- Changed]),
             update_services(Host, Changed, NSQ),
             {noreply, State#state{services = ServiceSet}};
         _ ->
@@ -419,20 +415,20 @@ register_hypervisor() ->
     lager:info([{fifo_component, chunter}],
                "chunter:init - Host: ~s(~s)", [Host, IPStr]),
     [Alias|_] = re:split(os:cmd("uname -n"), "\n"),
-    case libsniffle:hypervisor_get(Host) of
+    case ls_hypervisor:get(Host) of
         not_found ->
-            libsniffle:hypervisor_register(Host, IPStr, Port),
-            libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
+            ls_hypervisor:register(Host, IPStr, Port),
+            ls_hypervisor:alias(Host, Alias);
         {ok, H} ->
-            libsniffle:hypervisor_register(Host, IPStr, Port),
+            ls_hypervisor:register(Host, IPStr, Port),
             case ft_hypervisor:alias(H) of
                 undefined ->
-                    libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
+                    ls_hypervisor:alias(Host, Alias);
                 _ ->
                     ok
             end;
         _ ->
-            libsniffle:hypervisor_register(Host, IPStr, Port),
+            ls_hypervisor:register(Host, IPStr, Port),
             ok
     end.
 

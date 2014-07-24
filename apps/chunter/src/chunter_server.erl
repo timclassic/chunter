@@ -425,7 +425,7 @@ register_hypervisor() ->
             libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
         {ok, H} ->
             libsniffle:hypervisor_register(Host, IPStr, Port),
-            case jsxd:get(<<"alias">>, H) of
+            case ft_hypervisor:alias(H) of
                 undefined ->
                     libsniffle:hypervisor_set(Host, <<"alias">>, Alias);
                 _ ->

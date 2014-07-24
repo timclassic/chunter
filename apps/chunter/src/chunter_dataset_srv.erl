@@ -225,8 +225,8 @@ finish_image(UUID) ->
                                  {<<"state">>, <<"active">>}]},
                                {<<"zpool">>, <<"zones">>}]),
     %% Need to set the correct type
-    Manifest1 = case jsxd:get([<<"type">>], DS) of
-                    {ok, <<"zone">>} ->
+    Manifest1 = case ft_dataset:type(DS) of
+                    zone ->
                         jsxd:set([<<"manifest">>, <<"type">>],
                                  <<"zone-dataset">>, Manifest);
                     _ ->

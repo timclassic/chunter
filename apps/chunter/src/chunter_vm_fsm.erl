@@ -746,7 +746,7 @@ handle_info({D, {data, {eol, Data}}}, StateName,
             lager:warning("[zonedoor:~s] User ~s trying to connect with key ~s",
                           [UUID, User, KeyID]),
             KeyBin = libsnarl:keystr_to_id(KeyID),
-            case libsnarl:user_key_find(KeyBin) of
+            case ls_user:key_find(KeyBin) of
                 {ok, UserID} ->
                     case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) orelse
                         libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"ssh">>, User]) of

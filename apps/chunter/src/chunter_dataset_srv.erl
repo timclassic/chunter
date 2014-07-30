@@ -145,10 +145,10 @@ install_image(DatasetUUID, VM) ->
             lager:debug("found.", []),
             ok;
         _ ->
-            case libsniffle:img_list(DatasetUUID) of
+            case ls_img:list(DatasetUUID) of
                 {ok, Parts} ->
                     [Idx | Parts1] = lists:sort(Parts),
-                    {Cmd, B} = case libsniffle:img_get(DatasetUUID, Idx) of
+                    {Cmd, B} = case ls_img:get(DatasetUUID, Idx) of
                                    {ok, <<31:8, 139:8, _/binary>> = AB} ->
                                        {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
                                    {ok, <<"BZh", _/binary>> = AB} ->
@@ -198,7 +198,7 @@ write_image(Port, UUID, [Idx|_], _Lock, ?WRITE_RETRY) ->
 write_image(Port, UUID, [Idx|R], Lock, Retry) ->
     lager:debug("<IMG> ~s[~p]: fetching", [UUID, Idx]),
     chunter_lock:lock(Lock),
-    case libsniffle:img_get(UUID, Idx) of
+    case ls_img:get(UUID, Idx) of
         {ok, B} ->
             lager:debug("<IMG> ~s[~p]: writing", [UUID, Idx]),
             port_command(Port, B),
@@ -216,7 +216,7 @@ write_image(Port, UUID, [], _Lock, _) ->
 
 finish_image(UUID) ->
     UUIDL = binary_to_list(UUID),
-    {ok, DS} = libsniffle:dataset_get(UUID),
+    {ok, DS} = ls_dataset:get(UUID),
     Manifest = jsxd:from_list([{<<"manifest">>,
                                 [{<<"v">>, 2},
                                  {<<"uuid">>, UUID},

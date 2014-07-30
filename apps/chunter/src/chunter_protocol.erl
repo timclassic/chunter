@@ -211,14 +211,17 @@ handle_message({machines, snapshot, store,
                            {s3_port, Port},
                            {s3_bucket, Bucket},
                            {quiet, true} | Opts],
-                  libsniffle:dataset_set(Img, <<"imported">>, <<"pending">>),
+                  ls_dataset:imported(Img, <<"pending">>),
+                  ls_dataset:state(Img, <<"pending">>),
                   R = chunter_snap:upload(<<"/zones/", UUID/binary>>,
                                           UUID, SnapId, Opts1),
                   case R of
                       {ok, _} ->
-                          libsniffle:dataset_set(Img, <<"imported">>, 1);
+                          ls_dataset:state(Img, <<"imported">>),
+                          ls_dataset:imported(Img, 1);
                       {error, _, _} ->
-                          libsniffle:dataset_set(Img, <<"imported">>, <<"failed">>)
+                          ls_dataset:state(Img, <<"failed">>),
+                          ls_dataset:imported(Img, <<"failed">>)
                   end
           end),
     {stop, ok, State};
@@ -324,12 +327,13 @@ write_snapshot(UUID, SnapId, Img) ->
     Port = open_port({spawn_executable, Cmd},
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
-    libsniffle:dataset_set(Img, <<"imported">>, <<"pending">>),
+    ls_dataset:imported(Img, <<"pending">>),
+    ls_dataset:state(Img, <<"pending">>),
     write_snapshot(Port, Img, <<>>, 0, undefined).
 
 write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx, Ref) ->
     lager:debug("<IMG> ~s[~p]", [Img, Idx]),
-    {ok, Ref1} = libsniffle:img_create(Img, Idx, binary:copy(MB), Ref),
+    {ok, Ref1} = ls_img:create(Img, Idx, binary:copy(MB), Ref),
     write_snapshot(Port, Img, Acc, Idx+1, Ref1);
 
 write_snapshot(Port, Img, Acc, Idx, Ref) ->
@@ -342,10 +346,11 @@ write_snapshot(Port, Img, Acc, Idx, Ref) ->
                     ok;
                 _ ->
                     lager:debug("<IMG> ~s[~p]", [Img, Idx]),
-                    libsniffle:img_create(Img, Idx, binary:copy(Acc), Ref)
+                    ls_img:create(Img, Idx, binary:copy(Acc), Ref)
             end,
             lager:info("Writing image ~s finished with ~p parts.", [Img, Idx]),
-            libsniffle:dataset_set(Img, <<"imported">>, 1),
+            ls_dataset:imported(Img, 1),
+            ls_dataset:state(Img, <<"imported">>),
             ok;
         {Port,{exit_status, S}} ->
             lager:error("Writing image ~s failed after ~p parts with exit "

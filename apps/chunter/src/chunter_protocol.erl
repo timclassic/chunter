@@ -212,15 +212,15 @@ handle_message({machines, snapshot, store,
                            {s3_bucket, Bucket},
                            {quiet, true} | Opts],
                   ls_dataset:imported(Img, <<"pending">>),
-                  ls_dataset:state(Img, <<"pending">>),
+                  ls_dataset:status(Img, <<"pending">>),
                   R = chunter_snap:upload(<<"/zones/", UUID/binary>>,
                                           UUID, SnapId, Opts1),
                   case R of
                       {ok, _} ->
-                          ls_dataset:state(Img, <<"imported">>),
+                          ls_dataset:status(Img, <<"imported">>),
                           ls_dataset:imported(Img, 1);
                       {error, _, _} ->
-                          ls_dataset:state(Img, <<"failed">>),
+                          ls_dataset:status(Img, <<"failed">>),
                           ls_dataset:imported(Img, <<"failed">>)
                   end
           end),
@@ -328,7 +328,7 @@ write_snapshot(UUID, SnapId, Img) ->
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
     ls_dataset:imported(Img, <<"pending">>),
-    ls_dataset:state(Img, <<"pending">>),
+    ls_dataset:status(Img, <<"pending">>),
     write_snapshot(Port, Img, <<>>, 0, undefined).
 
 write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx, Ref) ->
@@ -350,7 +350,7 @@ write_snapshot(Port, Img, Acc, Idx, Ref) ->
             end,
             lager:info("Writing image ~s finished with ~p parts.", [Img, Idx]),
             ls_dataset:imported(Img, 1),
-            ls_dataset:state(Img, <<"imported">>),
+            ls_dataset:status(Img, <<"imported">>),
             ok;
         {Port,{exit_status, S}} ->
             lager:error("Writing image ~s failed after ~p parts with exit "

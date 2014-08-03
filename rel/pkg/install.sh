@@ -2,7 +2,8 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=20140124T065835Z\|20140221T042147Z\|20140404T041131Z\|20140404T041131Z\|20140404T001635Z\|20140501T225642Z
+TESTED_VERSIONS=20140124T065835Z\|20140221T042147Z\|20140404T041131Z\|20140404T041131Z\|20140404T001635Z\|20140501T225642Z\|20140724T221203Z
+BAD_VERSIONS=20130627T201726Z\|20131031T235904Z\|20140710T224431Z
 
 if [ -z "$DST" ]
 then
@@ -28,14 +29,9 @@ while getopts ":f" opt; do
     esac
 done
 
-if uname -a | egrep 20130627T201726Z
+if uname -a | egrep $BAD_VERSIONS
 then
     echo "Sorry this SmartOS version is known to be incompatible or faulty."
-    exit 1
-elif uname -a | egrep 20131031T235904Z
-then
-    echo "Sorry this SmartOS version is known to be incompatible or faulty."
-    echo " 20131031T235904Z: missing mdata-get ( http://bit.ly/Hyzb1e )"
     exit 1
 fi
 

@@ -461,7 +461,6 @@ nics_test() ->
     InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
     In = apply_defaults(InP, InD1, InO),
     Expected = to_sniffle(to_vmadm(InP, InD, InO)),
-    io:format(user, "In~n~p~nExpected~n~p~n", [In, Expected]),
     ?assertEqual(In, Expected).
 
 apply_defaults(InP, InD, InO) ->

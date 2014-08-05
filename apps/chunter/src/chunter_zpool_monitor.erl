@@ -104,7 +104,7 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(tick, State = #state{last = Last,
                                  skipped = Skipped}) ->
-    case get_stats("/usr/sbin/zpool list -pH") of
+    case get_stats("/usr/sbin/zpool list -pH -oname,size,alloc,free,dedup,health") of
         Last when Skipped < 120 ->
             {noreply, State};
         Pools ->
@@ -150,7 +150,7 @@ code_change(_OldVsn, State, _Extra) ->
 get_stats(Cmd) ->
     lists:foldl(
       fun (Line, Acc) ->
-              [Name, Size, Alloc, Free, _Expand, _Cap, Dedup, Health, _Altroot] = re:split(Line, "\t"),
+              [Name, Size, Alloc, Free, Dedup, Health] = re:split(Line, "\t"),
               [{[Name, <<"size">>], bin_to_gb(Size)},
                {[Name, <<"used">>], bin_to_gb(Alloc)},
                {[Name, <<"free">>], bin_to_gb(Free)},

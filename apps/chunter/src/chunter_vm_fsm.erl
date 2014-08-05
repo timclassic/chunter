@@ -248,7 +248,7 @@ initialized(load, State) ->
 
 initialized({create, PackageSpec, DatasetSpec, VMSpec},
             State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
-    {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
+    {ok, DatasetUUID} = jsxd:get(<<"uuid">>, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
     VMData1 = eplugin:fold('vm:create_json', VMData),
     lager:debug("Creating with spec: ~p", [VMData1]),

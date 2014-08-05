@@ -3,13 +3,32 @@
 . /usbkey/config
 
 TESTED_VERSIONS=20140124T065835Z\|20140221T042147Z\|20140404T041131Z\|20140404T041131Z\|20140404T001635Z\|20140501T225642Z\|20140724T221203Z
-BAD_VERSIONS=20130627T201726Z\|20131031T235904Z\|20140710T224431Z
+BAD_VERSIONS=20130627T201726Z\|20131031T235904Z\|20140710T224431AZ\|20140724T221203Z
 
 if [ -z "$DST" ]
 then
     DST="/opt"
 fi
 
+function graylist {
+    ver="$1"
+    msg="$2"
+    if uname -a | egrep $ver
+    then
+        echo $msg
+        echo
+        echo "This SmartOS release is affected by the abovementioned problem!"
+        echo "Would you like to continue non the less? [yes|NO] "
+        read SKIP
+        if [[ "$SKIP" = "yes" ]]
+        then
+            echo "Okay we go on, but it might not work!"
+        else
+            echo "Exiting."
+            exit 1
+        fi
+    fi
+}
 #IFACE=`dladm show-phys -m | grep $admin_nic | awk '{print $1}'`
 #IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`
 

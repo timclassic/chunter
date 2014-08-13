@@ -12,7 +12,7 @@ case "$conf_admin_mac" in
         echo "[02] Looks like a aggr, so nic == mac"
         ;;
     *)
-        conf_admin_nic=$(dladm show-phys -m -o LINK,ADDRES | grep "$conf_admin_mac" | awk '{print $1}')
+        conf_admin_nic=$(dladm show-phys -m -o LINK,ADDRESS | grep "$conf_admin_mac" | awk '{print $1}')
         echo "[02] Looks like a normal nic, so '$conf_admin_mac' => '$conf_admin_nic'"
         ;;
 esac

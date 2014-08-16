@@ -43,5 +43,6 @@ init([]) ->
            ?CHILD(chunter_vm_sup, supervisor),
            ?CHILD(chunter_server, worker),
            ?CHILD(chunter_zpool_monitor, worker),
-           ?CHILD(chunter_zonemon, worker)
+           ?CHILD(chunter_zonemon, worker),
+           ?CHILD(chunter_vm_auth, worker)
           ] ++ ArkSrvs}}.

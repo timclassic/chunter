@@ -19,7 +19,6 @@
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-
 init(_) ->
     Cmd = code:priv_dir(chunter) ++ "/zonedoor",
     DoorPort = open_port({spawn_executable, Cmd},
@@ -27,14 +26,12 @@ init(_) ->
     erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
     {ok, #state{port = DoorPort}}.
 
-
 handle_call({verify_zonedoor, UUID}, _, State) ->
     case lists:member(UUID, State#state.doors) of
         false ->
-            io:format("Request to add zone door: ~s~n", [UUID]),
-            Data = io_lib:format("a~s~n", [UUID]),
-            port_command(State#state.port, Data),
-            State1 = State#state{doors = lists:flatten([UUID, State#state.doors])},
+            lager:info("[vm_auth] Request to add zone door: ~s~n", [UUID]),
+            port_command(State#state.port, [$a, UUID, $\n]),
+            State1 = State#state{doors = [UUID | State#state.doors]},
             {reply, ok, State1};
         _ ->
             {reply, ok, State}
@@ -42,28 +39,56 @@ handle_call({verify_zonedoor, UUID}, _, State) ->
 handle_call({remove_zonedoor, UUID}, _, State) ->
     case lists:member(UUID, State#state.doors) of
         true ->
-            io:format("Request to delete zone door: ~s~n", [UUID]),
-            Data = io_lib:format("d~s~n", [UUID]),
-            port_command(State#state.port, Data),
+            lager:info("[vm_auth] Request to delete zone door: ~s~n", [UUID]),
+            port_command(State#state.port, [$d, UUID, $\n]),
             State1 = State#state{doors = lists:delete(UUID, State#state.doors)},
             {reply, ok, State1};
         _ ->
             {reply, ok, State}
     end.
 
-
-
 handle_info(heartbeat, State) ->
     port_command(State#state.port, "h\n"),
     erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
     {noreply, State};
 handle_info({Port,{data,{eol,Data}}} , State) ->
-    io:format("Received data: ~s~n", [Data]),
+    lager:debug("[vm_auth] Received data: ~s~n", [Data]),
     auth_credintials(Port, Data),
     {noreply, State}.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is called by a gen_fsm when it is about to
+%% terminate. It should be the opposite of Module:init/1 and do any
+%% necessary cleaning up. When it returns, the gen_fsm terminates with
+%% Reason. The return value is ignored.
+%%
+%% @spec terminate(Reason, StateName, State) -> void()
+%% @end
+%%--------------------------------------------------------------------
 
+terminate(_, State) ->
+    incinerate(State#state.port),
+    ok.
+
+%%%===================================================================
+%%% Unused gen_server functions
+%%%===================================================================
+
+handle_cast(_, State) -> {noreply, State}.
+code_change(_, State, _) -> {ok, State}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+incinerate(Port) ->
+    {os_pid, OsPid} = erlang:port_info(Port, os_pid),
+    port_close(Port),
+    lager:warning("Killing ~p with -9", [OsPid]),
+    os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
 
 auth_credintials(Port, [UUID,KeyID]) ->
     KeyBin = libsnarl:keystr_to_id(KeyID),
@@ -93,42 +118,3 @@ auth_credintials(Port, Data) ->
             lager:warning("[zonedoor] recived unknown data: ~p.", [Data]),
             ok
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_fsm when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_fsm terminates with
-%% Reason. The return value is ignored.
-%%
-%% @spec terminate(Reason, StateName, State) -> void()
-%% @end
-%%--------------------------------------------------------------------
-
-terminate(_, State) ->
-    incinerate(State#state.port),
-    ok.
-
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-incinerate(Port) ->
-    {os_pid, OsPid} = erlang:port_info(Port, os_pid),
-    port_close(Port),
-    lager:warning("Killing ~p with -9", [OsPid]),
-    os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
-
-
-
-
-%%%===================================================================
-%%% Unused gen_server functions
-%%%===================================================================
-
-handle_cast(_, State) -> {noreply, State}.
-code_change(_, State, _) -> {ok, State}.

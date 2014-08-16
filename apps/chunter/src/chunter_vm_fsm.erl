@@ -73,7 +73,6 @@
                 type = unknown,
                 uuid,
                 console,
-                zonedoor,
                 orig_state,
                 args,
                 services = [],
@@ -735,40 +734,6 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
-handle_info({D, {data, {eol, Data}}}, StateName,
-            State = #state{
-                       zonedoor = D,
-                       uuid = UUID
-                      }) ->
-    io:format("~s~n", [Data]),
-    case re:split(Data, " ") of
-        [User, _, KeyID] ->
-            lager:warning("[zonedoor:~s] User ~s trying to connect with key ~s",
-                          [UUID, User, KeyID]),
-            KeyBin = libsnarl:keystr_to_id(KeyID),
-            case ls_user:key_find(KeyBin) of
-                {ok, UserID} ->
-                    case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) orelse
-                        libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"ssh">>, User]) of
-                        true ->
-                            lager:warning("[zonedoor:~s] granted.", [UUID]),
-                            port_command(D, "1\n");
-                        _ ->
-                            lager:warning("[zonedoor:~s] denied.", [UUID]),
-                            port_command(D, "0\n")
-                    end;
-                _ ->
-                    lager:warning("[zonedoor:~s] denied.", [UUID]),
-                    port_command(D, "0\n")
-            end;
-        _ ->
-            lager:warning("[zonedoor:~s] can't parse auth request: ~s.", [UUID, Data]),
-            ok
-    end,
-    {next_state, StateName, State};
-
-
-
 handle_info({_C,{exit_status, _}}, stopped,
             State = #state{console = _C, type=zone}) ->
     lager:warning("[console:~s] Exited but vm in stopped", [State#state.uuid]),
@@ -792,29 +757,6 @@ handle_info({'EXIT', _C, PosixCode}, StateName,
     lager:warning("[console:~s] Exited with code: ~p",
                   [State#state.uuid, PosixCode]),
     timer:send_after(1000, {init, console}),
-    {next_state, StateName, State};
-
-handle_info({_D, {exit_status, _}}, stopped,
-            State = #state{zonedoor = _D, type=zone}) ->
-    lager:warning("[zonedoor:~s] Exited but vm in stopped", [State#state.uuid]),
-    {next_state, stopped, State};
-
-handle_info({_D, {exit_status, Status}}, StateName,
-            State = #state{zonedoor = _D, type=zone}) ->
-    lager:warning("[zonedoor:~s] Exited with status: ~p", [State#state.uuid, Status]),
-    timer:send_after(1000, {init, zonedoor}),
-    {next_state, StateName, State};
-
-handle_info({'EXIT', _D, PosixCode}, stopped,
-            State = #state{zonedoor = _D, type=zone}) ->
-    lager:warning("[zonedoor:~s] Exited ith ~p but vm in stopped",
-                  [State#state.uuid, PosixCode]),
-    {next_state, stopped, State};
-
-handle_info({'EXIT', _D, PosixCode}, StateName,
-            State = #state{zonedoor = _D, type=zone}) ->
-    lager:warning("[zonedoor:~s] Exited with code: ~p", [State#state.uuid, PosixCode]),
-    timer:send_after(1000, {init, zonedoor}),
     {next_state, StateName, State};
 
 handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
@@ -861,7 +803,7 @@ handle_info(get_info, stopped, State) ->
 
 handle_info(get_info, StateName, State=#state{type=zone}) ->
     State1 = init_console(State),
-    State2 = init_zonedoor(State1),
+    State2 = ensure_zonedoor(State1),
     {next_state, StateName, State2};
 
 handle_info(get_info, StateName, State=#state{type=kvm}) ->
@@ -881,7 +823,7 @@ handle_info({init, console}, StateName, State=#state{type=zone}) ->
     {next_state, StateName, init_console(State)};
 
 handle_info({init, zonedoor}, StateName, State=#state{type=zone}) ->
-    {next_state, StateName, init_zonedoor(State)};
+    {next_state, StateName, ensure_zonedoor(State)};
 
 handle_info({init, _}, StateName, State) ->
     {next_state, StateName, State};
@@ -913,15 +855,7 @@ terminate(Reason, StateName, State = #state{uuid = UUID}) ->
         _ ->
             incinerate(State#state.console)
     end,
-    case erlang:port_info(State#state.zonedoor) of
-        undefined ->
-            lager:debug("[terminate:~s] ssh door not running.", [UUID]),
-            ok;
-        _ ->
-            %% Since the SSH process does not close with a exit we kill it with
-            %% fire!
-            incinerate(State#state.zonedoor)
-    end,
+    gen_server:call(chunter_vm_auth, {remove_zonedoor, UUID}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -956,19 +890,12 @@ init_console(State) ->
         _ ->
             State
     end.
+ 
+ 
+ensure_zonedoor(State) ->
+    gen_server:call(chunter_vm_auth, {verify_zonedoor, State#state.uuid}),
+    State.
 
-init_zonedoor(State) ->
-    case erlang:port_info(State#state.zonedoor) of
-        undefined ->
-            Cmd = code:priv_dir(chunter) ++ "/zonedoor",
-            Args = [State#state.uuid, "_joyent_sshd_key_is_authorized"],
-            lager:warning("[zonedoor] Starting with cmd: ~s ~s ~s~n", [Cmd | Args]),
-            DoorPort = open_port({spawn_executable, Cmd},
-                                 [{args, Args}, use_stdio, binary, {line, 1024}, exit_status]),
-            State#state{zonedoor = DoorPort};
-        _ ->
-            State
-    end.
 
 do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
     chunter_zfs:snapshot(P, SnapID).

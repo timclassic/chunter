@@ -35,7 +35,13 @@ to_sniffle(Spec) ->
     case jsxd:get(<<"brand">>, <<"joyent">>, Spec1) of
         <<"kvm">> ->
             generate_sniffle(Spec1, kvm);
+        <<"lx">> ->
+            generate_sniffle(Spec1, zone);
+        <<"sngl">> ->
+            generate_sniffle(Spec1, zone);
         <<"joyent">> ->
+            generate_sniffle(Spec1, zone);
+        <<"joyent-minimal">> ->
             generate_sniffle(Spec1, zone)
     end.
 

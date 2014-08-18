@@ -85,10 +85,14 @@ code_change(_, State, _) -> {ok, State}.
 %%%===================================================================
 
 incinerate(Port) ->
-    {os_pid, OsPid} = erlang:port_info(Port, os_pid),
-    port_close(Port),
-    lager:warning("Killing ~p with -9", [OsPid]),
-    os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
+    case erlang:port_info(Port, os_pid) of
+        {os_pid, OsPid} ->
+            port_close(Port),
+            lager:warning("Killing ~p with -9", [OsPid]),
+            os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid]));
+        undefined ->
+            lager:warning("Process has no pid not incinerating.")
+    end.
 
 auth_credintials(Port, [UUID,KeyID]) ->
     KeyBin = libsnarl:keystr_to_id(KeyID),

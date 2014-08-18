@@ -36,6 +36,8 @@ to_sniffle(Spec) ->
         <<"kvm">> ->
             generate_sniffle(Spec1, kvm);
         <<"joyent">> ->
+            generate_sniffle(Spec1, zone);
+        <<"joyent-minimal">> ->
             generate_sniffle(Spec1, zone)
     end.
 

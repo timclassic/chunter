@@ -42,6 +42,7 @@
          delete_backup/2,
          rollback_snapshot/2,
          service_action/3,
+         snapshot_action/5,
          force_state/2]).
 
 %% gen_fsm callbacks
@@ -420,8 +421,9 @@ creating_backup(timeout, State = #state{orig_state = NextState, uuid=VM,
     case proplists:is_defined(create, Options) of
         true ->
             lager:debug("New Snapshot: ~p", [SnapID]),
-            snapshot_action(VM, SnapID, fun do_snapshot/4,
-                            fun finish_snapshot/4, [backup]);
+            spawn(?MODULE, snapshot_action,
+                  [VM, SnapID, fun do_snapshot/4,
+                   fun finish_snapshot/4, [backup]]);
         _ ->
             ok
     end,
@@ -967,7 +969,7 @@ finish_backup(VM, UUID, Opts, ok) ->
 finish_backup(_VM, _UUID, _, error) ->
     error.
 
-snapshp_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
+snapshot_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
     lists:foldl(
       fun (_, {error, E}) ->
               {error, E};
@@ -1003,7 +1005,7 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                     case Fun(P, VM, UUID, Opts) of
                         {ok, _} = R0 ->
                             Disks = jsxd:get(<<"disks">>, [], Spec),
-                            case snapshp_action_on_disks(VM, UUID, Fun, R0, Disks, Opts) of
+                            case snapshot_action_on_disks(VM, UUID, Fun, R0, Disks, Opts) of
                                 {ok, Res} ->
                                     M = io_lib:format("Snapshot done: ~p",
                                                       [Res]),

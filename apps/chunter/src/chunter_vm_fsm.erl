@@ -413,6 +413,11 @@ restoring_backup(timeout, State =
                    [{<<"action">>, <<"restored">>},
                     {<<"uuid">>, SnapID}]}]),
     timer:send_after(500, get_info),
+    %% The restored dataset does not have the correct quota,
+    %% we reapply the package to make sure it is applied.
+    {ok, V} = ls_vm:get(VM),
+    Package = ft_vm:package(V),
+    ls_vm:update(VM, Package, []),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 creating_backup(timeout, State = #state{orig_state = NextState, uuid=VM,
@@ -892,8 +897,7 @@ init_console(State) ->
         _ ->
             State
     end.
- 
- 
+
 ensure_zonedoor(State) ->
     gen_server:call(chunter_vm_auth, {verify_zonedoor, State#state.uuid}),
     State.
@@ -943,9 +947,11 @@ finish_rollback_snapshot(VM, SnapID, _, ok) ->
                   {<<"data">>,
                    [{<<"action">>, <<"rollback">>},
                     {<<"uuid">>, SnapID}]}]),
+    lager:debug("[Snapshot] committing rollback fo snapshot ~s on VM ~s.", [VM, SnapID]),
     ls_vm:commit_snapshot_rollback(VM, SnapID);
 
 finish_rollback_snapshot(_VM, _SnapID, _, error) ->
+    lager:error("Snapshot rollback failed!"),
     error.
 
 do_backup(Path, VM, SnapID, Options) ->

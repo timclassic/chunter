@@ -42,7 +42,6 @@
          delete_backup/2,
          rollback_snapshot/2,
          service_action/3,
-         snapshot_action/5,
          force_state/2]).
 
 %% gen_fsm callbacks

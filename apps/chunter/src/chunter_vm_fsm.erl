@@ -428,37 +428,39 @@ creating_backup(timeout, State = #state{orig_state = NextState, uuid=VM,
     case proplists:is_defined(create, Options) of
         true ->
             lager:debug("New Snapshot: ~p", [SnapID]),
-            spawn(?MODULE, snapshot_action,
-                  [VM, SnapID, fun do_snapshot/4,
-                   fun finish_snapshot/4, [backup]]);
+            snapshot_action(
+              VM, SnapID, fun do_snapshot/4,
+              fun finish_snapshot/4, [backup]);
         _ ->
             ok
     end,
-    snapshot_action(VM, SnapID, fun do_backup/4,
-                    fun finish_backup/4, Options),
-    case proplists:get_value(delete, Options) of
-        true ->
-            lager:debug("Deleint snapshot: ~p", [SnapID]),
-            snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
-                            fun finish_delete_snapshot/4, Options),
-            backup_update(VM, SnapID, <<"local">>, false);
-        parent ->
-            backup_update(VM, SnapID, <<"local">>, true),
-            case proplists:get_value(parent, Options) of
-                undefined ->
-                    lager:debug("Deleting parent but not defined."),
-                    ok;
-                Parent ->
-                    lager:debug("Deleting parent: ~p", [Parent]),
-                    snapshot_action(VM, Parent,
-                                    fun do_delete_snapshot/4,
-                                    fun finish_delete_snapshot/4,
-                                    Options),
-                    backup_update(VM, Parent, <<"local">>, false)
-            end;
-        undefined ->
-            backup_update(VM, SnapID, <<"local">>, true)
-    end,
+    spawn(fun () ->
+                  snapshot_action(VM, SnapID, fun do_backup/4,
+                                  fun finish_backup/4, Options),
+                  case proplists:get_value(delete, Options) of
+                      true ->
+                          lager:debug("Deleint snapshot: ~p", [SnapID]),
+                          snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
+                                          fun finish_delete_snapshot/4, Options),
+                          backup_update(VM, SnapID, <<"local">>, false);
+                      parent ->
+                          backup_update(VM, SnapID, <<"local">>, true),
+                          case proplists:get_value(parent, Options) of
+                              undefined ->
+                                  lager:debug("Deleting parent but not defined."),
+                                  ok;
+                              Parent ->
+                                  lager:debug("Deleting parent: ~p", [Parent]),
+                                  snapshot_action(VM, Parent,
+                                                  fun do_delete_snapshot/4,
+                                                  fun finish_delete_snapshot/4,
+                                                  Options),
+                                  backup_update(VM, Parent, <<"local">>, false)
+                          end;
+                      undefined ->
+                          backup_update(VM, SnapID, <<"local">>, true)
+                  end
+          end),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 

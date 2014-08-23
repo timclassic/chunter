@@ -246,8 +246,10 @@ init([UUID]) ->
 initialized(load, State) ->
     {next_state, loading, State};
 
-initialized({create, PackageSpec, DatasetSpec, VMSpec},
+initialized({create, Package, Dataset, VMSpec},
             State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
+    PackageSpec = ft_package:to_json(Package),
+    DatasetSpec = ft_dataset:to_json(Dataset),
     {ok, DatasetUUID} = jsxd:get(<<"uuid">>, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
     VMData1 = eplugin:fold('vm:create_json', VMData),
@@ -426,37 +428,39 @@ creating_backup(timeout, State = #state{orig_state = NextState, uuid=VM,
     case proplists:is_defined(create, Options) of
         true ->
             lager:debug("New Snapshot: ~p", [SnapID]),
-            spawn(?MODULE, snapshot_action,
-                  [VM, SnapID, fun do_snapshot/4,
-                   fun finish_snapshot/4, [backup]]);
+            snapshot_action(
+              VM, SnapID, fun do_snapshot/4,
+              fun finish_snapshot/4, [backup]);
         _ ->
             ok
     end,
-    snapshot_action(VM, SnapID, fun do_backup/4,
-                    fun finish_backup/4, Options),
-    case proplists:get_value(delete, Options) of
-        true ->
-            lager:debug("Deleint snapshot: ~p", [SnapID]),
-            snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
-                            fun finish_delete_snapshot/4, Options),
-            backup_update(VM, SnapID, <<"local">>, false);
-        parent ->
-            backup_update(VM, SnapID, <<"local">>, true),
-            case proplists:get_value(parent, Options) of
-                undefined ->
-                    lager:debug("Deleting parent but not defined."),
-                    ok;
-                Parent ->
-                    lager:debug("Deleting parent: ~p", [Parent]),
-                    snapshot_action(VM, Parent,
-                                    fun do_delete_snapshot/4,
-                                    fun finish_delete_snapshot/4,
-                                    Options),
-                    backup_update(VM, Parent, <<"local">>, false)
-            end;
-        undefined ->
-            backup_update(VM, SnapID, <<"local">>, true)
-    end,
+    spawn(fun () ->
+                  snapshot_action(VM, SnapID, fun do_backup/4,
+                                  fun finish_backup/4, Options),
+                  case proplists:get_value(delete, Options) of
+                      true ->
+                          lager:debug("Deleint snapshot: ~p", [SnapID]),
+                          snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
+                                          fun finish_delete_snapshot/4, Options),
+                          backup_update(VM, SnapID, <<"local">>, false);
+                      parent ->
+                          backup_update(VM, SnapID, <<"local">>, true),
+                          case proplists:get_value(parent, Options) of
+                              undefined ->
+                                  lager:debug("Deleting parent but not defined."),
+                                  ok;
+                              Parent ->
+                                  lager:debug("Deleting parent: ~p", [Parent]),
+                                  snapshot_action(VM, Parent,
+                                                  fun do_delete_snapshot/4,
+                                                  fun finish_delete_snapshot/4,
+                                                  Options),
+                                  backup_update(VM, Parent, <<"local">>, false)
+                          end;
+                      undefined ->
+                          backup_update(VM, SnapID, <<"local">>, true)
+                  end
+          end),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 
@@ -564,7 +568,13 @@ handle_event({update, Package, Config}, StateName,
                         [State#state.uuid]),
             {stop, not_found, State};
         VMData ->
-            Update = chunter_spec:create_update(VMData, Package, Config),
+            P = case Package of
+                    undefiend ->
+                        [];
+                    _ ->
+                        ft_package:to_json(Package)
+                end,
+            Update = chunter_spec:create_update(VMData, P, Config),
             case chunter_vmadm:update(UUID, Update) of
                 ok ->
                     case load_vm(UUID) of
@@ -577,13 +587,13 @@ handle_event({update, Package, Config}, StateName,
                             SniffleData = chunter_spec:to_sniffle(VMData1),
                             ls_vm:set_config(UUID, SniffleData),
                             ls_vm:log(UUID, <<"Update complete.">>),
-                            UodateData =  case jsxd:get(<<"uuid">>, Package) of
-                                              {ok, PUUID} ->
-                                                  [{<<"package">>, PUUID},
-                                                   {<<"config">>, SniffleData}];
-                                              _ ->
-                                                  [{<<"config">>, SniffleData}]
-                                          end,
+                            UodateData = case Package of
+                                             undefined ->
+                                                 [{<<"config">>, SniffleData}];
+                                             _ ->
+                                                 [{<<"package">>, ft_package:uuid(Package)},
+                                                  {<<"config">>, SniffleData}]
+                                         end,
                             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                                 {<<"data">>, UodateData}]),
                             {next_state, StateName, State}
@@ -770,11 +780,11 @@ handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
     {next_state, StateName, State};
 
 handle_info(update_services, running, State=#state{
-                                                 uuid=UUID,
-                                                 nsq=NSQ,
-                                                 services = OldServices,
-                                                 type = zone
-                                                }) ->
+                                               uuid=UUID,
+                                               nsq=NSQ,
+                                               services = OldServices,
+                                               type = zone
+                                              }) ->
     case {chunter_smf:update(UUID, OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[~s] Initializing ~p Services.",
@@ -1031,7 +1041,7 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                             lager:error("Failed snapshot VM ~s ~p: ~s.",
                                         [VM, Code, Reply]),
                             ls_vm:log(VM, <<"Failed to snapshot: ",
-                                                    Reply/binary>>),
+                                            Reply/binary>>),
                             CompleteFun(VM, UUID, Opts, error)
                     end;
                 _ ->
@@ -1073,7 +1083,7 @@ snapshot_sizes(VM) ->
                                          lists:member(Name, KnownS)
                                  end, Snaps),
             BnS = [{[Name, <<"size">>], Size}
-                  || {Name, Size} <- Snaps1] ++ R,
+                   || {Name, Size} <- Snaps1] ++ R,
             ls_vm:set_snapshot(VM, BnS);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),

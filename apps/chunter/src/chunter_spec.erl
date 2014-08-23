@@ -242,7 +242,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                     Package::fifo:vm_config(),
                     Config::fifo:vm_config()) -> fifo:config_list().
 
-create_update(_, [], Config) ->
+create_update(_, undefined, Config) ->
     KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>,
                 <<"update_nics">>, <<"autoboot">>, <<"max_swap">>, <<"set_routes">>, <<"remove_routes">>],
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
@@ -275,7 +275,7 @@ create_update(_, [], Config) ->
     R1;
 
 create_update(Original, Package, Config) ->
-    Base = create_update(Original, [], Config),
+    Base = create_update(Original, undefined, Config),
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
     RamPerc = case string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")) of
                   {TotalMem, _} when is_number(TotalMem),

@@ -6,3 +6,5 @@
 ^jsx_
 ^glc_code.erl:
 ^lager
+^erlcloud
+^meck

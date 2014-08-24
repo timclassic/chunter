@@ -240,7 +240,7 @@ generate_spec(Package, Dataset, OwnerData) ->
 
 
 -spec create_update(Original::fifo:config(),
-                    Package::fifo:config(),
+                    Package::fifo:config() | undefined,
                     Config::fifo:config()) -> fifo:config_list().
 
 create_update(_, undefined, Config) ->

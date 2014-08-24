@@ -222,7 +222,7 @@ handle_message({machines, snapshot, store,
                           ls_dataset:imported(Img, 1);
                       {error, _, _} ->
                           ls_dataset:status(Img, <<"failed">>),
-                          ls_dataset:imported(Img, <<"failed">>)
+                          ls_dataset:imported(Img, 0)
                   end
           end),
     {stop, ok, State};
@@ -329,7 +329,7 @@ write_snapshot(UUID, SnapId, Img) ->
     Port = open_port({spawn_executable, Cmd},
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
-    ls_dataset:imported(Img, <<"pending">>),
+    ls_dataset:imported(Img, 0),
     ls_dataset:status(Img, <<"pending">>),
     write_snapshot(Port, Img, <<>>, 0, undefined).
 

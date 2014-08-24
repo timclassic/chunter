@@ -1137,12 +1137,12 @@ load_vm(ZUUID) ->
             {error, not_found}
     end.
 
--spec change_state(UUID::binary(), State::fifo:vm_state()) -> ok.
+-spec change_state(UUID::binary(), State::fifo:vm_state()) -> fifo:vm_state().
 
 change_state(UUID, State) ->
     change_state(UUID, State, true).
 
--spec change_state(UUID::binary(), State::fifo:vm_state(), binary()) -> fifo:vm_state().
+-spec change_state(UUID::binary(), State::fifo:vm_state(), boolean()) -> fifo:vm_state().
 
 change_state(UUID, State, true) ->
     %% State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of

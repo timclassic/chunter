@@ -186,7 +186,9 @@ install_image(DatasetUUID, VM) ->
                             finish_image(DatasetUUID);
                         E ->
                             E
-                    end
+                    end;
+                E ->
+                    E
             end
     end.
 

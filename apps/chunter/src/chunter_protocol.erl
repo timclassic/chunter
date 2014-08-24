@@ -201,7 +201,8 @@ handle_message({machines, snapshot, rollback, UUID, SnapId}, State)
 handle_message({machines, snapshot, store,
                 UUID, SnapId, Img, Host, Port, Bucket, AKey, SKey, Opts},
                State)
-  when is_binary(UUID),
+  when is_binary(Img),
+       is_binary(UUID),
        is_binary(SnapId) ->
     spawn(fun() ->
                   Opts1 = [{target, Img},
@@ -227,7 +228,8 @@ handle_message({machines, snapshot, store,
     {stop, ok, State};
 
 handle_message({machines, snapshot, store, UUID, SnapId, Img}, State)
-  when is_binary(UUID),
+  when is_binary(Img),
+       is_binary(UUID),
        is_binary(SnapId) ->
     spawn(fun() ->
                   write_snapshot(UUID, SnapId, Img)

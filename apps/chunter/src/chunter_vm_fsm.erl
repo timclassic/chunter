@@ -568,7 +568,7 @@ handle_event({update, Package, Config}, StateName,
             {stop, not_found, State};
         VMData ->
             P = case Package of
-                    undefiend ->
+                    undefined ->
                         [];
                     _ ->
                         ft_package:to_json(Package)
@@ -664,7 +664,7 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
             chunter_snap:describe_restore(Path),
             Toss0 =
                 [S || {_, S} <- Path,
-                      jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
+                      jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
             backup_update(VM, SnapID, <<"local">>, true),
@@ -1142,7 +1142,7 @@ load_vm(ZUUID) ->
 change_state(UUID, State) ->
     change_state(UUID, State, true).
 
--spec change_state(UUID::binary(), State::fifo:vm_state(), true | false) -> ok.
+-spec change_state(UUID::binary(), State::fifo:vm_state(), binary()) -> fifo:vm_state().
 
 change_state(UUID, State, true) ->
     %% State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of

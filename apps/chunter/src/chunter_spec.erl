@@ -18,7 +18,8 @@
          create_update/3
         ]).
 
--spec to_vmadm(Package::fifo:package(), Dataset::fifo:dataset(), OwnerData::fifo:config()) -> fifo:vm_config().
+-spec to_vmadm(Package::fifo:config(), Dataset::fifo:config(),
+               OwnerData::fifo:config()) -> fifo:vm_config().
 
 to_vmadm(Package, Dataset, OwnerData) ->
     case lists:keyfind(<<"type">>, 1, Dataset) of
@@ -105,8 +106,8 @@ generate_sniffle(In, _Type) ->
                       Obj
               end, jsxd:select(KeepKeys, In), In).
 
--spec generate_spec(Package::fifo:package(),
-                    Dataset::fifo:dataset(),
+-spec generate_spec(Package::fifo:config(),
+                    Dataset::fifo:config(),
                     OwnerData::fifo:config()) -> fifo:vm_config().
 
 generate_spec(Package, Dataset, OwnerData) ->
@@ -238,9 +239,9 @@ generate_spec(Package, Dataset, OwnerData) ->
     Result.
 
 
--spec create_update(Original::fifo:vm_config(),
-                    Package::fifo:vm_config(),
-                    Config::fifo:vm_config()) -> fifo:config_list().
+-spec create_update(Original::fifo:config(),
+                    Package::fifo:config(),
+                    Config::fifo:config()) -> fifo:config_list().
 
 create_update(_, undefined, Config) ->
     KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>,

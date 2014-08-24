@@ -201,7 +201,8 @@ handle_message({machines, snapshot, rollback, UUID, SnapId}, State)
 handle_message({machines, snapshot, store,
                 UUID, SnapId, Img, Host, Port, Bucket, AKey, SKey, Opts},
                State)
-  when is_binary(UUID),
+  when is_binary(Img),
+       is_binary(UUID),
        is_binary(SnapId) ->
     spawn(fun() ->
                   Opts1 = [{target, Img},
@@ -211,7 +212,7 @@ handle_message({machines, snapshot, store,
                            {s3_port, Port},
                            {s3_bucket, Bucket},
                            {quiet, true} | Opts],
-                  ls_dataset:imported(Img, <<"pending">>),
+                  ls_dataset:imported(Img, 0),
                   ls_dataset:status(Img, <<"pending">>),
                   R = chunter_snap:upload(<<"/zones/", UUID/binary>>,
                                           UUID, SnapId, Opts1),
@@ -221,13 +222,14 @@ handle_message({machines, snapshot, store,
                           ls_dataset:imported(Img, 1);
                       {error, _, _} ->
                           ls_dataset:status(Img, <<"failed">>),
-                          ls_dataset:imported(Img, <<"failed">>)
+                          ls_dataset:imported(Img, 0)
                   end
           end),
     {stop, ok, State};
 
 handle_message({machines, snapshot, store, UUID, SnapId, Img}, State)
-  when is_binary(UUID),
+  when is_binary(Img),
+       is_binary(UUID),
        is_binary(SnapId) ->
     spawn(fun() ->
                   write_snapshot(UUID, SnapId, Img)
@@ -327,7 +329,7 @@ write_snapshot(UUID, SnapId, Img) ->
     Port = open_port({spawn_executable, Cmd},
                      [{args, [UUID, SnapId]}, use_stdio, binary,
                       stderr_to_stdout, exit_status, stream]),
-    ls_dataset:imported(Img, <<"pending">>),
+    ls_dataset:imported(Img, 0),
     ls_dataset:status(Img, <<"pending">>),
     write_snapshot(Port, Img, <<>>, 0, undefined).
 

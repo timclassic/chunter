@@ -105,7 +105,7 @@ then
     then
         cp ${CONFFILE}.example ${CONFFILE}
     else
-        sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
+        sed "s/^ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
     fi
     digest -a md5 ${CONFFILE} > ${CONFFILE}.md5
 elif [ -f ${CONFFILE}.md5 ]
@@ -116,7 +116,7 @@ then
         then
             cp ${CONFFILE}.example ${CONFFILE}
         else
-            sed "s/^## ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
+            sed "s/^ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
         fi
         digest -a md5 ${CONFFILE} > ${CONFFILE}.md5
     fi

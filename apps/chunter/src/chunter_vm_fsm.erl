@@ -69,13 +69,10 @@
          deleting_snapshot/2
         ]).
 
--define(WRITE_RETRY, 10).
-
 -record(state, {hypervisor,
                 type = unknown,
                 uuid,
                 console,
-                zonedoor,
                 orig_state,
                 args,
                 services = [],
@@ -207,7 +204,7 @@ start_link(UUID) ->
 init([UUID]) ->
     process_flag(trap_exit, true),
     {Hypervisor, _, _} = chunter_server:host_info(),
-    libsniffle:vm_register(UUID, Hypervisor),
+    ls_vm:register(UUID, Hypervisor),
     SnapshotIVal = application:get_env(chunter, snapshot_update_interval, 900000),
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
@@ -248,13 +245,16 @@ init([UUID]) ->
 initialized(load, State) ->
     {next_state, loading, State};
 
-initialized({create, PackageSpec, DatasetSpec, VMSpec},
+initialized({create, Package, Dataset, VMSpec},
             State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
-    {ok, DatasetUUID} = jsxd:get(<<"dataset">>, DatasetSpec),
+    PackageSpec = ft_package:to_json(Package),
+    DatasetSpec = ft_dataset:to_json(Dataset),
+    {ok, DatasetUUID} = jsxd:get(<<"uuid">>, DatasetSpec),
     VMData = chunter_spec:to_vmadm(PackageSpec, DatasetSpec, jsxd:set(<<"uuid">>, UUID, VMSpec)),
-    lager:debug("Creating with spec: ~p", [VMData]),
-    eplugin:call('vm:create', UUID, VMData),
-    SniffleData  = chunter_spec:to_sniffle(VMData),
+    VMData1 = eplugin:fold('vm:create_json', VMData),
+    lager:debug("Creating with spec: ~p", [VMData1]),
+    eplugin:call('vm:create', UUID, VMData1),
+    SniffleData  = chunter_spec:to_sniffle(VMData1),
     {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
     chunter_server:reserve_mem(Ram),
     SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
@@ -268,13 +268,13 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
                {ok, <<"kvm">>} -> kvm;
                _ -> zone
            end,
-    libsniffle:vm_set(UUID, [{<<"config">>, SniffleData1}]),
+    ls_vm:set_config(UUID, SniffleData1),
     lager:debug("[create:~s] Done generating config, handing to img install.",
                 [UUID]),
-    install_image(DatasetUUID, UUID),
+    chunter_dataset_srv:install(DatasetUUID, UUID),
     lager:debug("[create:~s] Done installing image going to create now.",
                 [UUID]),
-    case chunter_vmadm:create(VMData) of
+    case chunter_vmadm:create(VMData1) of
         ok ->
             lager:debug("[create:~s] Done creating continuing on.", [UUID]),
             {next_state, creating,
@@ -289,8 +289,9 @@ initialized({create, PackageSpec, DatasetSpec, VMSpec},
 
 initialized({restore, SnapID, Options},
             State=#state{uuid=VM}) ->
-    {ok, VMObj} = libsniffle:vm_get(VM),
-    case jsxd:get([<<"backups">>, SnapID, <<"xml">>], false, VMObj) of
+    {ok, VMObj} = ls_vm:get(VM),
+    Remote = ft_vm:backups(VMObj),
+    case jsxd:get([SnapID, <<"xml">>], false, Remote) of
         true ->
             UUIDL = binary_to_list(VM),
             Conf = chunter_snap:mk_s3_conf(Options),
@@ -301,18 +302,17 @@ initialized({restore, SnapID, Options},
         false ->
             ok
     end,
-    {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
     Local = chunter_snap:get(VM),
     case chunter_snap:restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
                 [S || {_, S} <- Path,
-                      jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
+                      jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
             backup_update(VM, SnapID, <<"local">>, true),
-            Type = case jsxd:get(<<"type">>, VMObj) of
+            Type = case jsxd:get(<<"type">>, ft_vm:config(VMObj)) of
                        {ok, <<"kvm">>} -> kvm;
                        _ -> zone
                    end,
@@ -414,6 +414,11 @@ restoring_backup(timeout, State =
                    [{<<"action">>, <<"restored">>},
                     {<<"uuid">>, SnapID}]}]),
     timer:send_after(500, get_info),
+    %% The restored dataset does not have the correct quota,
+    %% we reapply the package to make sure it is applied.
+    {ok, V} = ls_vm:get(VM),
+    Package = ft_vm:package(V),
+    ls_vm:update(VM, Package, []),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 creating_backup(timeout, State = #state{orig_state = NextState, uuid=VM,
@@ -422,36 +427,39 @@ creating_backup(timeout, State = #state{orig_state = NextState, uuid=VM,
     case proplists:is_defined(create, Options) of
         true ->
             lager:debug("New Snapshot: ~p", [SnapID]),
-            snapshot_action(VM, SnapID, fun do_snapshot/4,
-                            fun finish_snapshot/4, [backup]);
+            snapshot_action(
+              VM, SnapID, fun do_snapshot/4,
+              fun finish_snapshot/4, [backup]);
         _ ->
             ok
     end,
-    snapshot_action(VM, SnapID, fun do_backup/4,
-                    fun finish_backup/4, Options),
-    case proplists:get_value(delete, Options) of
-        true ->
-            lager:debug("Deleint snapshot: ~p", [SnapID]),
-            snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
-                            fun finish_delete_snapshot/4, Options),
-            backup_update(VM, SnapID, <<"local">>, false);
-        parent ->
-            backup_update(VM, SnapID, <<"local">>, true),
-            case proplists:get_value(parent, Options) of
-                undefined ->
-                    lager:debug("Deleting parent but not defined."),
-                    ok;
-                Parent ->
-                    lager:debug("Deleting parent: ~p", [Parent]),
-                    snapshot_action(VM, Parent,
-                                    fun do_delete_snapshot/4,
-                                    fun finish_delete_snapshot/4,
-                                    Options),
-                    backup_update(VM, Parent, <<"local">>, false)
-            end;
-        undefined ->
-            backup_update(VM, SnapID, <<"local">>, true)
-    end,
+    spawn(fun () ->
+                  snapshot_action(VM, SnapID, fun do_backup/4,
+                                  fun finish_backup/4, Options),
+                  case proplists:get_value(delete, Options) of
+                      true ->
+                          lager:debug("Deleint snapshot: ~p", [SnapID]),
+                          snapshot_action(VM, SnapID, fun do_delete_snapshot/4,
+                                          fun finish_delete_snapshot/4, Options),
+                          backup_update(VM, SnapID, <<"local">>, false);
+                      parent ->
+                          backup_update(VM, SnapID, <<"local">>, true),
+                          case proplists:get_value(parent, Options) of
+                              undefined ->
+                                  lager:debug("Deleting parent but not defined."),
+                                  ok;
+                              Parent ->
+                                  lager:debug("Deleting parent: ~p", [Parent]),
+                                  snapshot_action(VM, Parent,
+                                                  fun do_delete_snapshot/4,
+                                                  fun finish_delete_snapshot/4,
+                                                  Options),
+                                  backup_update(VM, Parent, <<"local">>, false)
+                          end;
+                      undefined ->
+                          backup_update(VM, SnapID, <<"local">>, true)
+                  end
+          end),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 
@@ -527,7 +535,7 @@ handle_event({force_state, NextState}, StateName, State) ->
     end;
 
 handle_event(register, StateName, State = #state{uuid = UUID}) ->
-    libsniffle:vm_register(UUID, State#state.hypervisor),
+    ls_vm:register(UUID, State#state.hypervisor),
     %%    change_state(State#state.uuid, atom_to_binary(StateName)),
     case load_vm(UUID) of
         {error, not_found} ->
@@ -545,7 +553,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                 {<<"data">>,
                                  [{<<"config">>, SniffleData}]}]),
-            libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
+            ls_vm:set_config(UUID, SniffleData),
             State1 = State#state{type = Type},
             change_state(State1#state.uuid, atom_to_binary(StateName), false),
             {next_state, StateName, State1#state{services = []}}
@@ -559,7 +567,13 @@ handle_event({update, Package, Config}, StateName,
                         [State#state.uuid]),
             {stop, not_found, State};
         VMData ->
-            Update = chunter_spec:create_update(VMData, Package, Config),
+            P = case Package of
+                    undefined ->
+                        [];
+                    _ ->
+                        ft_package:to_json(Package)
+                end,
+            Update = chunter_spec:create_update(VMData, P, Config),
             case chunter_vmadm:update(UUID, Update) of
                 ok ->
                     case load_vm(UUID) of
@@ -570,29 +584,29 @@ handle_event({update, Package, Config}, StateName,
                         VMData1 ->
                             chunter_server:update_mem(),
                             SniffleData = chunter_spec:to_sniffle(VMData1),
-                            libsniffle:vm_set(UUID, [{<<"config">>, SniffleData}]),
-                            libsniffle:vm_log(UUID, <<"Update complete.">>),
-                            UodateData =  case jsxd:get(<<"uuid">>, Package) of
-                                              {ok, PUUID} ->
-                                                  [{<<"package">>, PUUID},
-                                                   {<<"config">>, SniffleData}];
-                                              _ ->
-                                                  [{<<"config">>, SniffleData}]
-                                          end,
+                            ls_vm:set_config(UUID, SniffleData),
+                            ls_vm:log(UUID, <<"Update complete.">>),
+                            UodateData = case Package of
+                                             undefined ->
+                                                 [{<<"config">>, SniffleData}];
+                                             _ ->
+                                                 [{<<"package">>, ft_package:uuid(Package)},
+                                                  {<<"config">>, SniffleData}]
+                                         end,
                             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                                 {<<"data">>, UodateData}]),
                             {next_state, StateName, State}
                     end;
                 {error, E} ->
                     lager:error("[~s] updated failed with ~p", [UUID, E]),
-                    libsniffle:vm_log(UUID, <<"Update failed.">>),
+                    ls_vm:log(UUID, <<"Update failed.">>),
                     {next_state, StateName, State}
             end
     end;
 
 handle_event(remove, _StateName, State) ->
     lager:debug("[~s] Calling remove.", [State#state.uuid]),
-    libsniffle:vm_unregister(State#state.uuid),
+    ls_vm:unregister(State#state.uuid),
     {stop, normal, State};
 
 handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
@@ -603,7 +617,7 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
         _VM ->
             chunter_vmadm:delete(UUID),
             lager:info("Deleting ~s successfull, letting sniffle know.", [UUID]),
-            libsniffle:vm_delete(UUID)
+            ls_vm:delete(UUID)
     end,
     {stop, normal, State};
 
@@ -642,15 +656,15 @@ handle_event(_Event, StateName, State) ->
 
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,
-    {ok, VMObj} = libsniffle:vm_get(VM),
-    {ok, Remote} = jsxd:get(<<"backups">>, VMObj),
+    {ok, VMObj} = ls_vm:get(VM),
+    {ok, Remote} = ft_vm:backups(VMObj),
     Local = chunter_snap:get(VM),
     case chunter_snap:restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
                 [S || {_, S} <- Path,
-                      jsxd:get([<<"backups">>, S, <<"local">>], false, VMObj)
+                      jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
             backup_update(VM, SnapID, <<"local">>, true),
@@ -736,40 +750,6 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     [ L ! {data, Data} || L <- Ls1],
     {next_state, StateName, State#state{listeners = Ls1}};
 
-handle_info({D, {data, {eol, Data}}}, StateName,
-            State = #state{
-                       zonedoor = D,
-                       uuid = UUID
-                      }) ->
-    io:format("~s~n", [Data]),
-    case re:split(Data, " ") of
-        [User, _, KeyID] ->
-            lager:warning("[zonedoor:~s] User ~s trying to connect with key ~s",
-                          [UUID, User, KeyID]),
-            KeyBin = libsnarl:keystr_to_id(KeyID),
-            case libsnarl:user_key_find(KeyBin) of
-                {ok, UserID} ->
-                    case libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"console">>]) orelse
-                        libsnarl:allowed(UserID, [<<"vms">>, UUID, <<"ssh">>, User]) of
-                        true ->
-                            lager:warning("[zonedoor:~s] granted.", [UUID]),
-                            port_command(D, "1\n");
-                        _ ->
-                            lager:warning("[zonedoor:~s] denied.", [UUID]),
-                            port_command(D, "0\n")
-                    end;
-                _ ->
-                    lager:warning("[zonedoor:~s] denied.", [UUID]),
-                    port_command(D, "0\n")
-            end;
-        _ ->
-            lager:warning("[zonedoor:~s] can't parse auth request: ~s.", [UUID, Data]),
-            ok
-    end,
-    {next_state, StateName, State};
-
-
-
 handle_info({_C,{exit_status, _}}, stopped,
             State = #state{console = _C, type=zone}) ->
     lager:warning("[console:~s] Exited but vm in stopped", [State#state.uuid]),
@@ -795,43 +775,20 @@ handle_info({'EXIT', _C, PosixCode}, StateName,
     timer:send_after(1000, {init, console}),
     {next_state, StateName, State};
 
-handle_info({_D, {exit_status, _}}, stopped,
-            State = #state{zonedoor = _D, type=zone}) ->
-    lager:warning("[zonedoor:~s] Exited but vm in stopped", [State#state.uuid]),
-    {next_state, stopped, State};
-
-handle_info({_D, {exit_status, Status}}, StateName,
-            State = #state{zonedoor = _D, type=zone}) ->
-    lager:warning("[zonedoor:~s] Exited with status: ~p", [State#state.uuid, Status]),
-    timer:send_after(1000, {init, zonedoor}),
-    {next_state, StateName, State};
-
-handle_info({'EXIT', _D, PosixCode}, stopped,
-            State = #state{zonedoor = _D, type=zone}) ->
-    lager:warning("[zonedoor:~s] Exited ith ~p but vm in stopped",
-                  [State#state.uuid, PosixCode]),
-    {next_state, stopped, State};
-
-handle_info({'EXIT', _D, PosixCode}, StateName,
-            State = #state{zonedoor = _D, type=zone}) ->
-    lager:warning("[zonedoor:~s] Exited with code: ~p", [State#state.uuid, PosixCode]),
-    timer:send_after(1000, {init, zonedoor}),
-    {next_state, StateName, State};
-
 handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
     {next_state, StateName, State};
 
 handle_info(update_services, running, State=#state{
-                                                 uuid=UUID,
-                                                 nsq=NSQ,
-                                                 services = OldServices,
-                                                 type = zone
-                                                }) ->
+                                               uuid=UUID,
+                                               nsq=NSQ,
+                                               services = OldServices,
+                                               type = zone
+                                              }) ->
     case {chunter_smf:update(UUID, OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[~s] Initializing ~p Services.",
                         [UUID, length(Changed)]),
-            libsniffle:vm_set(UUID, <<"services">>,
+            ls_vm:set_service(UUID,
                               [{Srv, St}
                                || {Srv, _, St} <- Changed]),
             {next_state, running, State#state{services = ServiceSet}};
@@ -839,14 +796,14 @@ handle_info(update_services, running, State=#state{
             lager:debug("[~s] Updating ~p Services.",
                         [UUID, length(Changed)]),
             %% Update changes which are not removes
-            [libsniffle:vm_set(
-               UUID, [<<"services">>, Srv], SrvState)
-             || {Srv, _, SrvState} <- Changed,
-                SrvState =/= <<"removed">>],
+            ls_vm:set_service(UUID,
+                              [{Srv, SrvState}
+                               || {Srv, _, SrvState} <- Changed,
+                                  SrvState =/= <<"removed">>]),
             %% Delete services that were changed.
-            [libsniffle:vm_set(
-               UUID, [<<"services">>, Srv], delete)
-             || {Srv, _, <<"removed">>} <- Changed],
+            ls_vm:set_service(UUID,
+                              [{Srv, delete}
+                               || {Srv, _, <<"removed">>} <- Changed]),
             update_services(UUID, Changed, NSQ),
             {next_state, running, State#state{services = ServiceSet}};
         _ ->
@@ -862,7 +819,7 @@ handle_info(get_info, stopped, State) ->
 
 handle_info(get_info, StateName, State=#state{type=zone}) ->
     State1 = init_console(State),
-    State2 = init_zonedoor(State1),
+    State2 = ensure_zonedoor(State1),
     {next_state, StateName, State2};
 
 handle_info(get_info, StateName, State=#state{type=kvm}) ->
@@ -871,7 +828,7 @@ handle_info(get_info, StateName, State=#state{type=kvm}) ->
             timer:send_after(1000, get_info),
             {next_state, StateName, State};
         {ok, Info} ->
-            libsniffle:vm_set(State#state.uuid, <<"info">>, Info),
+            ls_vm:set_info(State#state.uuid, Info),
             {next_state, StateName, State}
     end;
 
@@ -882,7 +839,7 @@ handle_info({init, console}, StateName, State=#state{type=zone}) ->
     {next_state, StateName, init_console(State)};
 
 handle_info({init, zonedoor}, StateName, State=#state{type=zone}) ->
-    {next_state, StateName, init_zonedoor(State)};
+    {next_state, StateName, ensure_zonedoor(State)};
 
 handle_info({init, _}, StateName, State) ->
     {next_state, StateName, State};
@@ -914,15 +871,7 @@ terminate(Reason, StateName, State = #state{uuid = UUID}) ->
         _ ->
             incinerate(State#state.console)
     end,
-    case erlang:port_info(State#state.zonedoor) of
-        undefined ->
-            lager:debug("[terminate:~s] ssh door not running.", [UUID]),
-            ok;
-        _ ->
-            %% Since the SSH process does not close with a exit we kill it with
-            %% fire!
-            incinerate(State#state.zonedoor)
-    end,
+    gen_server:call(chunter_vm_auth, {remove_zonedoor, UUID}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -958,123 +907,10 @@ init_console(State) ->
             State
     end.
 
-init_zonedoor(State) ->
-    case erlang:port_info(State#state.zonedoor) of
-        undefined ->
-            Cmd = code:priv_dir(chunter) ++ "/zonedoor",
-            Args = [State#state.uuid, "_joyent_sshd_key_is_authorized"],
-            lager:warning("[zonedoor] Starting with cmd: ~s ~s ~s~n", [Cmd | Args]),
-            DoorPort = open_port({spawn_executable, Cmd},
-                                 [{args, Args}, use_stdio, binary, {line, 1024}, exit_status]),
-            State#state{zonedoor = DoorPort};
-        _ ->
-            State
-    end.
+ensure_zonedoor(State) ->
+    gen_server:call(chunter_vm_auth, {verify_zonedoor, State#state.uuid}),
+    State.
 
--spec install_image(DatasetUUID::fifo:uuid(), VM::fifo:uuid()) -> ok | string().
-
-install_image(DatasetUUID, VM) ->
-    lager:debug("Installing dataset ~s.", [DatasetUUID]),
-    Path = filename:join(<<"/zones">>, DatasetUUID),
-    lager:debug("Checking path ~s.", [Path]),
-    case os:cmd("zfs list zones/" ++ binary_to_list(DatasetUUID) ++">/dev/null; echo $?") of
-        "0\n" ->
-            lager:debug("found.", []),
-            ok;
-        _ ->
-            case libsniffle:img_list(DatasetUUID) of
-                {ok, Parts} ->
-                    [Idx | Parts1] = lists:sort(Parts),
-                    {Cmd, B} = case libsniffle:img_get(DatasetUUID, Idx) of
-                                   {ok, <<31:8, 139:8, _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
-                                   {ok, <<"BZh", _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
-                               end,
-                    lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
-                    Port = open_port({spawn_executable, Cmd},
-                                     [{args, [DatasetUUID]}, use_stdio, binary,
-                                      stderr_to_stdout, exit_status]),
-                    port_command(Port, B),
-                    lager:debug("We have the following parts: ~p.", [Parts1]),
-                    write_image(Port, DatasetUUID, Parts1, VM, 0);
-                {ok, AKey, SKey, S3Host, S3Port, Bucket, Target} ->
-                    Chunk = case application:get_env(chunter, download_chunk) of
-                                undefined ->
-                                    1048576;
-                                {ok, S} ->
-                                    S
-                            end,
-                    {ok, Download} = fifo_s3_download:new(AKey, SKey, S3Host, S3Port, Bucket,
-                                                          Target, [{chunk_size, Chunk}]),
-                    {Cmd, B} = case fifo_s3_download:get(Download) of
-                                   {ok, <<31:8, 139:8, _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
-                                   {ok, <<"BZh", _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
-                               end,
-                    lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
-                    Port = open_port({spawn_executable, Cmd},
-                                     [{args, [DatasetUUID]}, use_stdio, binary,
-                                      stderr_to_stdout, exit_status]),
-                    port_command(Port, B),
-                    case chunter_snap:download_to_port(Port, Download, VM, 1) of
-                        {ok, done} ->
-                            finish_image(DatasetUUID);
-                        E ->
-                            E
-                    end
-            end
-    end.
-
-write_image(Port, UUID, [Idx|_], _Lock, ?WRITE_RETRY) ->
-    lager:debug("<IMG> ~p import failed at chunk ~p.", [UUID, Idx]),
-    port_close(Port),
-    {error, retries_exceeded};
-
-write_image(Port, UUID, [Idx|R], Lock, Retry) ->
-    lager:debug("<IMG> ~s[~p]: fetching", [UUID, Idx]),
-    chunter_lock:lock(Lock),
-    case libsniffle:img_get(UUID, Idx) of
-        {ok, B} ->
-            lager:debug("<IMG> ~s[~p]: writing", [UUID, Idx]),
-            port_command(Port, B),
-            write_image(Port, UUID, R, Lock, 0);
-        E ->
-            lager:warning("<IMG> ~p[~p]: retry! -> ~p", [UUID, Idx, E]),
-            timer:sleep(1000),
-            write_image(Port, UUID, [Idx|R], Lock, Retry+1)
-    end;
-
-write_image(Port, UUID, [], _Lock, _) ->
-    lager:debug("<IMG> done, going to wait for zfs to finish now.", []),
-    port_close(Port),
-    finish_image(UUID).
-
-finish_image(UUID) ->
-    UUIDL = binary_to_list(UUID),
-    {ok, DS} = libsniffle:dataset_get(UUID),
-    Manifest = jsxd:from_list([{<<"manifest">>,
-                                [{<<"v">>, 2},
-                                 {<<"uuid">>, UUID},
-                                 {<<"disabled">>, false},
-                                 {<<"type">>, <<"zvol">>},
-                                 {<<"state">>, <<"active">>}]},
-                               {<<"zpool">>, <<"zones">>}]),
-    %% Need to set the correct type
-    Manifest1 = case jsxd:get([<<"type">>], DS) of
-                    {ok, <<"zone">>} ->
-                        jsxd:set([<<"manifest">>, <<"type">>],
-                                 <<"zone-dataset">>, Manifest);
-                    _ ->
-                        Manifest
-                end,
-    %% and write it to zoneamd's new destination folder ...
-    file:write_file("/var/imgadm/images/zones-" ++ UUIDL ++ ".json",
-                    jsx:encode(Manifest1)),
-    Cmd = "zfs list -Hp -t all -r  zones/" ++ UUIDL,
-
-    wait_image(0, Cmd).
 
 do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
     chunter_zfs:snapshot(P, SnapID).
@@ -1082,9 +918,9 @@ do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
 finish_snapshot(_VM, _SnapID, [backup], ok) ->
     ok;
 finish_snapshot(VM, SnapID, _, ok) ->
-    libsniffle:vm_set(
-      VM, [<<"snapshots">>, SnapID, <<"state">>],
-      <<"completed">>),
+    ls_vm:set_snapshot(
+      VM, [{[SnapID, <<"state">>],
+            <<"completed">>}]),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -1099,9 +935,8 @@ do_delete_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
     chunter_zfs:destroy_snapshot(P, SnapID, [f, r]).
 
 finish_delete_snapshot(VM, SnapID, _, ok) ->
-    SnapPath = [<<"snapshots">>, SnapID],
-    lager:debug("Deleting ~p", [SnapPath]),
-    libsniffle:vm_set(VM, SnapPath, delete),
+    lager:debug("Deleting ~p", [SnapID]),
+    ls_vm:set_snapshot(VM, [{[SnapID], delete}]),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -1121,9 +956,11 @@ finish_rollback_snapshot(VM, SnapID, _, ok) ->
                   {<<"data">>,
                    [{<<"action">>, <<"rollback">>},
                     {<<"uuid">>, SnapID}]}]),
-    libsniffle:vm_commit_snapshot_rollback(VM, SnapID);
+    lager:debug("[Snapshot] committing rollback fo snapshot ~s on VM ~s.", [VM, SnapID]),
+    ls_vm:commit_snapshot_rollback(VM, SnapID);
 
 finish_rollback_snapshot(_VM, _SnapID, _, error) ->
+    lager:error("Snapshot rollback failed!"),
     error.
 
 do_backup(Path, VM, SnapID, Options) ->
@@ -1147,7 +984,7 @@ finish_backup(VM, UUID, Opts, ok) ->
 finish_backup(_VM, _UUID, _, error) ->
     error.
 
-snapshp_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
+snapshot_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
     lists:foldl(
       fun (_, {error, E}) ->
               {error, E};
@@ -1159,7 +996,7 @@ snapshp_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
                               {S, <<Reply0/binary, "\n", Res/binary>>};
                           {error, Code, Res} ->
                               lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
-                              libsniffle:vm_log(
+                              ls_vm:log(
                                 VM,
                                 <<"Failed snapshot disk ", P1/binary, ": ", Res/binary>>),
                               {error, <<Reply0/binary, "\n", Res/binary>>}
@@ -1183,11 +1020,11 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                     case Fun(P, VM, UUID, Opts) of
                         {ok, _} = R0 ->
                             Disks = jsxd:get(<<"disks">>, [], Spec),
-                            case snapshp_action_on_disks(VM, UUID, Fun, R0, Disks, Opts) of
+                            case snapshot_action_on_disks(VM, UUID, Fun, R0, Disks, Opts) of
                                 {ok, Res} ->
                                     M = io_lib:format("Snapshot done: ~p",
                                                       [Res]),
-                                    libsniffle:vm_log(VM, iolist_to_binary(M)),
+                                    ls_vm:log(VM, iolist_to_binary(M)),
                                     CompleteFun(VM, UUID, Opts, ok);
                                 {error, E} ->
                                     libhowl:send(VM,
@@ -1202,20 +1039,20 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
                         {error, Code, Reply} ->
                             lager:error("Failed snapshot VM ~s ~p: ~s.",
                                         [VM, Code, Reply]),
-                            libsniffle:vm_log(VM, <<"Failed to snapshot: ",
-                                                    Reply/binary>>),
+                            ls_vm:log(VM, <<"Failed to snapshot: ",
+                                            Reply/binary>>),
                             CompleteFun(VM, UUID, Opts, error)
                     end;
                 _ ->
                     lager:error("Failed to snapshot VM ~s.", [VM]),
-                    libsniffle:vm_log(VM, <<"Failed snapshot: can't find zonepath.">>),
+                    ls_vm:log(VM, <<"Failed snapshot: can't find zonepath.">>),
                     error
             end
     end.
 
 snapshot_sizes(VM) ->
     lager:info("[~s] Updating Snapshots.", [VM]),
-    case {libsniffle:servers(), libsniffle:vm_get(VM)} of
+    case {libsniffle:servers(), ls_vm:get(VM)} of
         {[], _} ->
             lager:warning("[~s] No Servers to update snapshots.", [VM]),
             ok;
@@ -1227,34 +1064,26 @@ snapshot_sizes(VM) ->
                             Spec = chunter_spec:to_sniffle(VMData),
                             chunter_snap:get_all(VM, Spec)
                     end,
-            R = case jsxd:get([<<"backups">>], V) of
-                    {ok, Bs} ->
-                        KnownB = [ ID || {ID, _} <- Bs],
-                        Backups1 =lists:filter(fun ({Name, _}) ->
-                                                       lists:member(Name, KnownB)
-                                               end, Snaps),
-                        Local = [N || {N, _ } <- Backups1],
-                        NonLocal = lists:subtract(KnownB, Local),
-                        [{[<<"backups">>, Name, <<"local_size">>], Size}
-                         || {Name, Size} <- Backups1] ++
-                            [{[<<"backups">>, Name, <<"local_size">>], 0}
-                             || Name <- NonLocal];
-                    _ ->
-                        []
-                end,
-            R1 = case jsxd:get([<<"snapshots">>], V) of
-                     {ok, Ss} ->
-                         KnownS = [ ID || {ID, _} <- Ss],
-                         Snaps1 =lists:filter(fun ({Name, _}) ->
-                                                      lists:member(Name, KnownS)
-                                              end, Snaps),
-                         [{[<<"snapshots">>, Name, <<"size">>], Size}
-                          || {Name, Size} <- Snaps1];
-                     _ ->
-                         []
-                 end,
-            BnS = R1 ++ R,
-            [libsniffle:vm_set(VM, K, Size) || {K, Size} <- BnS];
+            Bs = ft_vm:backups(V),
+            KnownB = [ ID || {ID, _} <- Bs],
+            Backups1 =lists:filter(fun ({Name, _}) ->
+                                           lists:member(Name, KnownB)
+                                   end, Snaps),
+            Local = [N || {N, _ } <- Backups1],
+            NonLocal = lists:subtract(KnownB, Local),
+            R = [{[<<"backups">>, Name, <<"local_size">>], Size}
+                 || {Name, Size} <- Backups1] ++
+                [{[<<"backups">>, Name, <<"local_size">>], 0}
+                 || Name <- NonLocal],
+
+            Ss = ft_vm:snapshots(V),
+            KnownS = [ ID || {ID, _} <- Ss],
+            Snaps1 =lists:filter(fun ({Name, _}) ->
+                                         lists:member(Name, KnownS)
+                                 end, Snaps),
+            BnS = [{[Name, <<"size">>], Size}
+                   || {Name, Size} <- Snaps1] ++ R,
+            ls_vm:set_snapshot(VM, BnS);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),
             ok
@@ -1278,17 +1107,6 @@ do_destroy(<<_:1/binary, P/binary>>, _VM, _SnapID, _) ->
 %%%===================================================================
 %%% Utility
 %%%===================================================================
-
-wait_import(<<_:1/binary, P/binary>>) ->
-    Cmd = "zfs list -Hp -t all -r " ++ binary_to_list(P),
-    wait_image(0, Cmd).
-
-wait_image(N, Cmd) when N < 3 ->
-    timer:sleep(5000),
-    wait_image(length(re:split(os:cmd(Cmd), "\n")), Cmd);
-
-wait_image(_, _) ->
-    lager:debug("<IMG> done waiting.", []).
 
 -spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
                                        Name::binary(),
@@ -1319,12 +1137,12 @@ load_vm(ZUUID) ->
             {error, not_found}
     end.
 
--spec change_state(UUID::binary(), State::fifo:vm_state()) -> ok.
+-spec change_state(UUID::binary(), State::fifo:vm_state()) -> fifo:vm_state().
 
 change_state(UUID, State) ->
     change_state(UUID, State, true).
 
--spec change_state(UUID::binary(), State::fifo:vm_state(), true | false) -> ok.
+-spec change_state(UUID::binary(), State::fifo:vm_state(), boolean()) -> fifo:vm_state().
 
 change_state(UUID, State, true) ->
     %% State1 = case filelib:is_file(<<"/zones/", UUID/binary, "/root/var/svc/provisioning">>) of
@@ -1335,8 +1153,8 @@ change_state(UUID, State, true) ->
     %%          end,
     %% This will stay out untill someone provides a propper solution
     State1 = State,
-    libsniffle:vm_log(UUID, <<"Transitioning ", State1/binary>>),
-    libsniffle:vm_set(UUID, <<"state">>, State1),
+    ls_vm:log(UUID, <<"Transitioning ", State1/binary>>),
+    ls_vm:state(UUID, State1),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1;
 
@@ -1349,7 +1167,7 @@ change_state(UUID, State, false) ->
     %%          end,
     %% This will stay out untill someone provides a propper solution
     State1 = State,
-    libsniffle:vm_set(UUID, <<"state">>, State1),
+    ls_vm:state(UUID, State1),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1.
 
@@ -1364,7 +1182,7 @@ atom_to_binary(A) ->
     list_to_binary(atom_to_list(A)).
 
 backup_update(VM, SnapID, K, V) ->
-    libsniffle:vm_set(VM, [<<"backups">>, SnapID, K], V),
+    ls_vm:set_backup(VM, [{[SnapID, K], V}]),
     libhowl:send(VM,
                  [{<<"event">>, <<"backup">>},
                   {<<"data">>,
@@ -1388,3 +1206,15 @@ update_services(UUID, Changed, false) ->
         Changed1 ->
             libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}])
     end.
+
+wait_import(<<_:1/binary, P/binary>>) ->
+    Cmd = "zfs list -Hp -t all -r " ++ binary_to_list(P),
+    wait_image(0, Cmd).
+
+wait_image(N, Cmd) when N < 3 ->
+    timer:sleep(5000),
+    wait_image(length(re:split(os:cmd(Cmd), "\n")), Cmd);
+
+wait_image(_, _) ->
+    lager:debug("<IMG> done waiting.", []),
+    ok.

@@ -121,7 +121,7 @@
 %% auto detected as the first network iterface in the system, if it still
 %% needs to be changed it can be done here.
 {mapping, "ip", "chunter.endpoint",
- [{commented, {"127.0.0.1", 4200}},
+ [{default, {"127.0.0.1", 4200}},
   {datatype, ip}]}.
 
 {translation,
@@ -137,3 +137,9 @@
          end
  end
 }.
+
+%% @doc cpu_type used for creating VM's. This only applies to KVM machines,
+%% 'default' will not set the option at all. Please see 'man vmadm' for details.
+{mapping, "cpu_type", "chunter.cpu_type",
+ [{default, default},
+  {datatype, {enum, [default, qemu64, host]}}]}.

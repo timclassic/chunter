@@ -55,9 +55,11 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                              stderr_to_stdout, exit_status, stream])
           end,
     backup_update(VM, SnapID, <<"state">>, <<"uploading">>, Options),
-    {ok, VMObj} = libsniffle:vm_get(VM),
-    Size = jsxd:get([<<"backups">>, SnapID, <<"size">>], 0, VMObj),
-    Fs = jsxd:get([<<"backups">>, SnapID, <<"files">>], [], VMObj),
+    backup_update(VM, SnapID, <<"size">>, 0, Options),
+    {ok, VMObj} = ls_vm:get(VM),
+    Backups = ft_vm:backups(VMObj),
+    Size = jsxd:get([SnapID, <<"size">>], 0, Backups),
+    Fs = jsxd:get([SnapID, <<"files">>], [], Backups),
     backup_update(VM, SnapID, <<"files">>, [Target | Fs], Options),
     upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Options).
 
@@ -259,9 +261,8 @@ mk_s3_conf(Options) ->
 backup_update(VM, SnapID, K, V, Opts) ->
     case proplists:get_value(quiet, Opts, false) of
         false ->
-            Root = proplists:get_value(root, Opts, [<<"backups">>, SnapID]),
             Event = proplists:get_value(event, Opts, <<"backup">>),
-            libsniffle:vm_set(VM, Root ++ [K], V),
+            ls_vm:set_backup(VM, [{[SnapID, K], V}]),
             libhowl:send(VM,
                          [{<<"event">>, Event},
                           {<<"data">>,

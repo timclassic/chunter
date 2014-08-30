@@ -178,7 +178,7 @@ create(Data) ->
     Res.
 
 update(UUID, Data) ->
-    lager:info("~p", [<<"Updaring of VM '", UUID/binary, "' started.">>]),
+    lager:info("~p", [<<"Updating of VM '", UUID/binary, "' started.">>]),
     %%    libsnarl:msg(Owner, info, <<"Creation of VM '", Alias/binary, "' started.">>),
     lager:info([{fifi_component, chunter}],
                "vmadm:update", []),

@@ -215,7 +215,8 @@ handle_message({machines, snapshot, store,
                   ls_dataset:imported(Img, 0),
                   ls_dataset:status(Img, <<"pending">>),
 				  {ok, VM} = ls_vm:get(UUID),
-				  Path = case ft_vm:type(VM) of
+				  Type = jsxd:get([<<"type">>], <<"zone">>, ft_vm:config(VM)),
+				  Path = case Type of
 							 <<"zone">> ->
 								 <<"/zones/", UUID/binary>>;
 							 <<"kvm">> ->

@@ -215,7 +215,7 @@ handle_message({machines, snapshot, store,
                   ls_dataset:imported(Img, 0),
                   ls_dataset:status(Img, <<"pending">>),
 				  {ok, VM} = ls_vm:get(UUID),
-				  Path = case ls_vm:type(VM) of
+				  Path = case ft_vm:type(VM) of
 							 <<"zone">> ->
 								 <<"/zones/", UUID/binary>>;
 							 <<"kvm">> ->

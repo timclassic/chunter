@@ -214,9 +214,15 @@ handle_message({machines, snapshot, store,
                            {quiet, true} | Opts],
                   ls_dataset:imported(Img, 0),
                   ls_dataset:status(Img, <<"pending">>),
-                  R = chunter_snap:upload(<<"/zones/", UUID/binary>>,
-                                          UUID, SnapId, Opts1),
-                  case R of
+				  {ok, VM} = ls_vm:get(UUID),
+				  Type = jsxd:get([<<"type">>], <<"zone">>, ft_vm:config(VM)),
+				  Path = case Type of
+							 <<"zone">> ->
+								 <<"/zones/", UUID/binary>>;
+							 <<"kvm">> ->
+								 <<"/zones/", UUID/binary, "-disk0">>
+						 end,
+                  case chunter_snap:upload(Path, UUID, SnapId, Opts1) of
                       {ok, _} ->
                           ls_dataset:status(Img, <<"imported">>),
                           ls_dataset:imported(Img, 1);

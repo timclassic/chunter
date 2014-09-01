@@ -220,7 +220,7 @@ handle_message({machines, snapshot, store,
 							 <<"zone">> ->
 								 <<"/zones/", UUID/binary>>;
 							 <<"kvm">> ->
-								 <<"/zones/", UUID/binary>>
+								 <<"/zones/", UUID/binary, "-disk0">>
 						 end,
                   case chunter_snap:upload(Path, UUID, SnapId, Opts1) of
                       {ok, _} ->

@@ -271,19 +271,26 @@ initialized({create, Package, Dataset, VMSpec},
     ls_vm:set_config(UUID, SniffleData1),
     lager:debug("[create:~s] Done generating config, handing to img install.",
                 [UUID]),
-    chunter_dataset_srv:install(DatasetUUID, UUID),
-    lager:debug("[create:~s] Done installing image going to create now.",
-                [UUID]),
-    case chunter_vmadm:create(VMData1) of
+    case chunter_dataset_srv:install(DatasetUUID, UUID) of
         ok ->
-            lager:debug("[create:~s] Done creating continuing on.", [UUID]),
-            {next_state, creating,
-             State#state{type = Type,
-                         public_state = change_state(UUID, <<"creating">>)}};
-        {error, E} ->
-            lager:error("[create:~s] Failed to create with error: ~p",
-                        [UUID, E]),
-            change_state(UUID, <<"failed">>),
+            lager:debug("[create:~s] Done installing image going to create now.",
+                        [UUID]),
+            case chunter_vmadm:create(VMData1) of
+                ok ->
+                    lager:debug("[create:~s] Done creating continuing on.", [UUID]),
+                    {next_state, creating,
+                     State#state{type = Type,
+                                 public_state = change_state(UUID, <<"creating">>)}};
+                {error, E} ->
+                    lager:error("[create:~s] Failed to create with error: ~p",
+                                [UUID, E]),
+                    change_state(UUID, <<"failed">>),
+                    {stop, normal, State}
+            end;
+        E ->
+			lager:error("[create:~s] Dataset import failed with: ~p",
+						[UUID, E]),
+			change_state(UUID, <<"failed">>),
             {stop, normal, State}
     end;
 
@@ -569,7 +576,7 @@ handle_event({update, Package, Config}, StateName,
         VMData ->
             P = case Package of
                     undefined ->
-                        [];
+                        undefined;
                     _ ->
                         ft_package:to_json(Package)
                 end,

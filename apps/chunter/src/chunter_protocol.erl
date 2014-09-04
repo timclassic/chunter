@@ -242,7 +242,6 @@ handle_message({machines, snapshot, store, UUID, SnapId, Img}, State)
           end),
     {stop, ok, State};
 
-
 handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),
     {stop, State};

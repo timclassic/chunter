@@ -576,7 +576,7 @@ handle_event({update, Package, Config}, StateName,
         VMData ->
             P = case Package of
                     undefined ->
-                        [];
+                        undefined;
                     _ ->
                         ft_package:to_json(Package)
                 end,

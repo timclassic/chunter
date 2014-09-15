@@ -278,6 +278,13 @@ initialized({create, Package, Dataset, VMSpec},
             case chunter_vmadm:create(VMData1) of
                 ok ->
                     lager:debug("[create:~s] Done creating continuing on.", [UUID]),
+                    case jsxd:get(<<"owner">>, VMSpec) of
+                        {ok, Org} ->
+                            ls_org:resource_action(Org, UUID, timestamp(),
+                                                   confirm_create, []);
+                        _ ->
+                            ok
+                    end,
                     {next_state, creating,
                      State#state{type = Type,
                                  public_state = change_state(UUID, <<"creating">>)}};
@@ -1225,3 +1232,7 @@ wait_image(N, Cmd) when N < 3 ->
 wait_image(_, _) ->
     lager:debug("<IMG> done waiting.", []),
     ok.
+
+timestamp() ->
+    {Mega,Sec,Micro} = erlang:now(),
+    (Mega*1000000+Sec)*1000000+Micro.

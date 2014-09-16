@@ -1080,6 +1080,7 @@ snapshot_sizes(VM) ->
                             Spec = chunter_spec:to_sniffle(VMData),
                             chunter_snap:get_all(VM, Spec)
                     end,
+            %% First we look at backups
             Bs = ft_vm:backups(V),
             KnownB = [ ID || {ID, _} <- Bs],
             Backups1 =lists:filter(fun ({Name, _}) ->
@@ -1087,19 +1088,21 @@ snapshot_sizes(VM) ->
                                    end, Snaps),
             Local = [N || {N, _ } <- Backups1],
             NonLocal = lists:subtract(KnownB, Local),
-            R = [{[<<"backups">>, Name, <<"local_size">>], Size}
-                 || {Name, Size} <- Backups1] ++
-                [{[<<"backups">>, Name, <<"local_size">>], 0}
+            Bs1 = [{[Name, <<"local_size">>], Size}
+                   || {Name, Size} <- Backups1] ++
+                [{[Name, <<"local_size">>], 0}
                  || Name <- NonLocal],
+            ls_vm:set_snapshot(VM, Bs1),
 
+            %% And then at sanpshots
             Ss = ft_vm:snapshots(V),
             KnownS = [ ID || {ID, _} <- Ss],
             Snaps1 =lists:filter(fun ({Name, _}) ->
                                          lists:member(Name, KnownS)
                                  end, Snaps),
-            BnS = [{[Name, <<"size">>], Size}
-                   || {Name, Size} <- Snaps1] ++ R,
-            ls_vm:set_snapshot(VM, BnS);
+            Ss1 = [{[Name, <<"size">>], Size}
+                   || {Name, Size} <- Snaps1],
+            ls_vm:set_snapshot(VM, Ss1);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),
             ok

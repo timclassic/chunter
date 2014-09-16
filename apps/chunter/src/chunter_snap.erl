@@ -7,7 +7,7 @@
 -export([
          describe_restore/1,
          download/4,
-         download_to_port/4,
+         download_to_port/6,
          upload/4,
          get/1,
          get_all/2,
@@ -152,9 +152,10 @@ download(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
     Prt = open_port({spawn_executable, Cmd},
                     [{args, [P, SnapID]}, use_stdio, binary,
                      stderr_to_stdout, exit_status, stream]),
-    download_to_port(Prt, Download, undefined, 0).
+    Ctx = crypto:hash_init(sha),
+    download_to_port(Prt, Download, undefined, <<>>, Ctx,0).
 
-download_to_port(Prt, Download, Lock, I) ->
+download_to_port(Prt, Download, Lock, SHA1, Ctx, I) ->
     case Lock of
         undefined ->
             ok;
@@ -164,12 +165,27 @@ download_to_port(Prt, Download, Lock, I) ->
     case fifo_s3_download:get(Download) of
         {ok, done} ->
             lager:debug("Download complete: ~p.", [I]),
-            port_close(Prt),
-            {ok, done};
+            case base16:encode(crypto:hash_final(Ctx)) of
+                Digests when Digests == SHA1 ->
+                    port_close(Prt),
+                    lager:info("[download] Download valid with ~p", [Digests]),
+                    {ok, done};
+                Digests when SHA1 == <<>> ->
+                    lager:warning("[download] No hash provided so we assume ~p"
+                                  " to be correct.", [Digests]),
+                    port_close(Prt),
+                    {ok, done};
+                Digests ->
+                    lager:error("[download] Corrupted got ~p but expected ~p",
+                                  [Digests, SHA1]),
+                    port_close(Prt),
+                    {error, 0, corrupted}
+                end;
         {ok, Data} ->
+            Ctx1 = crypto:hash_update(Ctx, Data),
             lager:debug("Download part: ~p.", [I]),
             port_command(Prt, Data),
-            download_to_port(Prt, Download, Lock, I+1);
+            download_to_port(Prt, Download, Lock, SHA1, Ctx1, I+1);
         {error, E} ->
             port_close(Prt),
             lager:error("Import error: ~p", [I, E]),

@@ -186,7 +186,7 @@ install_image(DatasetUUID, VM) ->
                                       stderr_to_stdout, exit_status]),
                     port_command(Port, B),
                     case chunter_snap:download_to_port(
-                           Port, Download, VM, ft_dataset:sha(D), Ctx1, 1) of
+                           Port, Download, VM, ft_dataset:sha1(D), Ctx1, 1) of
                         {ok, done} ->
                             finish_image(DatasetUUID);
                         E ->

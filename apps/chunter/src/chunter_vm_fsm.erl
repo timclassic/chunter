@@ -1033,7 +1033,13 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
             Spec = chunter_spec:to_sniffle(VMData),
             case jsxd:get(<<"zonepath">>, Spec) of
                 {ok, P} ->
-                    case Fun(P, VM, UUID, Opts) of
+                    R = case Fun(P, VM, UUID, Opts) of
+                            {ok, Rx, _} ->
+                                {ok, Rx};
+                            O ->
+                                O
+                        end,
+                    case R of
                         {ok, _} = R0 ->
                             Disks = jsxd:get(<<"disks">>, [], Spec),
                             case snapshot_action_on_disks(VM, UUID, Fun, R0, Disks, Opts) of

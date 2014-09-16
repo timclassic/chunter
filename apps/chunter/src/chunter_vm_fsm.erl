@@ -321,7 +321,7 @@ initialized({restore, SnapID, Options},
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
-                [S || {_, S} <- Path,
+                [S || {_, S, _} <- Path,
                       jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
@@ -671,13 +671,13 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,
     {ok, VMObj} = ls_vm:get(VM),
-    {ok, Remote} = ft_vm:backups(VMObj),
+    Remote = ft_vm:backups(VMObj),
     Local = chunter_snap:get(VM),
     case chunter_snap:restore_path(SnapID, Remote, Local) of
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
-                [S || {_, S} <- Path,
+                [S || {_, S, _} <- Path,
                       jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
@@ -1008,6 +1008,8 @@ snapshot_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
                       case Fun(P1, VM, UUID, Opts) of
                           {ok, Res} ->
                               {S, <<Reply0/binary, "\n", Res/binary>>};
+                          {ok, Res, _} ->
+                              {S, <<Reply0/binary, "\n", Res/binary>>};
                           {error, Code, Res} ->
                               lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
                               ls_vm:log(
@@ -1078,6 +1080,7 @@ snapshot_sizes(VM) ->
                             Spec = chunter_spec:to_sniffle(VMData),
                             chunter_snap:get_all(VM, Spec)
                     end,
+            %% First we look at backups
             Bs = ft_vm:backups(V),
             KnownB = [ ID || {ID, _} <- Bs],
             Backups1 =lists:filter(fun ({Name, _}) ->
@@ -1085,19 +1088,21 @@ snapshot_sizes(VM) ->
                                    end, Snaps),
             Local = [N || {N, _ } <- Backups1],
             NonLocal = lists:subtract(KnownB, Local),
-            R = [{[<<"backups">>, Name, <<"local_size">>], Size}
-                 || {Name, Size} <- Backups1] ++
-                [{[<<"backups">>, Name, <<"local_size">>], 0}
+            Bs1 = [{[Name, <<"local_size">>], Size}
+                   || {Name, Size} <- Backups1] ++
+                [{[Name, <<"local_size">>], 0}
                  || Name <- NonLocal],
+            ls_vm:set_backup(VM, Bs1),
 
+            %% And then at sanpshots
             Ss = ft_vm:snapshots(V),
             KnownS = [ ID || {ID, _} <- Ss],
             Snaps1 =lists:filter(fun ({Name, _}) ->
                                          lists:member(Name, KnownS)
                                  end, Snaps),
-            BnS = [{[Name, <<"size">>], Size}
-                   || {Name, Size} <- Snaps1] ++ R,
-            ls_vm:set_snapshot(VM, BnS);
+            Ss1 = [{[Name, <<"size">>], Size}
+                   || {Name, Size} <- Snaps1],
+            ls_vm:set_snapshot(VM, Ss1);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),
             ok
@@ -1105,13 +1110,13 @@ snapshot_sizes(VM) ->
 
 do_restore(Path, VM, {local, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {full, SnapId}, Opts) ->
+do_restore(Path, VM, {full, SnapId, SHA1}, Opts) ->
     do_destroy(Path, VM, SnapId, Opts),
-    chunter_snap:download(Path, VM, SnapId, Opts),
+    chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {incr, SnapId}, Opts) ->
-    chunter_snap:download(Path, VM, SnapId, Opts),
+do_restore(Path, VM, {incr, SnapId, SHA1}, Opts) ->
+    chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts).
 

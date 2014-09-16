@@ -206,26 +206,31 @@ generate_spec(Package, Dataset, OwnerData) ->
                     end
             end,
     Base2 = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
-                              jsxd:set([<<"customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
-                          (<<"root_pw">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"root_pw">>], V, Obj);
+                              jsxd:set([<<"customer_metadata">>,
+                                        <<"root_authorized_keys">>], V, Obj);
                           (<<"resolvers">>, V, Obj) ->
                               jsxd:set(<<"resolvers">>, V, Obj);
                           (<<"hostname">>, V, Obj) ->
                               jsxd:set(<<"hostname">>, V, Obj);
-                          (<<"admin_pw">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"admin_pw">>], V, Obj);
                           (<<"metadata">>, V, Obj) ->
                               jsxd:update(<<"customer_metadata">>,
                                           fun(M) ->
                                                   jsxd:merge(M, V)
                                           end, V, Obj);
                           (<<"note">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"note">>], V, Obj);
+                              jsxd:set([<<"internal_metadata">>, <<"note">>],
+                                       V, Obj);
                           (<<"network_map">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"network_map">>], V, Obj);
-                          (_, _, Obj) ->
-                              Obj
+                              jsxd:set([<<"internal_metadata">>,
+                                        <<"network_map">>], V, Obj);
+                          (K, V, Obj) ->
+                              case re:run(K, "_pw$") of
+                                  nomatch ->
+                                      Obj;
+                                  _ ->
+                                      jsxd:set([<<"internal_metadata">>, K],
+                                               V, Obj)
+                              end
                       end, Base1, OwnerData),
     Result = case jsxd:get(<<"networks">>, Dataset) of
                  {ok, Nics} ->
@@ -235,7 +240,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                  _ ->
                      Base2
              end,
-    lager:debug("Converted ~p / ~p / ~p to: ~p.", [Package, Dataset, OwnerData, Result]),
+    lager:debug("Converted ~p / ~p / ~p to: ~p.",
+                [Package, Dataset, OwnerData, Result]),
     Result.
 
 
@@ -244,26 +250,30 @@ generate_spec(Package, Dataset, OwnerData) ->
                     Config::fifo:config()) -> fifo:config_list().
 
 create_update(_, undefined, Config) ->
-    KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>,
-                <<"update_nics">>, <<"autoboot">>, <<"max_swap">>, <<"set_routes">>, <<"remove_routes">>],
-    Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
-                               jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
-                           (<<"root_pw">>, V, Obj) ->
-                               jsxd:set([<<"set_internal_metadata">>, <<"root_pw">>], V, Obj);
-                           (<<"admin_pw">>, V, Obj) ->
-                               jsxd:set([<<"set_internal_metadata">>, <<"admin_pw">>], V, Obj);
-                           (<<"metadata">>, V, Obj) ->
-                               jsxd:update(<<"set_customer_metadata">>,
-                                           fun(M) ->
-                                                   jsxd:merge(M, V)
-                                           end, V, Obj);
-                           (<<"note">>, V, Obj) ->
-                               jsxd:set([<<"set_internal_metadata">>, <<"note">>], V, Obj);
-                           (_, _, Obj) ->
-                               Obj
-                       end,
-                       jsxd:select(KeepKeys, Config),
-                       Config),
+    KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>,
+                <<"add_nics">>, <<"update_nics">>, <<"autoboot">>,
+                <<"max_swap">>, <<"set_routes">>, <<"remove_routes">>],
+    MDataFun = fun (<<"ssh_keys">>, V, Obj) ->
+                       jsxd:set([<<"set_customer_metadata">>,
+                                 <<"root_authorized_keys">>], V, Obj);
+                   (<<"metadata">>, V, Obj) ->
+                       jsxd:update(<<"set_customer_metadata">>,
+                                   fun(M) ->
+                                           jsxd:merge(M, V)
+                                   end, V, Obj);
+                   (<<"note">>, V, Obj) ->
+                       jsxd:set([<<"set_internal_metadata">>, <<"note">>],
+                                V, Obj);
+                   (K, V, Obj) ->
+                       case re:run(K, "_pw$") of
+                           nomatch ->
+                               Obj;
+                           _ ->
+                               jsxd:set([<<"set_internal_metadata">>, K],
+                                        V, Obj)
+                       end
+               end,
+        Result = jsxd:fold(MDataFun, jsxd:select(KeepKeys, Config), Config),
     R1 = jsxd:update([<<"add_nics">>],
                      fun(Ns) ->
                              [jsxd:update([<<"model">>],

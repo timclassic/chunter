@@ -116,7 +116,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Options) ->
                             M = io_lib:format("Uploaded ~s with a total size of"
                                               " done: ~p", [UUID, Size]),
 
-                            {ok, list_to_binary(M)};
+                            {ok, list_to_binary(M), Digest};
                         {error, E} ->
                             fifo_s3_upload:abort(Upload),
                             backup_update(UUID, SnapID, <<"state">>,

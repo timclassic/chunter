@@ -1008,6 +1008,8 @@ snapshot_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
                       case Fun(P1, VM, UUID, Opts) of
                           {ok, Res} ->
                               {S, <<Reply0/binary, "\n", Res/binary>>};
+                          {ok, Res, _} ->
+                              {S, <<Reply0/binary, "\n", Res/binary>>};
                           {error, Code, Res} ->
                               lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
                               ls_vm:log(

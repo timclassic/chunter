@@ -671,7 +671,7 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,
     {ok, VMObj} = ls_vm:get(VM),
-    {ok, Remote} = ft_vm:backups(VMObj),
+    Remote = ft_vm:backups(VMObj),
     Local = chunter_snap:get(VM),
     case chunter_snap:restore_path(SnapID, Remote, Local) of
         {ok, Path} ->

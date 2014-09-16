@@ -321,7 +321,7 @@ initialized({restore, SnapID, Options},
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
-                [S || {_, S} <- Path,
+                [S || {_, S, _} <- Path,
                       jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
@@ -677,7 +677,7 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
-                [S || {_, S} <- Path,
+                [S || {_, S, _} <- Path,
                       jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
@@ -1105,13 +1105,13 @@ snapshot_sizes(VM) ->
 
 do_restore(Path, VM, {local, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {full, SnapId}, Opts) ->
+do_restore(Path, VM, {full, SnapId, SHA1}, Opts) ->
     do_destroy(Path, VM, SnapId, Opts),
-    chunter_snap:download(Path, VM, SnapId, Opts),
+    chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {incr, SnapId}, Opts) ->
-    chunter_snap:download(Path, VM, SnapId, Opts),
+do_restore(Path, VM, {incr, SnapId, SHA1}, Opts) ->
+    chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts).
 

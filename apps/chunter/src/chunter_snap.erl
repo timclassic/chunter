@@ -6,7 +6,7 @@
 
 -export([
          describe_restore/1,
-         download/4,
+         download/5,
          download_to_port/6,
          upload/4,
          get/1,
@@ -61,18 +61,19 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
     Size = jsxd:get([SnapID, <<"size">>], 0, Backups),
     Fs = jsxd:get([SnapID, <<"files">>], [], Backups),
     backup_update(VM, SnapID, <<"files">>, [Target | Fs], Options),
-    upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Options).
+    Ctx = crypto:hash_init(sha),
+    upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Ctx, Options).
 
 
-upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
+upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Options) ->
     case AccIn of
         <<MB:Chunk/binary, Acc/binary>> ->
             case fifo_s3_upload:part(Upload, binary:copy(MB)) of
                 ok ->
                     lager:debug("Uploading: ~p MB.", [round(Size/1024/1024)]),
                     backup_update(UUID, SnapID, <<"size">>, Size, Options),
-                    upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk, Size,
-                                    Options);
+                    upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk,
+                                    Size, Ctx, Options);
                 {error, E} ->
                     fifo_s3_upload:abort(Upload),
                     lager:error("Upload error: ~p", [E]),
@@ -83,8 +84,10 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
             receive
                 {Port, {data, Data}} ->
                     Size1 = Size + byte_size(Data),
+                    Ctx1 = crypto:hash_update(Ctx, Data),
                     upload_to_cloud(UUID, SnapID, Port, Upload,
-                                    <<Acc/binary, Data/binary>>, Chunk, Size1, Options);
+                                    <<Acc/binary, Data/binary>>, Chunk, Size1,
+                                    Ctx1, Options);
                 {Port, {exit_status, 0}} ->
                     R = case Acc of
                             <<>> ->
@@ -103,10 +106,15 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
                         end,
                     case R of
                         ok ->
-                            lager:debug("Upload complete: ~p MB.", [round(Size/1024/1024)]),
-                            backup_update(UUID, SnapID, <<"size">>, Size, Options),
-                            M = io_lib:format("Uploaded ~s with a total size of done: "
-                                              "~p", [UUID, Size]),
+                            lager:debug("Upload complete: ~p MB.",
+                                        [round(Size/1024/1024)]),
+                            backup_update(UUID, SnapID, <<"size">>, Size,
+                                          Options),
+                            Digest = base16:encode(crypto:hash_final(Ctx)),
+                            backup_update(UUID, SnapID, <<"sha1">>, Digest,
+                                          Options),
+                            M = io_lib:format("Uploaded ~s with a total size of"
+                                              " done: ~p", [UUID, Size]),
 
                             {ok, list_to_binary(M)};
                         {error, E} ->
@@ -124,7 +132,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Options) ->
             end
     end.
 
-download(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
+download(<<_:1/binary, P/binary>>, VM, SnapID, SHA1, Options) ->
     Disk = case P of
                %% 42 is the lenght of zone/<uuid>
                <<_:42/binary, "-", Dx/binary>> ->
@@ -153,7 +161,7 @@ download(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                     [{args, [P, SnapID]}, use_stdio, binary,
                      stderr_to_stdout, exit_status, stream]),
     Ctx = crypto:hash_init(sha),
-    download_to_port(Prt, Download, undefined, <<>>, Ctx,0).
+    download_to_port(Prt, Download, undefined, SHA1, Ctx, 0).
 
 download_to_port(Prt, Download, Lock, SHA1, Ctx, I) ->
     case Lock of
@@ -168,15 +176,15 @@ download_to_port(Prt, Download, Lock, SHA1, Ctx, I) ->
             case base16:encode(crypto:hash_final(Ctx)) of
                 Digests when Digests == SHA1 ->
                     port_close(Prt),
-                    lager:info("[download] Download valid with ~p", [Digests]),
+                    lager:info("[download] Download valid with ~s", [Digests]),
                     {ok, done};
                 Digests when SHA1 == <<>> ->
-                    lager:warning("[download] No hash provided so we assume ~p"
+                    lager:warning("[download] No hash provided so we assume ~s"
                                   " to be correct.", [Digests]),
                     port_close(Prt),
                     {ok, done};
                 Digests ->
-                    lager:error("[download] Corrupted got ~p but expected ~p",
+                    lager:error("[download] Corrupted got ~p but expected ~s",
                                   [Digests, SHA1]),
                     port_close(Prt),
                     {error, 0, corrupted}
@@ -254,12 +262,13 @@ restore_path(Target, Remote, Local, Path) ->
         false ->
             case jsxd:get(Target, Remote) of
                 {ok, Snap} ->
+                    SHA1 = jsxd:get(<<"sha1">>, <<>>, Snap),
                     case jsxd:get(<<"parent">>, Snap) of
                         {ok, Parent} ->
                             restore_path(Parent, Remote, Local,
-                                         [{incr, Target} | Path]);
+                                         [{incr,  Target, SHA1} | Path]);
                         _ ->
-                            {ok, [{full, Target} | Path]}
+                            {ok, [{full, Target, SHA1} | Path]}
                     end;
                 _ ->
                     {error, nopath}
@@ -305,8 +314,9 @@ restore_path_test() ->
     ResG = restore_path(<<"g">>, Remote, Local),
 
     ?assertEqual([{local, <<"b">>}], ResB),
-    ?assertEqual([{local, <<"c">>}, {incr, <<"a">>}], ResA),
-    ?assertEqual([{full, <<"f">>}, {incr, <<"e">>}, {incr, <<"d">>}], ResD),
+    ?assertEqual([{local, <<"c">>}, {incr, <<"a">>, <<>>}], ResA),
+    ?assertEqual([{full, <<"f">>, <<>>}, {incr, <<"e">>, <<>>},
+                  {incr, <<"d">>, <<>>}], ResD),
     ?assertEqual({error, nopath}, ResG),
     ok.
 

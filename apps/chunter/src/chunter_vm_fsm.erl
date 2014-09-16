@@ -1083,7 +1083,7 @@ snapshot_sizes(VM) ->
                    || {Name, Size} <- Backups1] ++
                 [{[Name, <<"local_size">>], 0}
                  || Name <- NonLocal],
-            ls_vm:set_snapshot(VM, Bs1),
+            ls_vm:set_backup(VM, Bs1),
 
             %% And then at sanpshots
             Ss = ft_vm:snapshots(V),

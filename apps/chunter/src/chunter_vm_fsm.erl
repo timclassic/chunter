@@ -103,8 +103,9 @@ load(UUID) ->
             chunter_vm_sup:start_child(UUID),
             gen_fsm:send_event({global, {vm, UUID}}, load);
         _ ->
-            register(UUID)
-    end.
+            ok
+    end,
+    register(UUID).
 
 -spec transition(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
 

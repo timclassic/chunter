@@ -119,7 +119,15 @@ delete(UUID) ->
 -spec force_state(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
 
 force_state(UUID, State) ->
-    gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State}).
+    case global:whereis_name({vm, UUID}) of
+        undefined ->
+            chunter_vm_sup:start_child(UUID),
+            gen_fsm:send_event({global, {vm, UUID}}, load),
+            register(UUID);
+        _ ->
+            gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State})
+    end.
+
 
 -spec register(UUID::fifo:uuid()) -> ok.
 

@@ -122,7 +122,8 @@ force_state(UUID, State) ->
     case global:whereis_name({vm, UUID}) of
         undefined ->
             chunter_vm_sup:start_child(UUID),
-            gen_fsm:send_event({global, {vm, UUID}}, load);
+            gen_fsm:send_event({global, {vm, UUID}}, load),
+            register(UUID);
         _ ->
             gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State})
     end.

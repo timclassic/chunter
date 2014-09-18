@@ -697,6 +697,11 @@ handle_sync_event({door, Ref, Data}, _From, StateName,
         end,
     {reply, {ok, R}, StateName, State};
 
+handle_sync_event({door, Ref, Data}, _From, StateName,
+             State = #state{api_ref=Ref, uuid=UUID}) ->
+    lager:info("[zone:~s] API: ~s", [UUID, Data]),
+    {reply, {ok, <<"API!">>}, StateName, State};
+
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,
     {ok, VMObj} = ls_vm:get(VM),

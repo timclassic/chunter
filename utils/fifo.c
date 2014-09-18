@@ -57,7 +57,7 @@ main(int argc, char *argv[])
   int blen = 0;
   char *buf = NULL;
   door_arg_t door_args = {0};
-
+  char success = 0;
   blen = snprintf(NULL, 0, REQ_FMT_STR, argv[1]) + 1;
 
   buf = (char *)alloca(blen);
@@ -86,7 +86,7 @@ main(int argc, char *argv[])
   if (door_call(fd, &door_args) < 0) {
     perror("smartplugin: door_call failed");
   } else {
-    char success = (*(door_args.rbuf) == '1')
+    success = (*(door_args.rbuf) == '1');
     if (success) {
       fprintf(stdout, "%s\n", (door_args.rbuf + 1));
     } else {

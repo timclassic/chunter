@@ -45,7 +45,7 @@
 
 static const char *DOOR = "/var/tmp/._fifo";
 static const char *REQ_FMT_STR = "%s"; /* name uid fp */
-static const int RETURN_SZ = 10240;
+static const int RETURN_SZ = 65536;
 
 static const int MAX_ATTEMPTS = 2;
 static const int SLEEP_PERIOD = 1;
@@ -57,13 +57,13 @@ main(int argc, char *argv[])
   int blen = 0;
   char *buf = NULL;
   door_arg_t door_args = {0};
-  int success = 0;
+  int success = 1;
   blen = strlen(argv[1]) + 1;
 
   buf = (char *)alloca(blen);
   if (buf == NULL) {
     LOG_OOM(blen);
-    return (0);
+    return (1);
   }
   strlcpy(buf, argv[1], blen);
 
@@ -74,7 +74,7 @@ main(int argc, char *argv[])
   door_args.rbuf = alloca(RETURN_SZ);
   if (door_args.rbuf == NULL) {
     LOG_OOM(RETURN_SZ);
-    return (0);
+    return (1);
   }
   memset(door_args.rbuf, 0, RETURN_SZ);
 

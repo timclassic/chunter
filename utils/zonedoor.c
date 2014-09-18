@@ -118,7 +118,7 @@ main(int argc, char *argv[])
           // "_joyent_sshd_key_is_authorized"
           addVMDoor(input, arg2);
         } else {
-          alert("invalid input");
+          fprintf(stderr, "Invalid input: '%s'.\r\n", input);
         }
         break;
       case 'd':    // delete zone door
@@ -129,7 +129,7 @@ main(int argc, char *argv[])
           // "_joyent_sshd_key_is_authorized"
           deleteVMDoor(input, arg2);
         } else {
-          alert("invalid input");
+          fprintf(stderr, "Invalid input: '%s'.\r\n", input);
         }
         break;
       case 'r':   // request response

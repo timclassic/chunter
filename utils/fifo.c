@@ -84,6 +84,7 @@ main(int argc, char *argv[])
 
   if (door_call(fd, &door_args) < 0) {
     perror("fifodoor: door_call failed");
+    return (1);
   } else {
     success = (*(door_args.rbuf) == '1');
     if (success) {
@@ -94,6 +95,4 @@ main(int argc, char *argv[])
     munmap(door_args.rbuf, door_args.rsize);
     return (success);
   }
-
-  return (0);
 }

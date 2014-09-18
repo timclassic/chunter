@@ -31,7 +31,7 @@
 zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz);
 void addVMDoor(char * zoneID, char *doorName, char *doorBiscuit);
 void rmVMDoor(char * zoneID, char *doorName);
-
+char *split_space(char *input);
 zdoor_handle_t zdid;
 int pendingRequest;
 char requestResponse;

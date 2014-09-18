@@ -65,7 +65,7 @@ main(int argc, char *argv[])
     LOG_OOM(blen);
     return (0);
   }
-  strlcpy(buf, argv[1], blen-1);
+  strlcpy(buf, argv[1], blen);
 
   door_args.data_ptr = buf;
   door_args.data_size = blen;

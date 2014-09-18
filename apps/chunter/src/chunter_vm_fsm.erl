@@ -80,9 +80,11 @@
                 listeners = [],
                 nsq = false,
                 public_state,
-                auth_ref}).
+                auth_ref,
+                api_ref}).
 
 -define(AUTH_DOOR, "_joyent_sshd_key_is_authorized").
+-define(API_DOOR, "_fifo").
 
 
 %%%===================================================================
@@ -901,7 +903,8 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-terminate(Reason, StateName, State = #state{uuid = UUID, auth_ref=AuthRef}) ->
+terminate(Reason, StateName,
+          State = #state{uuid = UUID, auth_ref=AuthRef, api_ref=APIRef}) ->
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
                   [UUID, StateName, Reason]),
     lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
@@ -913,6 +916,7 @@ terminate(Reason, StateName, State = #state{uuid = UUID, auth_ref=AuthRef}) ->
             incinerate(State#state.console)
     end,
     ezdoor_server:remove(AuthRef),
+    ezdoor_server:remove(APIRef),
     ok.
 
 %%--------------------------------------------------------------------
@@ -949,11 +953,17 @@ init_console(State) ->
     end.
 
 ensure_zonedoor(State) ->
-    case ezdoor_server:add(?MODULE, State#state.uuid, ?AUTH_DOOR) of
-        {ok, Ref} ->
-            State#state{auth_ref = Ref};
+    State1 = case ezdoor_server:add(?MODULE, State#state.uuid, ?AUTH_DOOR) of
+                 {ok, AuthRef} ->
+                     State#state{auth_ref = AuthRef};
+                 {error, doublicate} ->
+                     State
+             end,
+    case ezdoor_server:add(?MODULE, State1#state.uuid, ?API_DOOR) of
+        {ok, APIRef} ->
+            State1#state{api_ref = APIRef};
         {error, doublicate} ->
-            State
+            State1
     end.
 
 

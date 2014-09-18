@@ -45,7 +45,6 @@
 
 static const char *DOOR = "/var/tmp/._fifo";
 static const char *REQ_FMT_STR = "%s"; /* name uid fp */
-static const char *REQ_FMT_STR_2 = "%s %s"; /* name uid fp */
 static const int RETURN_SZ = 2048;
 
 static const int MAX_ATTEMPTS = 2;
@@ -58,28 +57,27 @@ main(int argc, char *argv[])
   int blen = 0;
   char *buf = NULL;
   door_arg_t door_args = {0};
-  if (argc == 3 && strcmp(argv[1], "snapshot") == 0) {
-    blen = snprintf(NULL, 0, REQ_FMT_STR_2, argv[1], argv[2]) + 1;
+  char fstr = NULL;
+  int args = 0;
 
-    buf = (char *)alloca(blen);
-    if (buf == NULL) {
-      LOG_OOM(blen);
-      return (0);
-    }
+  blen = snprintf(NULL, 0, REQ_FMT_STR, argv[1]) + 1;
 
-    (void) snprintf(buf, blen, REQ_FMT_STR_2, argv[1], argv[2]);
-    door_args.data_ptr = buf;
-    door_args.data_size = blen;
+  buf = (char *)alloca(blen);
+  if (buf == NULL) {
+    LOG_OOM(blen);
+    return (0);
+  }
 
-    door_args.rsize = RETURN_SZ;
-    door_args.rbuf = alloca(RETURN_SZ);
-    if (door_args.rbuf == NULL) {
-      LOG_OOM(RETURN_SZ);
-      return (0);
-    }
-  } else {
-    fprintf(stderr, "Command not supported: %s\n", argv[1]);
-    return (1);
+  (void) snprintf(buf, blen, fstr, argv[1]);
+
+  door_args.data_ptr = buf;
+  door_args.data_size = blen;
+
+  door_args.rsize = RETURN_SZ;
+  door_args.rbuf = alloca(RETURN_SZ);
+  if (door_args.rbuf == NULL) {
+    LOG_OOM(RETURN_SZ);
+    return (0);
   }
   memset(door_args.rbuf, 0, RETURN_SZ);
 
@@ -90,9 +88,14 @@ main(int argc, char *argv[])
   if (door_call(fd, &door_args) < 0) {
     perror("smartplugin: door_call failed");
   } else {
-    fprintf(stdout, "%s\n",  door_args.rbuf);
+    char success = (*(door_args.rbuf) == '1')
+    if (success) {
+      fprintf(stdout, "%s\n", (door_args.rbuf + 1));
+    } else {
+      fprintf(stderr, "%s\n", (door_args.rbuf + 1));
+    }
     munmap(door_args.rbuf, door_args.rsize);
-    return (0);
+    return (success);
   }
 
   return (0);

@@ -59,7 +59,7 @@ main(int argc, char *argv[])
   char *buf = NULL;
   door_arg_t door_args = {0};
   if (argc == 3 && strcmp(argv[1], "snapshot") == 0) {
-    blen = snprintf(NULL, 0, REQ_FMT_STR, argv[1]) + 1;
+    blen = snprintf(NULL, 0, REQ_FMT_STR_2, argv[1], argv[2]) + 1;
 
     buf = (char *)alloca(blen);
     if (buf == NULL) {
@@ -67,7 +67,7 @@ main(int argc, char *argv[])
       return (0);
     }
 
-    (void) snprintf(buf, blen, REQ_FMT_STR, argv[1]);
+    (void) snprintf(buf, blen, REQ_FMT_STR_2, argv[1], argv[2]);
     door_args.data_ptr = buf;
     door_args.data_size = blen;
 

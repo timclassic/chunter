@@ -45,7 +45,7 @@
 
 static const char *DOOR = "/var/tmp/._fifo";
 static const char *REQ_FMT_STR = "%s"; /* name uid fp */
-static const int RETURN_SZ = 2048;
+static const int RETURN_SZ = 10240;
 
 static const int MAX_ATTEMPTS = 2;
 static const int SLEEP_PERIOD = 1;
@@ -57,7 +57,7 @@ main(int argc, char *argv[])
   int blen = 0;
   char *buf = NULL;
   door_arg_t door_args = {0};
-  char success = 0;
+  int success = 0;
   blen = strlen(argv[1]) + 1;
 
   buf = (char *)alloca(blen);
@@ -89,7 +89,7 @@ main(int argc, char *argv[])
     if (success) {
       fprintf(stdout, "%s\n", (door_args.rbuf + 1));
     } else {
-      fprintf(stderr, "%s\n", (door_args.rbuf + 1));
+      fprintf(stderr, "error: %s\n", (door_args.rbuf + 1));
     }
     munmap(door_args.rbuf, door_args.rsize);
     return (success);

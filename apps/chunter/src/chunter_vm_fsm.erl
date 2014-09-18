@@ -13,9 +13,10 @@
 -endif.
 
 -behaviour(gen_fsm).
+-behaviour(ezdoor_behaviour).
 
 %% API
--export([start_link/1]).
+-export([start_link/1, door_event/3]).
 -ignore_xref([start_link/1,
               initialized/2,
               creating/2,
@@ -78,7 +79,11 @@
                 services = [],
                 listeners = [],
                 nsq = false,
-                public_state}).
+                public_state,
+                auth_ref}).
+
+-define(AUTH_DOOR, "_joyent_sshd_key_is_authorized").
+
 
 %%%===================================================================
 %%% API
@@ -145,6 +150,9 @@ restore_backup(UUID, SnapID, Options) ->
             gen_fsm:sync_send_all_state_event(
               {global, {vm, UUID}}, {backup, restore, SnapID, Options})
     end.
+
+door_event(Pid, Ref, Data) ->
+    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
 
 
 service_action(UUID, Action, Service)
@@ -677,6 +685,16 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
+handle_sync_event({door, Ref, Data}, _From, StateName,
+             State = #state{auth_ref=Ref, uuid=UUID}) ->
+    R = case auth_credintials(UUID, Data) of
+            true ->
+                <<"1">>;
+            false ->
+                <<"0">>
+        end,
+    {reply, {ok, R}, StateName, State};
+
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,
     {ok, VMObj} = ls_vm:get(VM),
@@ -883,7 +901,7 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-terminate(Reason, StateName, State = #state{uuid = UUID}) ->
+terminate(Reason, StateName, State = #state{uuid = UUID, auth_ref=AuthRef}) ->
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
                   [UUID, StateName, Reason]),
     lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
@@ -894,7 +912,7 @@ terminate(Reason, StateName, State = #state{uuid = UUID}) ->
         _ ->
             incinerate(State#state.console)
     end,
-    gen_server:call(chunter_vm_auth, {remove_zonedoor, UUID}),
+    ezdoor_server:remove(AuthRef),
     ok.
 
 %%--------------------------------------------------------------------
@@ -931,8 +949,13 @@ init_console(State) ->
     end.
 
 ensure_zonedoor(State) ->
-    gen_server:call(chunter_vm_auth, {verify_zonedoor, State#state.uuid}),
-    State.
+    case ezdoor_server:add(?MODULE, State#state.uuid, ?AUTH_DOOR) of
+        {ok, Ref} ->
+            State#state{auth_ref = Ref};
+        {error, doublicate} ->
+            State
+    end.
+
 
 
 do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
@@ -1256,3 +1279,27 @@ wait_image(_, _) ->
 timestamp() ->
     {Mega,Sec,Micro} = erlang:now(),
     (Mega*1000000+Sec)*1000000+Micro.
+
+auth_credintials(UUID, Data) ->
+    case re:split(Data, " ") of
+        [User, _UserID, KeyID] ->
+            chk_key(UUID, User, KeyID);
+        _ ->
+            lager:warning("[zonedoor] recived unknown data: ~p.", [Data]),
+            false
+    end.
+
+chk_key(UUID, User, KeyID) ->
+    KeyBin = libsnarl:keystr_to_id(KeyID),
+    case ls_user:key_find(KeyBin) of
+        {ok, UID} ->
+            Res = libsnarl:allowed(UID, [<<"vms">>, UUID, <<"console">>])
+                orelse libsnarl:allowed(UID, [<<"vms">>, UUID, <<"ssh">>])
+                orelse libsnarl:allowed(UID, [<<"vms">>, UUID, <<"ssh">>, User]),
+            lager:warning("[zonedoor:~s] User ~s trying to connect with key ~s -> ~s",
+                          [UUID, User, KeyID, Res]),
+            Res;
+        _ ->
+            lager:warning("[zonedoor:~s] denied.", [UUID]),
+            false
+    end.

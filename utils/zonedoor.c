@@ -39,7 +39,7 @@ char requestResponse;
 
 void addVMDoor(char *zoneID, char *doorName, char *doorBiscuit){
   char* err = "unknown errror";
-  fprintf(stderr, "[zonedoor:%s] opening door '%s' in zone %s.\r\n", doorBiscuit, doorNamem, zoneID);
+  fprintf(stderr, "[zonedoor:%s] opening door '%s' in zone %s.\r\n", doorBiscuit, doorName, zoneID);
   switch (zdoor_open(zdid, zoneID, doorName, doorBiscuit, server)) {
   case 0:
     return;
@@ -161,7 +161,7 @@ main(int argc, char *argv[])
   }
 }
 
-split_space(char *input) {
+char* split_space(char *input) {
   char* arg = input;
   while (*arg != ' ' && *arg != 0) {
     arg++;

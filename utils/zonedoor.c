@@ -38,11 +38,31 @@ char requestResponse;
 
 
 void addVMDoor(char *zoneID, char *doorName, char *doorBiscuit){
-  if (zdoor_open(zdid, zoneID, doorName, doorBiscuit, server) < 0){
-    fprintf(stderr, "Error [zonedoor] opening door in zone %s.\r\n", zoneID);
-    fprintf(stderr, "zdoor_open result: %i", zdoor_open(zdid, zoneID, "_joyent_sshd_key_is_authorized", doorBiscuit, server));
+  char* err = "unknown errror";
+  fprintf(stderr, "[zonedoor:%s] opening door '%s' in zone %s.\r\n", doorBiscuit, doorNamem, zoneID);
+  switch (zdoor_open(zdid, zoneID, doorName, doorBiscuit, server)) {
+  case 0:
     return;
+  case -1:
+    err = "General error";
+    break;
+  case -2:
+    err = "Not the global zone";
+    break;
+  case -3:
+    err = "Zone not running";
+    break;
+  case -4:
+    err = "Zone forbidden";
+    break;
+  case -5:
+    err = "argument error";
+    break;
+  case -6:
+    err = "Out of memory";
+    break;
   }
+  fprintf(stderr, "Error [zonedoor] opening door '%s' in zone %s: %s.\r\n", doorNamem, zoneID, err);
   //  printf("ok\n");  //no sure if responce is necessary. right now chunter_vm_auth does not handle it.
   //  fflush(stdout);
 }

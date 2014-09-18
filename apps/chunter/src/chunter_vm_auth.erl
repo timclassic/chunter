@@ -13,7 +13,7 @@
 -ignore_xref([start_link/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--record(state, {port, doors=[]}).
+-record(state, {port, doors=[], refs = []}).
 
 -define(HEATRBEAT_INTERVAL, 1000). % 2 seconds - zonedoor terminates after 7 sec of no HB. Allow 2 misses
 
@@ -28,22 +28,27 @@ init(_) ->
     erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
     {ok, #state{port = DoorPort}}.
 
-handle_call({verify_zonedoor, UUID}, _, State) ->
-    case lists:member(UUID, State#state.doors) of
+handle_call({verify_zonedoor, UUID}, _, State =
+                #state{doors = Doors, refs = Refs, port = Port}) ->
+    case lists:member(UUID, Doors) of
         false ->
+            Ref = make_ref(),
             lager:info("[vm_auth] Request to add zone door: ~s~n", [UUID]),
-            port_command(State#state.port, [$a, UUID, $\s, ?DOOR, $\n]),
-            State1 = State#state{doors = [UUID | State#state.doors]},
+            port_command(Port, [$a, UUID, $\s, ?DOOR, $\s, r2s(Ref), $\n]),
+            State1 = State#state{doors = [UUID | Doors],
+                                 refs = orddict:store(Ref, UUID, Refs)},
             {reply, ok, State1};
         _ ->
             {reply, ok, State}
     end;
-handle_call({remove_zonedoor, UUID}, _, State) ->
+handle_call({remove_zonedoor, UUID}, _, State =
+                #state{doors = Doors, refs = Refs, port = Port}) ->
     case lists:member(UUID, State#state.doors) of
         true ->
             lager:info("[vm_auth] Request to delete zone door: ~s~n", [UUID]),
-            port_command(State#state.port, [$d, UUID, $\s, ?DOOR, $\n]),
-            State1 = State#state{doors = lists:delete(UUID, State#state.doors)},
+            port_command(Port, [$d, UUID, $\s, ?DOOR, $\n]),
+            State1 = State#state{doors = lists:delete(UUID, Doors),
+                                 refs = [{K, V} || {K, V} <- Refs, V /= UUID]},
             {reply, ok, State1};
         _ ->
             {reply, ok, State}
@@ -53,9 +58,9 @@ handle_info(heartbeat, State) ->
     port_command(State#state.port, "h\n"),
     erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
     {noreply, State};
-handle_info({Port,{data,{eol,Data}}} , State) ->
+handle_info({Port,{data,{eol,Data}}} , State = #state{port = Port}) ->
     lager:debug("[vm_auth] Received data: ~s~n", [Data]),
-    auth_credintials(Port, Data),
+    auth_credintials(State, Data),
     {noreply, State}.
 
 
@@ -96,6 +101,22 @@ incinerate(Port) ->
             lager:warning("Process has no pid not incinerating.")
     end.
 
+auth_credintials(#state{port = Port, refs = Refs}, Data) ->
+    case re:split(Data, " ") of
+        [RefStr,_,_,KeyID] ->
+            case orddict:find(s2r(RefStr), Refs) of
+                {ok, UUID} ->
+                    auth_credintials(Port, [UUID,KeyID]),
+                    ok;
+                error ->
+                    lager:warning("[zonedoor] unknown ref: ~s.", [RefStr]),
+                    ok
+            end;
+        _ ->
+            lager:warning("[zonedoor] recived unknown data: ~p.", [Data]),
+            ok
+    end;
+
 auth_credintials(Port, [UUID,KeyID]) ->
     KeyBin = libsnarl:keystr_to_id(KeyID),
     case ls_user:key_find(KeyBin) of
@@ -114,13 +135,10 @@ auth_credintials(Port, [UUID,KeyID]) ->
         _ ->
             lager:warning("[zonedoor:~s] denied.", [UUID]),
             port_command(Port, "r0\n")
-    end;
-auth_credintials(Port, Data) ->
-    case re:split(Data, " ") of
-        [UUID,_,_,KeyID] ->
-            auth_credintials(Port, [UUID,KeyID]),
-            ok;
-        _ ->
-            lager:warning("[zonedoor] recived unknown data: ~p.", [Data]),
-            ok
     end.
+
+r2s(Ref) ->
+    base64:encode(term_to_binary(Ref)).
+
+s2r(Str) ->
+    binary_to_term(base64:decode(Str)).

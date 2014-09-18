@@ -29,7 +29,7 @@
 
 
 zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz);
-void addVMDoor(char * zoneID, char *doorName);
+void addVMDoor(char * zoneID, char *doorName, char *doorBiscuit);
 void rmVMDoor(char * zoneID, char *doorName);
 
 zdoor_handle_t zdid;
@@ -37,10 +37,10 @@ int pendingRequest;
 char requestResponse;
 
 
-void addVMDoor(char *zoneID, char *doorName){
-  if (zdoor_open(zdid, zoneID, doorName, zoneID, server) < 0){
+void addVMDoor(char *zoneID, char *doorName, char *doorBiscuit){
+  if (zdoor_open(zdid, zoneID, doorName, doorBiscuit, server) < 0){
     fprintf(stderr, "Error [zonedoor] opening door in zone %s.\r\n", zoneID);
-    fprintf(stderr, "zdoor_open result: %i", zdoor_open(zdid, zoneID, "_joyent_sshd_key_is_authorized", zoneID, server));
+    fprintf(stderr, "zdoor_open result: %i", zdoor_open(zdid, zoneID, "_joyent_sshd_key_is_authorized", doorBiscuit, server));
     return;
   }
   //  printf("ok\n");  //no sure if responce is necessary. right now chunter_vm_auth does not handle it.
@@ -57,7 +57,7 @@ void deleteVMDoor(char *zoneID, char *doorName){
 zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
 {
   zdoor_result_t *result;
-  fprintf(stdout, "%s %s\n", cookie->zdc_biscuit, argp);
+  fprintf(stdout, "%s %s %s\n", cookie->zdc_biscuit, argp);
   fflush(stdout);
   pendingRequest = 1;
   char deny[] = "0";
@@ -100,6 +100,7 @@ main(int argc, char *argv[])
     size_t nbytes = 200;
     char *input = NULL;
     char *arg2 = NULL;
+    char *arg3 = NULL;
     getline(&input, &nbytes, stdin);
     switch(input[0])
       {
@@ -109,24 +110,19 @@ main(int argc, char *argv[])
       case 'a':    // add zone door
         input++[strlen(input)-1]=0;
         arg2 = input;
-        while (*arg2 != ' ' && arg2 - input < nbytes) {
+        while (*arg2 != ' ' && *arg2 != 0) {
           arg2++;
         };
-        if (*arg2 == ' ') {
-          *arg2 = 0;
-          arg2++;
-          // "_joyent_sshd_key_is_authorized"
-          addVMDoor(input, arg2);
+        if (arg2 = split_space(input) &&
+            arg3 = split_space(arg2)) {
+          addVMDoor(input, arg2, arg3);
         } else {
           fprintf(stderr, "Invalid input: '%s'.\r\n", input);
         }
         break;
       case 'd':    // delete zone door
         input++[strlen(input)-1]=0;
-        if (*arg2 == ' ') {
-          *arg2 = 0;
-          arg2++;
-          // "_joyent_sshd_key_is_authorized"
+        if (arg2 = split_space(input)) {
           deleteVMDoor(input, arg2);
         } else {
           fprintf(stderr, "Invalid input: '%s'.\r\n", input);
@@ -144,3 +140,17 @@ main(int argc, char *argv[])
 
   }
 }
+
+split_space(char *input) {
+  char* arg = input;
+  while (*arg != ' ' && *arg != 0) {
+    arg++;
+  };
+  if (*arg == ' ') {
+    *arg = 0;
+    arg++;
+    return arg;
+  } else {
+    return NULL;
+  }
+};

@@ -82,7 +82,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({add, Module, ZoneUUID, DoorName}, From,
+handle_call({add, Module, ZoneUUID, DoorName}, {From, _},
             State = #state{port = Port, doors = Doors}) ->
     case zdoor_exists(ZoneUUID, DoorName, Doors) of
         true ->
@@ -96,7 +96,7 @@ handle_call({add, Module, ZoneUUID, DoorName}, From,
             {reply, {ok, Ref}, State#state{doors = [Door | Doors]}}
     end;
 
-handle_call({remove, Ref}, From,
+handle_call({remove, Ref}, {From, _},
             State = #state{port = Port, doors = Doors}) ->
     case find_door(Ref, Doors) of
         {ok, D = #door{zone=UUID, door=Door}} ->

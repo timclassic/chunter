@@ -77,7 +77,7 @@ void deleteVMDoor(char *zoneID, char *doorName){
 zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
 {
   zdoor_result_t *result;
-  fprintf(stdout, "%s %s %s\n", cookie->zdc_biscuit, argp);
+  fprintf(stdout, "%s %s\n", cookie->zdc_biscuit, argp);
   fflush(stdout);
   pendingRequest = 1;
   char deny[] = "0";

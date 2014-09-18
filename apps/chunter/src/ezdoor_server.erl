@@ -183,8 +183,11 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, #state{port = Port, doors = Doors}) ->
-    [port_command(Port, [$d, Zone, $\s, Door, $\n])
-     || #door{zone=Zone, door=Door}<-Doors],
+    [begin
+         port_command(Port, [$d, Zone, $\s, Door, $\n]),
+         Mod:door_event(Pid, Ref, down)
+     end
+     || #door{zone=Zone, door=Door, pid=Pid, module=Mod, ref=Ref}<-Doors],
     incinerate(Port),
     ok.
 

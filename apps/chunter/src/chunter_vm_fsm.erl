@@ -228,7 +228,7 @@ init([UUID]) ->
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
     timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
-    timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second
+    %% timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second don't need this any longer?
     snapshot_sizes(UUID),
     NSQ = case application:get_env(nsq_producer) of
               {ok, _} ->
@@ -686,6 +686,16 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
+handle_sync_event({door, _Ref, down}, _From, StateName,
+                  State = #state{auth_ref=_Ref}) ->
+    timer:send_after(1000, {init, zonedoor}),
+    {reply, ok, StateName, State#state{auth_ref = undefined}};
+
+handle_sync_event({door, _Ref, down}, _From, StateName,
+                  State = #state{api_ref=_Ref}) ->
+    timer:send_after(1000, {init, zonedoor}),
+    {reply, ok, StateName, State#state{api_ref = undefined}};
 
 handle_sync_event({door, Ref, Data}, _From, StateName,
              State = #state{auth_ref=Ref, uuid=UUID}) ->

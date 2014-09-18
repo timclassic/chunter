@@ -17,6 +17,8 @@
 
 -define(HEATRBEAT_INTERVAL, 1000). % 2 seconds - zonedoor terminates after 7 sec of no HB. Allow 2 misses
 
+-define(DOOR, "_joyent_sshd_key_is_authorized").
+
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init(_) ->
@@ -30,7 +32,7 @@ handle_call({verify_zonedoor, UUID}, _, State) ->
     case lists:member(UUID, State#state.doors) of
         false ->
             lager:info("[vm_auth] Request to add zone door: ~s~n", [UUID]),
-            port_command(State#state.port, [$a, UUID, $\n]),
+            port_command(State#state.port, [$a, UUID, $\s, ?DOOR, $\n]),
             State1 = State#state{doors = [UUID | State#state.doors]},
             {reply, ok, State1};
         _ ->
@@ -40,7 +42,7 @@ handle_call({remove_zonedoor, UUID}, _, State) ->
     case lists:member(UUID, State#state.doors) of
         true ->
             lager:info("[vm_auth] Request to delete zone door: ~s~n", [UUID]),
-            port_command(State#state.port, [$d, UUID, $\n]),
+            port_command(State#state.port, [$d, UUID, $\s, ?DOOR, $\n]),
             State1 = State#state{doors = lists:delete(UUID, State#state.doors)},
             {reply, ok, State1};
         _ ->

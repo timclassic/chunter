@@ -57,8 +57,6 @@ main(int argc, char *argv[])
   int blen = 0;
   char *buf = NULL;
   door_arg_t door_args = {0};
-  char fstr = NULL;
-  int args = 0;
 
   blen = snprintf(NULL, 0, REQ_FMT_STR, argv[1]) + 1;
 
@@ -68,7 +66,7 @@ main(int argc, char *argv[])
     return (0);
   }
 
-  (void) snprintf(buf, blen, fstr, argv[1]);
+  (void) snprintf(buf, blen, REQ_FMT_STR, argv[1]);
 
   door_args.data_ptr = buf;
   door_args.data_size = blen;

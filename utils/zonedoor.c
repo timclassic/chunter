@@ -109,10 +109,10 @@ main(int argc, char *argv[])
       case 'a':    // add zone door
         input++[strlen(input)-1]=0;
         arg2 = input;
-        while (arg2 != ' ' && arg2 - input < nbytes) {
+        while (*arg2 != ' ' && arg2 - input < nbytes) {
           arg2++;
         };
-        if (arg2 == ' ') {
+        if (*arg2 == ' ') {
           *arg2 = 0;
           arg2++;
           // "_joyent_sshd_key_is_authorized"
@@ -123,7 +123,7 @@ main(int argc, char *argv[])
         break;
       case 'd':    // delete zone door
         input++[strlen(input)-1]=0;
-        if (arg2 == ' ') {
+        if (*arg2 == ' ') {
           *arg2 = 0;
           arg2++;
           // "_joyent_sshd_key_is_authorized"

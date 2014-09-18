@@ -113,8 +113,8 @@ main(int argc, char *argv[])
         while (*arg2 != ' ' && *arg2 != 0) {
           arg2++;
         };
-        if (arg2 = split_space(input) &&
-            arg3 = split_space(arg2)) {
+        if ((arg2 = split_space(input)) &&
+            (arg3 = split_space(arg2))) {
           addVMDoor(input, arg2, arg3);
         } else {
           fprintf(stderr, "Invalid input: '%s'.\r\n", input);

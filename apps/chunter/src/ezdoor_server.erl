@@ -23,7 +23,7 @@
 
 
 -record(door, {ref, zone, door, pid, monitor, module}).
--record(state, {port, doors}).
+-record(state, {port, doors=[]}).
 
 %%%===================================================================
 %%% API

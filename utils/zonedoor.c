@@ -34,7 +34,7 @@ void rmVMDoor(char * zoneID, char *doorName);
 char *split_space(char *input);
 zdoor_handle_t zdid;
 int pendingRequest;
-char requestResponse;
+char *requestResponse;
 
 
 void addVMDoor(char *zoneID, char *doorName, char *doorBiscuit){
@@ -89,7 +89,9 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
   int i = 0;
   while(i<20){
     if(pendingRequest == 0){
-      result->zdr_data = &requestResponse;
+      result->zdr_size = strlen(requestResponse) + 1;
+      result->zdr_data = malloc(result->zdr_size) + 1;
+      strlcpy(result->zdr_data, requestResponse, result->zdr_size -1);
       return result;
     }
     i++;
@@ -149,7 +151,8 @@ main(int argc, char *argv[])
         }
         break;
       case 'r':   // request response
-        requestResponse = input[1];
+        input++[strlen(input)-1]=0;
+        requestResponse = input;
         pendingRequest = 0;
         break;
       default:

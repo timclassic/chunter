@@ -62,7 +62,8 @@ remove(Ref) ->
 %%--------------------------------------------------------------------
 init([]) ->
     Cmd = code:priv_dir(chunter) ++ "/zonedoor",
-    PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status],
+    PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
+                binary],
     DoorPort = open_port({spawn_executable, Cmd},  PortOpts),
     erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
     process_flag(trap_exit, true),

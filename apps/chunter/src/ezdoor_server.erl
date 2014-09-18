@@ -85,11 +85,14 @@ init([]) ->
 %%--------------------------------------------------------------------
 handle_call({add, Module, ZoneUUID, DoorName}, {From, _},
             State = #state{port = Port, doors = Doors}) ->
+    lager:info("[ezdoor] Requesting door for ~s/~s", [ZoneUUID, DoorName]),
     case zdoor_exists(ZoneUUID, DoorName, Doors) of
         true ->
+            lager:info("[ezdoor] ~s/~s already exists.", [ZoneUUID, DoorName]),
             {reply, {error, doublicate}, State};
         false ->
             Ref = make_ref(),
+            lager:info("[ezdoor] ~s/~s created.", [ZoneUUID, DoorName]),
             port_command(Port, [$a, ZoneUUID, $\s, DoorName, $\s, r2s(Ref), $\n]),
             MRef = do_monitor(From, Doors),
             Door = #door{ref=Ref, zone=ZoneUUID, door=DoorName, pid=From,

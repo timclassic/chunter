@@ -58,15 +58,14 @@ main(int argc, char *argv[])
   char *buf = NULL;
   door_arg_t door_args = {0};
   char success = 0;
-  blen = snprintf(NULL, 0, REQ_FMT_STR, argv[1]) + 1;
+  blen = strlen(argv[1]) + 1;
 
   buf = (char *)alloca(blen);
   if (buf == NULL) {
     LOG_OOM(blen);
     return (0);
   }
-
-  (void) snprintf(buf, blen, REQ_FMT_STR, argv[1]);
+  strlcpy(buf, argv[1], blen-1);
 
   door_args.data_ptr = buf;
   door_args.data_size = blen;
@@ -81,10 +80,10 @@ main(int argc, char *argv[])
 
   fd = open(DOOR, O_RDWR);
   if (fd < 0)
-    perror("smartplugin: open (of door FD) failed");
+    perror("fifodoor: open (of door FD) failed");
 
   if (door_call(fd, &door_args) < 0) {
-    perror("smartplugin: door_call failed");
+    perror("fifodoor: door_call failed");
   } else {
     success = (*(door_args.rbuf) == '1');
     if (success) {

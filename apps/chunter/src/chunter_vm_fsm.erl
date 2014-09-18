@@ -710,7 +710,14 @@ handle_sync_event({door, Ref, Data}, _From, StateName,
 handle_sync_event({door, Ref, Data}, _From, StateName,
              State = #state{api_ref=Ref, uuid=UUID}) ->
     lager:info("[zone:~s] API: ~s", [UUID, Data]),
-    {reply, chunter_api:call(UUID, Data), StateName, State};
+    Reply = case chunter_api:call(UUID, Data) of
+                {ok, D} ->
+                    Bin = jsx:encode(D),
+                    {ok, <<$1, Bin/binary>>};
+                {error, E} ->
+                    {ok, <<$0, E/binary>>}
+            end,
+    {reply, Reply, StateName, State};
 
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,

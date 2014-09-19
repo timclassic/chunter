@@ -718,9 +718,11 @@ handle_sync_event({door, Ref, Data}, _From, StateName,
                             Bin = jsx:encode(D),
                             {ok, <<$1, Bin/binary>>};
                         {error, E} when is_list(E) ->
+                            lager:warning("[zdoor] error: ~p", [E]),
                             RJSON = jsx:encode([{error, list_to_binary(E)}]),
                             {ok, <<$0, RJSON/binary>>};
                         {error, E} ->
+                            lager:warning("[zdoor] error: ~p", [E]),
                             RJSON = jsx:encode([{error, E}]),
                             {ok, <<$0, RJSON/binary>>}
 
@@ -728,12 +730,13 @@ handle_sync_event({door, Ref, Data}, _From, StateName,
             {reply, Reply, StateName, State}
     catch
         _:_ ->
-            RJSON = jsx:encode([{error,  <<"format error in: ", Data/binary>>}]),
+            lager:warning("[zdoor] error: ~p", [Data]),
+            RJSON = jsx:encode([{error,  <<"format error: ", Data/binary>>}]),
             Reply = {ok, <<$0, RJSON/binary>>},
             {reply, Reply, StateName, State}
     end;
 
-handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
+handle_sync_event({backup, restore, SnapID, Options}, _F, StateName, State) ->
     VM = State#state.uuid,
     {ok, VMObj} = ls_vm:get(VM),
     Remote = ft_vm:backups(VMObj),

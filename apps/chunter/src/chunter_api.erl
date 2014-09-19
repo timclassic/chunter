@@ -63,5 +63,6 @@ call(UUID, [{<<"action">>, <<"metadata-set">>},
     end;
 
 
-call(_, _Cmd) ->
+call(_, Cmd) ->
+    lager:warning("[api] Unsupported command: ~p", [Cmd]),
     {error, "unsupported"}.

@@ -159,7 +159,7 @@ main(int argc, char *argv[])
       case 'r':   // request response
         if (pendingRequest == 1) {
           len = strlen(input);
-          input++[len - 2] = 0;
+          input++[len - 1] = 0;
           requestResponse = malloc(len * sizeof(char));
           strlcpy(requestResponse, input, len);
           pendingRequest = 2;

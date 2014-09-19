@@ -97,7 +97,7 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
     i++;
     nanosleep((struct timespec[]){{0, 100000000}}, NULL);
   }
-  fprintf(stderr, "Timeout in reply.\r\n", input);
+  fprintf(stderr, "Timeout in reply.\r\n");
   pendingRequest = 0;
   result->zdr_data = deny;
   return result;
@@ -157,12 +157,14 @@ main(int argc, char *argv[])
         }
         break;
       case 'r':   // request response
-        len = strlen(input);
-        input++[len - 1]=0;
-        len--;
-        requestResponse = malloc(len * sizeof(char));
-        strlcpy(requestResponse, input, len);
-        pendingRequest = 2;
+        if (pendingRequest == 1) {
+          len = strlen(input);
+          input++[len - 1]=0;
+          len--;
+          requestResponse = malloc(len * sizeof(char));
+          strlcpy(requestResponse, input, len);
+          pendingRequest = 2;
+        }
         break;
       default:
         break;

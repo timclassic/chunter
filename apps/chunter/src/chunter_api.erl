@@ -142,7 +142,7 @@ grouping_id(UUID) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
             case ft_vm:groupings(V) of
-                {ok, [GID]} ->
+                [GID] ->
                     {ok, GID};
                 _ ->
                     {error, "not in a cluster"}

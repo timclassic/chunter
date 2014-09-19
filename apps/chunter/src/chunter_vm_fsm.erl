@@ -710,14 +710,28 @@ handle_sync_event({door, Ref, Data}, _From, StateName,
 handle_sync_event({door, Ref, Data}, _From, StateName,
              State = #state{api_ref=Ref, uuid=UUID}) ->
     lager:info("[zone:~s] API: ~s", [UUID, Data]),
-    Reply = case chunter_api:call(UUID, Data) of
-                {ok, D} ->
-                    Bin = jsx:encode(D),
-                    {ok, <<$1, Bin/binary>>};
-                {error, E} ->
-                    {ok, <<$0, E/binary>>}
-            end,
-    {reply, Reply, StateName, State};
+    try jsx:decode(Data) of
+        JSON ->
+            JSON1 = jsxd:from_list(JSON),
+            Reply = case chunter_api:call(UUID, JSON1) of
+                        {ok, D} ->
+                            Bin = jsx:encode(D),
+                            {ok, <<$1, Bin/binary>>};
+                        {error, E} when is_list(E) ->
+                            RJSON = jsx:encode([{error, list_to_binary(E)}]),
+                            {ok, <<$0, RJSON/binary>>};
+                        {error, E} ->
+                            RJSON = jsx:encode([{error, E}]),
+                            {ok, <<$0, RJSON/binary>>}
+
+                    end,
+            {reply, Reply, StateName, State}
+    catch
+        _:_ ->
+            RJSON = jsx:encode([{error,  <<"format error in: ", Data/binary>>}]),
+            Reply = {ok, <<$0, RJSON/binary>>},
+            {reply, Reply, StateName, State}
+    end;
 
 handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
     VM = State#state.uuid,

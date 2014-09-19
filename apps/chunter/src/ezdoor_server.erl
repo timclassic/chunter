@@ -162,7 +162,7 @@ handle_info({Port,{data, {eol,Data}}},
     case find_door(Ref, Doors) of
         {ok, #door{pid=Pid, module=Mod}} ->
             {ok, Res} = Mod:door_event(Pid, Ref, Cmd),
-            port_command(Port, [$r, Res]);
+            port_command(Port, [$r, Res, $\n]);
         _ ->
             ok
     end,

@@ -8,6 +8,7 @@ cp-hooks:
 	cp hooks/* .git/hooks
 
 apps/chunter/priv/zonedoor: utils/zonedoor.c
+	gcc -lzdoor utils/zonedoor.c -o apps/chunter/priv/zonedoor
 
 fifo: utils/fifo.c
 	gcc utils/fifo.c -o fifo

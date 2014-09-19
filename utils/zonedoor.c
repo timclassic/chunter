@@ -87,16 +87,17 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
   result->zdr_size = 9;
 
   int i = 0;
-  while(i<500){
-    if(pendingRequest == 0){
-      result->zdr_size = strlen(requestResponse) + 1;
-      result->zdr_data = malloc(result->zdr_size) + 1;
-      strlcpy(result->zdr_data, requestResponse, result->zdr_size -1);
+  while(i<500) {
+    if(pendingRequest == 2){
+      result->zdr_data = requestResponse;
+      result->zdr_size = strlen(result->zdr_data)+1;
+      pendingRequest = 0;
       return result;
     }
     i++;
     nanosleep((struct timespec[]){{0, 100000000}}, NULL);
   }
+  fprintf(stderr, "Timeout in reply.\r\n", input);
   pendingRequest = 0;
   result->zdr_data = deny;
   return result;
@@ -119,10 +120,15 @@ main(int argc, char *argv[])
 
   while(1){
 
-    size_t nbytes = 200;
+    size_t nbytes = 0;
+    size_t len = 0;
     char *input = NULL;
     char *arg2 = NULL;
     char *arg3 = NULL;
+
+    while(pendingRequest == 2){
+      nanosleep((struct timespec[]){{0, 100000000}}, NULL);
+    }
     getline(&input, &nbytes, stdin);
     switch(input[0])
       {
@@ -151,9 +157,12 @@ main(int argc, char *argv[])
         }
         break;
       case 'r':   // request response
-        input++[strlen(input)-1]=0;
-        requestResponse = input;
-        pendingRequest = 0;
+        len = strlen(input);
+        input++[len - 1]=0;
+        len--;
+        requestResponse = malloc(len * sizeof(char));
+        strlcpy(requestResponse, input, len);
+        pendingRequest = 2;
         break;
       default:
         break;

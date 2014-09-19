@@ -62,6 +62,31 @@ call(UUID, [{<<"action">>, <<"metadata-set">>},
             {error, "failed!"}
     end;
 
+call(UUID, [{<<"action">>, <<"cluster-get">>}]) ->
+    case grouping(UUID) of
+        {ok, _, G} ->
+            {ok, ft_grouping:config(G)};
+        E ->
+            E
+    end;
+
+call(UUID, [{<<"action">>, <<"cluster-set">>},
+            {<<"data">>, D}]) ->
+    case grouping(UUID) of
+        {ok, GID, G} ->
+            Size = byte_size(term_to_binary(ft_grouping:config(G))) +
+                byte_size(term_to_binary(D)),
+            if
+                Size > ?MAX_MDATA_SIZE ->
+                    {error, "out of space"};
+                true ->
+                    ls_grouping:set_config(GID, D),
+                    {ok, G1} = ls_grouping:get(GID),
+                    {ok, ft_grouping:config(G1)}
+            end;
+        E ->
+            E
+    end;
 
 call(UUID, [{<<"action">>, <<"backup-list">>}]) ->
     case ls_vm:get(UUID) of
@@ -86,6 +111,7 @@ call(UUID, [{<<"action">>, <<"backup-create">>},
         _ ->
             {error, "failed!"}
     end;
+
 call(UUID, [{<<"action">>, <<"backup-create">>},
             {<<"comment">>, Comment},
             {<<"delete">>, Delete},
@@ -110,3 +136,30 @@ call(UUID, [{<<"action">>, <<"backup-create">>},
 call(_, Cmd) ->
     lager:warning("[api] Unsupported command: ~p", [Cmd]),
     {error, "unsupported"}.
+
+
+grouping_id(UUID) ->
+    case ls_vm:get(UUID) of
+        {ok, V} ->
+            case ft_vm:groupings(V) of
+                {ok, [GID]} ->
+                    {ok, GID};
+                _ ->
+                    {error, "not in a cluster"}
+            end;
+        _ ->
+            {error, "failed!"}
+    end.
+
+grouping(UUID) ->
+    case grouping_id(UUID) of
+        {ok, GID} ->
+            case ls_grouping:get(GID) of
+                {ok, G} ->
+                    {ok, GID, G};
+                _ ->
+                    {error, "cluster not found"}
+            end;
+        E ->
+            E
+    end.

@@ -63,6 +63,50 @@ call(UUID, [{<<"action">>, <<"metadata-set">>},
     end;
 
 
+call(UUID, [{<<"action">>, <<"backup-list">>}]) ->
+    case ls_vm:get(UUID) of
+        {ok, V} ->
+            {ok, ft_vm:backups(V)};
+        _ ->
+            {error, "failed!"}
+    end;
+
+call(UUID, [{<<"action">>, <<"backup-create">>},
+            {<<"comment">>, Comment},
+            {<<"delete">>, Delete}]) ->
+    Opts = case Delete of
+               true ->
+                   [delete, xml];
+               _ ->
+                   [xml]
+           end,
+    case ls_vm:full_backup(UUID, Comment, Opts) of
+        {ok, BackupID} ->
+            {ok, BackupID};
+        _ ->
+            {error, "failed!"}
+    end;
+call(UUID, [{<<"action">>, <<"backup-create">>},
+            {<<"comment">>, Comment},
+            {<<"delete">>, Delete},
+            {<<"parent">>, Parent}]) ->
+    Opts = case Delete of
+               true ->
+                   [delete, xml];
+               <<"parent">> ->
+                   [{delete, parent}, xml];
+               <<"both">> ->
+                   [{delete, parent}, delete, xml];
+               _ ->
+                   [xml]
+           end,
+    case ls_vm:incremental_backup(UUID, Parent, Comment, Opts) of
+        {ok, BackupID} ->
+            {ok, BackupID};
+        _ ->
+            {error, "failed!"}
+    end;
+
 call(_, Cmd) ->
     lager:warning("[api] Unsupported command: ~p", [Cmd]),
     {error, "unsupported"}.

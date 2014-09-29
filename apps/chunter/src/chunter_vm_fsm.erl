@@ -688,12 +688,14 @@ handle_event(_Event, StateName, State) ->
 %%--------------------------------------------------------------------
 
 handle_sync_event({door, _Ref, down}, _From, StateName,
-                  State = #state{auth_ref=_Ref}) ->
+                  State = #state{auth_ref=_Ref, uuid=UUID}) ->
+    lager:warning("[vm:~s] auth door down!", [UUID]),
     timer:send_after(1000, {init, zonedoor}),
     {reply, ok, StateName, State#state{auth_ref = undefined}};
 
 handle_sync_event({door, _Ref, down}, _From, StateName,
-                  State = #state{api_ref=_Ref}) ->
+                  State = #state{api_ref=_Ref, uuid=UUID}) ->
+    lager:warning("[vm:~s] api door down!", [UUID]),
     timer:send_after(1000, {init, zonedoor}),
     {reply, ok, StateName, State#state{api_ref = undefined}};
 

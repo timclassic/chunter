@@ -149,6 +149,16 @@ handle_info(heartbeat, State) ->
     erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
     {noreply, State};
 
+handle_info({'EXIT', _Port, _Reason},
+            State = #state{port = _Port, doors = Doors}) ->
+    Cmd = code:priv_dir(chunter) ++ "/zonedoor",
+    PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
+                binary],
+    DoorPort = open_port({spawn_executable, Cmd},  PortOpts),
+    [port_command(DoorPort, [$a, UUID, $\s, Door, $\s, r2s(Ref), $\n]) ||
+        #door{ref=Ref, zone=UUID, door=Door} <- Doors],
+    {noreply, State#state{port = DoorPort}};
+
 handle_info({'DOWN', MRef, _Type, _Object, _Info},
             State = #state{doors = Doors, port = Port}) ->
     Doors1 = [D || D<-Doors, D#door.monitor /= MRef],
@@ -156,7 +166,7 @@ handle_info({'DOWN', MRef, _Type, _Object, _Info},
      || #door{zone=Zone, door=Door, monitor=AMRef}<-Doors, AMRef == MRef],
     {noreply, State#state{doors = Doors1}};
 
-handle_info({Port,{data, {eol,Data}}},
+handle_info({Port, {data, {eol,Data}}},
             State = #state{port = Port, doors=Doors}) ->
     {Ref, Cmd} = extract_ref(Data),
     case find_door(Ref, Doors) of
@@ -183,6 +193,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, #state{port = Port, doors = Doors}) ->
+    lager:error("[zdoor] Terminating the door!"),
     [begin
          port_command(Port, [$d, Zone, $\s, Door, $\n]),
          Mod:door_event(Pid, Ref, down)

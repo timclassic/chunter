@@ -151,8 +151,9 @@ handle_info(heartbeat, State) ->
     erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
     {noreply, State};
 
-handle_info({'EXIT', _Port, _Reason},
+handle_info({'EXIT', _Port, Reason},
             State = #state{port = _Port, doors = Doors}) ->
+    lager:warning("[ezdoor] Port exited with reason: ~p", [Reason]),
     Cmd = code:priv_dir(chunter) ++ "/zonedoor",
     PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
                 binary],

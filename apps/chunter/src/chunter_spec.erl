@@ -70,6 +70,8 @@ generate_sniffle(In, _Type) ->
                       jsxd:set(<<"type">>, <<"kvm">>, Obj);
                   (<<"brand">>, <<"joyent">>, Obj) ->
                       jsxd:set(<<"type">>, <<"zone">>, Obj);
+                  (<<"brand">>, <<"lx">>, Obj) ->
+                      jsxd:set(<<"type">>, <<"zone">>, Obj);
                   (<<"max_physical_memory">>, V, Obj) ->
                       jsxd:update(<<"ram">>, fun(E) -> E end, round(V/(1024*1024)), Obj);
                   (<<"zonepath">>, V, Obj) ->
@@ -206,9 +208,14 @@ generate_spec(Package, Dataset, OwnerData) ->
                                  _ ->
                                      Base11
                              end,
-                    case jsxd:get([<<"kernel_version">>], Dataset) of
-                        {ok, KVersion} when KVersion /= <<>> ->
-                            jsxd:set([<<"kernel_version">>], KVersion, Base12);
+                    case jsxd:get([<<"zone_type">>], Dataset) of
+                        {ok, <<"lx">>} ->
+                            {ok, KVersion} = jsxd:get([<<"kernel_version">>], Dataset),
+                            jsxd:thread(
+                              [
+                               {set, <<"kernel_version">>, KVersion},
+                               {set, <<"brand">>, <<"lx">>}
+                              ], Base12);
                         _ ->
                             Base12
                     end

@@ -54,10 +54,12 @@ to_sniffle(Spec) ->
                        Type::fifo:vm_type()) -> fifo:config_list().
 
 generate_sniffle(In, _Type) ->
-    KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>, <<"routes">>,
-                <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
-                <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
-                <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>],
+    KeepKeys =
+        [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>, <<"routes">>,
+         <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
+         <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
+         <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>,
+         <<"kernel_version">>],
     jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
                       jsxd:merge(Int, Obj);
                   (<<"dataset_uuid">>, V, Obj) ->
@@ -67,6 +69,8 @@ generate_sniffle(In, _Type) ->
                   (<<"brand">>, <<"kvm">>, Obj) ->
                       jsxd:set(<<"type">>, <<"kvm">>, Obj);
                   (<<"brand">>, <<"joyent">>, Obj) ->
+                      jsxd:set(<<"type">>, <<"zone">>, Obj);
+                  (<<"brand">>, <<"lx">>, Obj) ->
                       jsxd:set(<<"type">>, <<"zone">>, Obj);
                   (<<"max_physical_memory">>, V, Obj) ->
                       jsxd:update(<<"ram">>, fun(E) -> E end, round(V/(1024*1024)), Obj);
@@ -198,11 +202,20 @@ generate_spec(Package, Dataset, OwnerData) ->
                                           {set, <<"image_uuid">>,
                                            jsxd:get(<<"uuid">>, <<"">>, Dataset)}],
                                          Base0),
-                    case jsxd:get(<<"compression">>, Package) of
-                        {ok, Compression} ->
-                            jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
+                    Base12 = case jsxd:get(<<"compression">>, Package) of
+                                 {ok, Compression} ->
+                                     jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
+                                 _ ->
+                                     Base11
+                             end,
+                    case jsxd:get([<<"zone_type">>], Dataset) of
+                        {ok, <<"lx">>} ->
+                            {ok, KVersion} = jsxd:get([<<"kernel_version">>], Dataset),
+                            jsxd:thread(
+                              [{set, <<"kernel_version">>, KVersion},
+                               {set, <<"brand">>, <<"lx">>}], Base12);
                         _ ->
-                            Base11
+                            Base12
                     end
             end,
     Base2 = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->

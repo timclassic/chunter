@@ -54,10 +54,12 @@ to_sniffle(Spec) ->
                        Type::fifo:vm_type()) -> fifo:config_list().
 
 generate_sniffle(In, _Type) ->
-    KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>, <<"routes">>,
-                <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
-                <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
-                <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>],
+    KeepKeys =
+        [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>, <<"routes">>,
+         <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
+         <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
+         <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>,
+         <<"kernel_version">>],
     jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
                       jsxd:merge(Int, Obj);
                   (<<"dataset_uuid">>, V, Obj) ->
@@ -198,11 +200,17 @@ generate_spec(Package, Dataset, OwnerData) ->
                                           {set, <<"image_uuid">>,
                                            jsxd:get(<<"uuid">>, <<"">>, Dataset)}],
                                          Base0),
-                    case jsxd:get(<<"compression">>, Package) of
-                        {ok, Compression} ->
-                            jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
+                    Base12 = case jsxd:get(<<"compression">>, Package) of
+                                 {ok, Compression} ->
+                                     jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
+                                 _ ->
+                                     Base11
+                             end,
+                    case jsxd:get([<<"kernel_version">>], Dataset) of
+                        {ok, KVersion} when KVersion /= <<>> ->
+                            jsxd:set([<<"kernel_version">>], KVersion, Base12);
                         _ ->
-                            Base11
+                            Base12
                     end
             end,
     Base2 = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->

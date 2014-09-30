@@ -212,10 +212,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                         {ok, <<"lx">>} ->
                             {ok, KVersion} = jsxd:get([<<"kernel_version">>], Dataset),
                             jsxd:thread(
-                              [
-                               {set, <<"kernel_version">>, KVersion},
-                               {set, <<"brand">>, <<"lx">>}
-                              ], Base12);
+                              [{set, <<"kernel_version">>, KVersion},
+                               {set, <<"brand">>, <<"lx">>}], Base12);
                         _ ->
                             Base12
                     end

@@ -90,7 +90,7 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
   while(i<500) {
     if(pendingRequest == 2){
       result->zdr_data = requestResponse;
-      result->zdr_size = strlen(result->zdr_data);
+      result->zdr_size = strlen(result->zdr_data) + 1;
       pendingRequest = 0;
       return result;
     }
@@ -158,10 +158,11 @@ main(int argc, char *argv[])
         break;
       case 'r':   // request response
         if (pendingRequest == 1) {
-          len = strlen(input);
           input++[len - 1] = 0;
+          len = strlen(input) + 1;
           requestResponse = malloc(len * sizeof(char));
           strlcpy(requestResponse, input, len);
+          requestResponse[len - 1] = 0;
           pendingRequest = 2;
         }
         break;

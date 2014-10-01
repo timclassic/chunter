@@ -160,9 +160,7 @@ main(int argc, char *argv[])
         if (pendingRequest == 1) {
           len = strlen(input);
           input++[len - 1] = 0;
-          requestResponse = malloc(len * sizeof(char));
-          strlcpy(requestResponse, input, len);
-          requestResponse[len - 1] = 0;
+          requestResponse = strdup(strdup);
           pendingRequest = 2;
         }
         break;

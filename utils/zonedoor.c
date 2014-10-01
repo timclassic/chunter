@@ -80,17 +80,17 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
   fprintf(stdout, "%s %s\n", cookie->zdc_biscuit, argp);
   fflush(stdout);
   pendingRequest = 1;
-  char deny[] = "0timeout";
+  char deny[] = "0";
 
   result = malloc(sizeof(zdoor_result_t));
   result->zdr_data = NULL;
-  result->zdr_size = 9;
+  result->zdr_size = 2;
 
   int i = 0;
   while(i<500) {
     if(pendingRequest == 2){
       result->zdr_data = requestResponse;
-      result->zdr_size = strlen(result->zdr_data);
+      result->zdr_size = strlen(result->zdr_data) + 1;
       pendingRequest = 0;
       return result;
     }
@@ -99,7 +99,7 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
   }
   fprintf(stderr, "Timeout in reply.\r\n");
   pendingRequest = 0;
-  result->zdr_data = deny;
+  result->zdr_data = strdup(deny);
   return result;
 }
 
@@ -160,8 +160,7 @@ main(int argc, char *argv[])
         if (pendingRequest == 1) {
           len = strlen(input);
           input++[len - 1] = 0;
-          requestResponse = malloc(len * sizeof(char));
-          strlcpy(requestResponse, input, len);
+          requestResponse = strdup(input);
           pendingRequest = 2;
         }
         break;

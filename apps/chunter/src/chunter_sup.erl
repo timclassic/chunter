@@ -39,7 +39,6 @@ init([]) ->
     {ok, {{one_for_one, 5, 10},
           [
            ?CHILD(ezdoor_server, worker),
-           ?CHILD(chunter_vm_auth, worker),
            ?CHILD(chunter_lock, worker),
            ?CHILD(chunter_dataset_srv, worker),
            ?CHILD(chunter_vm_sup, supervisor),

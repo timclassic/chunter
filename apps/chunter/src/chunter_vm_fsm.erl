@@ -655,6 +655,7 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
             lager:info("Deleting ~s successfull, letting sniffle know.", [UUID]),
             ls_vm:delete(UUID)
     end,
+    wait_for_delete(UUID),
     {stop, normal, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
@@ -1357,4 +1358,17 @@ chk_key(UUID, User, KeyID) ->
         _ ->
             lager:warning("[zonedoor:~s] denied.", [UUID]),
             false
+    end.
+
+wait_for_delete(UUID) when is_binary(UUID) ->
+    wait_for_delete(binary_to_list(UUID));
+
+wait_for_delete(UUID) ->
+    UUIDn = UUID ++ "\n",
+    case os:cmd(["/usr/sbin/zoneadm -z ", binary_to_list(UUID), " list"]) of
+        {ok, R} when R == UUIDn ->
+            ok;
+        _ ->
+            timer:sleep(1000),
+            wait_for_delete(UUID)
     end.

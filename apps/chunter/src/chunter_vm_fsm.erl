@@ -157,7 +157,7 @@ door_event(Pid, Ref, down) ->
     gen_fsm:send_all_state_event(Pid, {door, Ref, down});
 
 door_event(Pid, Ref, Data) ->
-    gen_fsm:sync_send_all_state_even(Pid, {door, Ref, Data}).
+    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
 
 
 service_action(UUID, Action, Service)

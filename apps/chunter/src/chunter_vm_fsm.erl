@@ -1365,7 +1365,7 @@ wait_for_delete(UUID) when is_binary(UUID) ->
 
 wait_for_delete(UUID) ->
     UUIDn = UUID ++ "\n",
-    case os:cmd(["/usr/sbin/zoneadm -z ", binary_to_list(UUID), " list"]) of
+    case os:cmd(["/usr/sbin/zoneadm -z ", UUID, " list"]) of
         {ok, R} when R == UUIDn ->
             ok;
         _ ->

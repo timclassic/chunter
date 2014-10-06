@@ -88,6 +88,32 @@ call(UUID, [{<<"action">>, <<"cluster-set">>},
             E
     end;
 
+call(UUID, [{<<"action">>, <<"stack-get">>}]) ->
+    case stack(UUID) of
+        {ok, _, S} ->
+            {ok, ft_grouping:config(S)};
+        E ->
+            E
+    end;
+
+call(UUID, [{<<"action">>, <<"stack-set">>},
+            {<<"data">>, D}]) ->
+    case stack(UUID) of
+        {ok, SID, S} ->
+            Size = byte_size(term_to_binary(ft_grouping:config(S))) +
+                byte_size(term_to_binary(D)),
+            if
+                Size > ?MAX_MDATA_SIZE ->
+                    {error, "out of space"};
+                true ->
+                    ls_grouping:set_config(SID, S),
+                    {ok, S1} = ls_grouping:get(SID),
+                    {ok, ft_grouping:config(S1)}
+            end;
+        E ->
+            E
+    end;
+
 call(UUID, [{<<"action">>, <<"backup-list">>}]) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
@@ -137,7 +163,6 @@ call(_, Cmd) ->
     lager:warning("[api] Unsupported command: ~p", [Cmd]),
     {error, "unsupported"}.
 
-
 grouping_id(UUID) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
@@ -162,4 +187,29 @@ grouping(UUID) ->
             end;
         E ->
             E
+    end.
+stack_id(UUID) ->
+    case grouping(UUID) of
+        {ok, _, G} ->
+            case ft_grouping:groupings(G) of
+                [SID | _]  ->
+                    {ok, SID};
+                _ ->
+                    {error, "stack not found"}
+            end;
+        _ ->
+            {error, "stack not found"}
+    end.
+
+stack(UUID) ->
+    case stack_id(UUID) of
+        {ok, SID} ->
+            case ls_grouping:get(SID) of
+                {ok, S} ->
+                    {ok, SID, S};
+                _ ->
+                    {error, "stack not found"}
+            end;
+        _ ->
+            {error, "stack not found"}
     end.

@@ -153,8 +153,11 @@ restore_backup(UUID, SnapID, Options) ->
               {global, {vm, UUID}}, {backup, restore, SnapID, Options})
     end.
 
+door_event(Pid, Ref, down) ->
+    gen_fsm:send_all_state_event(Pid, {door, Ref, down});
+
 door_event(Pid, Ref, Data) ->
-    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
+    gen_fsm:sync_send_all_state_even(Pid, {door, Ref, Data}).
 
 
 service_action(UUID, Action, Service)
@@ -667,6 +670,18 @@ handle_event({console, send, _Data}, StateName, State) ->
 handle_event({console, link, _Pid}, StateName, State) ->
     {next_state, StateName, State};
 
+handle_event({door, _Ref, down}, StateName,
+             State = #state{auth_ref=_Ref, uuid=UUID}) ->
+    lager:warning("[vm:~s] auth door down!", [UUID]),
+    timer:send_after(1000, {init, zonedoor}),
+    {next_state, StateName, State#state{auth_ref = undefined}};
+
+handle_event({door, _Ref, down}, StateName,
+             State = #state{api_ref=_Ref, uuid=UUID}) ->
+    lager:warning("[vm:~s] api door down!", [UUID]),
+    timer:send_after(1000, {init, zonedoor}),
+    {next_state, StateName, State#state{api_ref = undefined}};
+
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
@@ -687,17 +702,6 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_sync_event({door, _Ref, down}, _From, StateName,
-                  State = #state{auth_ref=_Ref, uuid=UUID}) ->
-    lager:warning("[vm:~s] auth door down!", [UUID]),
-    timer:send_after(1000, {init, zonedoor}),
-    {reply, ok, StateName, State#state{auth_ref = undefined}};
-
-handle_sync_event({door, _Ref, down}, _From, StateName,
-                  State = #state{api_ref=_Ref, uuid=UUID}) ->
-    lager:warning("[vm:~s] api door down!", [UUID]),
-    timer:send_after(1000, {init, zonedoor}),
-    {reply, ok, StateName, State#state{api_ref = undefined}};
 
 handle_sync_event({door, Ref, Data}, _From, StateName,
              State = #state{auth_ref=Ref, uuid=UUID}) ->

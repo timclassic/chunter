@@ -110,7 +110,7 @@ handle_call({remove, Ref}, {From, _},
             Doors1 = lists:delete(D, Doors),
             case find_monitor(From, Doors1) of
                 undefined ->
-                    demonitor(Door#door.monitor);
+                    demonitor(D#door.monitor);
                 _ ->
                     ok
             end,

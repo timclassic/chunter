@@ -195,7 +195,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(normal, #state{port = Port, doors = Doors}) ->
+terminate(shutdown, #state{port = Port, doors = Doors}) ->
     [begin
          port_command(Port, [$d, Zone, $\s, Door, $\n]),
          Mod:door_event(Pid, Ref, down)

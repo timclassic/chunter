@@ -195,16 +195,18 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{port = Port, doors = Doors}) ->
-    lager:error("[zdoor] Terminating the door!"),
+terminate(normal, #state{port = Port, doors = Doors}) ->
     [begin
          port_command(Port, [$d, Zone, $\s, Door, $\n]),
          Mod:door_event(Pid, Ref, down)
      end
      || #door{zone=Zone, door=Door, pid=Pid, module=Mod, ref=Ref}<-Doors],
     incinerate(Port),
-    ok.
+    ok;
 
+terminate(Reason, State) ->
+    lager:error("[zdoor] Terminating the door with reason: ~p!", [Reason]),
+    terminate(normal, State).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -35,11 +35,14 @@ char *split_space(char *input);
 zdoor_handle_t zdid;
 int pendingRequest;
 char *requestResponse;
+mutex_t write_lock;
 
 
 void addVMDoor(char *zoneID, char *doorName, char *doorBiscuit){
   char* err = "unknown errror";
+  mutex_lock(&write_lock);
   fprintf(stderr, "[zonedoor:%s] opening door '%s' in zone %s.\r\n", doorBiscuit, doorName, zoneID);
+  mutex_unlock(&write_lock);
   switch (zdoor_open(zdid, zoneID, doorName, doorBiscuit, server)) {
   case 0:
     return;
@@ -62,7 +65,9 @@ void addVMDoor(char *zoneID, char *doorName, char *doorBiscuit){
     err = "Out of memory";
     break;
   }
+  mutex_lock(&write_lock);
   fprintf(stderr, "Error [zonedoor] opening door '%s' in zone %s: %s.\r\n", doorName, zoneID, err);
+  mutex_unlock(&write_lock);
   //  printf("ok\n");  //no sure if responce is necessary. right now chunter_vm_auth does not handle it.
   //  fflush(stdout);
 }
@@ -77,8 +82,10 @@ void deleteVMDoor(char *zoneID, char *doorName){
 zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
 {
   zdoor_result_t *result;
+  mutex_lock(&write_lock);
   fprintf(stdout, "%s %s\n", cookie->zdc_biscuit, argp);
   fflush(stdout);
+  mutex_unlock(&write_lock);
   pendingRequest = 1;
   char deny[] = "0";
 
@@ -97,7 +104,9 @@ zdoor_result_t *server(zdoor_cookie_t *cookie, char *argp, size_t arpg_sz)
     i++;
     nanosleep((struct timespec[]){{0, 100000000}}, NULL);
   }
+  mutex_lock(&write_lock);
   fprintf(stderr, "Timeout in reply.\r\n");
+  mutex_unlock(&write_lock);
   pendingRequest = 0;
   result->zdr_data = strdup(deny);
   return result;
@@ -145,7 +154,9 @@ main(int argc, char *argv[])
             (arg3 = split_space(arg2))) {
           addVMDoor(input, arg2, arg3);
         } else {
+          mutex_lock(&write_lock);
           fprintf(stderr, "Invalid input: '%s'.\r\n", input);
+          mutex_unlock(&write_lock);
         }
         break;
       case 'd':    // delete zone door
@@ -153,7 +164,9 @@ main(int argc, char *argv[])
         if (arg2 = split_space(input)) {
           deleteVMDoor(input, arg2);
         } else {
+          mutex_lock(&write_lock);
           fprintf(stderr, "Invalid input: '%s'.\r\n", input);
+          mutex_unlock(&write_lock);
         }
         break;
       case 'r':   // request response

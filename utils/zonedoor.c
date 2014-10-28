@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <thread.h>
 
 #define HEARTBEAT 7  // number of seconds missing HB before exit
 

@@ -9,7 +9,19 @@
  * i.e.: ./zonedoor <uuid> _joyent_sshd_key_is_authorized
  * gets: /zones/<uuid>/root/var/tmp/._joyent_sshd_key_is_authorized
  */
-
+ 
+/*
+ * protocoll:
+ * All data are newline terminated and space sperated commands
+ * 
+ * Erlang                                            C
+ * a<zone-uuid> <doorname> <cookie>         ->       // creates a new zone door in zone <zone-uuid> as the file <doorname>
+ * d<zone-uuid> <doorname>                  ->       // deletes the given zone door
+ * h                                        ->       // heartbeet to ensure the c program shuts down in the case the communicaiton with erlang fails
+ * 
+ * //sends a message to the erlang process  <-       <cookie> <message(might include spaces)>
+ * r<reply(might include spaces)>           ->       //sends a reply to the last request gotten
+ */
 #pragma ident "%Z%%M% %I% %E% SMI"
 
 #include <alloca.h>

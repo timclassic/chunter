@@ -206,7 +206,7 @@ terminate(shutdown, #state{port = Port, doors = Doors}) ->
 
 terminate(Reason, State) ->
     lager:error("[zdoor] Terminating the door with reason: ~p!", [Reason]),
-    terminate(normal, State).
+    terminate(shutdown, State).
 
 %%--------------------------------------------------------------------
 %% @private

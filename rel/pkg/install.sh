@@ -98,9 +98,10 @@ then
     conf_admin_ip=$conf_fifo_ip
 fi
 
-CONFFILE="$DST/chunter/etc/chunter.conf"
+CONFFILE="${DST}/chunter/etc/chunter.conf"
 if [ ! -f $CONFFILE ]
 then
+    echo "Creating new configuration from example file."
     if [[ "$conf_admin_ip" = "" ]]
     then
         cp ${CONFFILE}.example ${CONFFILE}
@@ -108,6 +109,7 @@ then
         sed "s/^ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
     fi
 else
+    echo "Merging old file with new template, the original can be found in ${CONFFILE}.old."
     $DST/chunter/share/update_config.sh ${CONFFILE}.example ${CONFFILE} > ${CONFFILE}.new &&
         mv ${CONFFILE} ${CONFFILE}.old &&
         mv ${CONFFILE}.new ${CONFFILE}

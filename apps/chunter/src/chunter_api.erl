@@ -106,7 +106,7 @@ call(UUID, [{<<"action">>, <<"stack-set">>},
                 Size > ?MAX_MDATA_SIZE ->
                     {error, "out of space"};
                 true ->
-                    ls_grouping:set_config(SID, S),
+                    ls_grouping:set_config(SID, D),
                     {ok, S1} = ls_grouping:get(SID),
                     {ok, ft_grouping:config(S1)}
             end;

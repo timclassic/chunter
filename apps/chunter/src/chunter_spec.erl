@@ -323,9 +323,18 @@ create_update(Original, Package, Config) ->
                                   _ ->
                                       Base0
                               end,
-                     jsxd:thread([{set, <<"ram">>, Ram},
-                                  {set, <<"max_physical_memory">>, Ram + 1024}],
-                                 Base01);
+                     Base02 = jsxd:thread([{set, <<"ram">>, Ram},
+                                           {set, <<"max_physical_memory">>, Ram + 1024}],
+                                          Base01),
+                     case update_disk(jsxd:get(<<"disks">>, [], Original)) of
+                         {ok, Path} ->
+                             Size = jsxd:get(<<"quota">>, 0, Package) * 1024,
+                             jsxd:set(<<"update_disks">>,
+                                      [[{<<"path">>, Path}, {<<"size">>, Size}]],
+                                      Base02);
+                         _ ->
+                             Base02
+                     end;
                  {ok, <<"joyent">>} ->
                      jsxd:thread([{set, <<"max_physical_memory">>, Ram},
                                   {set, <<"quota">>,
@@ -334,6 +343,16 @@ create_update(Original, Package, Config) ->
              end,
     lager:debug("Created Update package ~p / ~p / ~p to: ~p.", [Original, Package, Config, Result]),
     Result.
+
+update_disk([]) ->
+    error;
+update_disk([Disk | Rest]) ->
+    case {jsxd:get(<<"media">>, Disk), jsxd:get(<<"boot">>, Disk)} of
+        {{ok, <<"disk">>}, {ok, false}} ->
+            jsxd:get(<<"path">>, Disk);
+        _ ->
+            update_disk([Disk | Rest])
+    end.
 
 -spec ceiling(X::float()) -> integer().
 

@@ -330,7 +330,7 @@ create_update(Original, Package, Config) ->
                          {ok, Path} ->
                              Size = jsxd:get(<<"quota">>, 0, Package) * 1024,
                              jsxd:set(<<"update_disks">>,
-                                      [[{Path, [{<<"size">>, Size}]}]],
+                                      [[{<<"path">>, Path}, {<<"size">>, Size}]],
                                       Base02);
                          _ ->
                              Base02

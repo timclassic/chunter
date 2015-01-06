@@ -1194,12 +1194,13 @@ snapshot_sizes(VM) ->
             Snaps1 =lists:filter(fun ({Name, _}) ->
                                          lists:member(Name, KnownS)
                                  end, Snaps),
-            SnapsGone =lists:filter(fun ({Name, _}) ->
-                                            not lists:member(Name, KnownS)
-                                    end, Snaps),
+            FlatSnaps = [Name || {Name, _Size} <- Snaps],
+            SnapsGone =lists:filter(fun (Name) ->
+                                            not lists:member(Name, FlatSnaps)
+                                    end, FlatSnaps),
             Ss1 = [{[Name, <<"size">>], Size}
                    || {Name, Size} <- Snaps1],
-            Ss2 = [{[Name], delete} || {Name, _Size} <- SnapsGone],
+            Ss2 = [{[Name], delete} || Name <- SnapsGone],
             ls_vm:set_snapshot(VM, Ss1 ++ Ss2);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),

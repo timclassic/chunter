@@ -1177,9 +1177,9 @@ snapshot_sizes(VM) ->
             %% First we look at backups
             Bs = ft_vm:backups(V),
             KnownB = [ ID || {ID, _} <- Bs],
-            Backups1 =lists:filter(fun ({Name, _}) ->
-                                           lists:member(Name, KnownB)
-                                   end, Snaps),
+            Backups1 = lists:filter(fun ({Name, _}) ->
+                                            lists:member(Name, KnownB)
+                                    end, Snaps),
             Local = [N || {N, _ } <- Backups1],
             NonLocal = lists:subtract(KnownB, Local),
             Bs1 = [{[Name, <<"local_size">>], Size}
@@ -1194,9 +1194,14 @@ snapshot_sizes(VM) ->
             Snaps1 =lists:filter(fun ({Name, _}) ->
                                          lists:member(Name, KnownS)
                                  end, Snaps),
+            FlatSnaps = [Name || {Name, _Size} <- Snaps],
+            SnapsGone = lists:filter(fun (Name) ->
+                                             not lists:member(Name, FlatSnaps)
+                                      end, KnownS),
             Ss1 = [{[Name, <<"size">>], Size}
                    || {Name, Size} <- Snaps1],
-            ls_vm:set_snapshot(VM, Ss1);
+            Ss2 = [{[Name], delete} || Name <- SnapsGone],
+            ls_vm:set_snapshot(VM, Ss1 ++ Ss2);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),
             ok

@@ -301,7 +301,7 @@ initialized({create, Package, Dataset, VMSpec},
                 ok ->
                     lager:debug("[create:~s] Done creating continuing on.", [UUID]),
                     case jsxd:get(<<"owner">>, VMSpec) of
-                        {ok, Org} ->
+                        {ok, Org} when Org =/= <<>> ->
                             ls_org:resource_action(Org, UUID, timestamp(),
                                                    confirm_create, []);
                         _ ->

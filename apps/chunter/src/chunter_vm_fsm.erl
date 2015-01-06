@@ -1195,9 +1195,9 @@ snapshot_sizes(VM) ->
                                          lists:member(Name, KnownS)
                                  end, Snaps),
             FlatSnaps = [Name || {Name, _Size} <- Snaps],
-            SnapsGone =lists:filter(fun (Name) ->
-                                            not lists:member(Name, FlatSnaps)
-                                    end, FlatSnaps),
+            SnapsGone = lists:filter(fun (Name) ->
+                                             not lists:member(Name, FlatSnaps)
+                                      end, KnownS),
             Ss1 = [{[Name, <<"size">>], Size}
                    || {Name, Size} <- Snaps1],
             Ss2 = [{[Name], delete} || Name <- SnapsGone],

@@ -33,18 +33,20 @@ to_vmadm(Package, Dataset, OwnerData) ->
 
 to_sniffle(Spec) ->
     Spec1 = jsxd:from_list(Spec),
-    case jsxd:get(<<"brand">>, <<"joyent">>, Spec1) of
-        <<"kvm">> ->
-            generate_sniffle(Spec1, kvm);
-        <<"lx">> ->
-            generate_sniffle(Spec1, zone);
-        <<"sngl">> ->
-            generate_sniffle(Spec1, zone);
-        <<"joyent">> ->
-            generate_sniffle(Spec1, zone);
-        <<"joyent-minimal">> ->
-            generate_sniffle(Spec1, zone)
-    end.
+    Type = brand_to_type(jsxd:get(<<"brand">>, <<"joyent">>, Spec1)),
+    generate_sniffle(Spec1, Type).
+
+brand_to_type(<<"kvm">>) ->
+    kvm;
+brand_to_type(<<"lx">>) ->
+    zone;
+brand_to_type(<<"sngl">>) ->
+    zone;
+brand_to_type(<<"joyent">>) ->
+    zone;
+brand_to_type(<<"joyent-minimal">>) ->
+    zone.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -66,12 +68,13 @@ generate_sniffle(In, _Type) ->
                       jsxd:set(<<"dataset">>, V, Obj);
                   (<<"image_uuid">>, V, Obj) ->
                       jsxd:set(<<"dataset">>, V, Obj);
-                  (<<"brand">>, <<"kvm">>, Obj) ->
-                      jsxd:set(<<"type">>, <<"kvm">>, Obj);
-                  (<<"brand">>, <<"joyent">>, Obj) ->
-                      jsxd:set(<<"type">>, <<"zone">>, Obj);
-                  (<<"brand">>, <<"lx">>, Obj) ->
-                      jsxd:set(<<"type">>, <<"zone">>, Obj);
+                  (<<"brand">>, Brand, Obj) ->
+                      case brand_to_type(Brand) of
+                          kvm ->
+                              jsxd:set(<<"type">>, <<"kvm">>, Obj);
+                          zone ->
+                              jsxd:set(<<"type">>, <<"zone">>, Obj)
+                      end;
                   (<<"max_physical_memory">>, V, Obj) ->
                       jsxd:update(<<"ram">>, fun(E) -> E end, round(V/(1024*1024)), Obj);
                   (<<"zonepath">>, V, Obj) ->
@@ -315,8 +318,8 @@ create_update(Original, Package, Config) ->
                          {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, round((2048*RamPerc)), Package)},
                          {merge, jsxd:select([<<"cpu_cap">>], Package)}],
                         Base),
-    Result = case jsxd:get(<<"brand">>, Original) of
-                 {ok, <<"kvm">>} ->
+    Result = case brand_to_type(jsxd:get(<<"brand">>, <<"joyent">>, Original)) of
+                 kvm ->
                      Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
                                   {ok, V} ->
                                       jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
@@ -335,7 +338,7 @@ create_update(Original, Package, Config) ->
                          _ ->
                              Base02
                      end;
-                 {ok, <<"joyent">>} ->
+                 zone ->
                      jsxd:thread([{set, <<"max_physical_memory">>, Ram},
                                   {set, <<"quota">>,
                                    jsxd:get(<<"quota">>, 0, Package)}],

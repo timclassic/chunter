@@ -724,15 +724,10 @@ handle_sync_event({door, Ref, Data}, _From, StateName,
                         {ok, D} ->
                             Bin = jsx:encode(D),
                             {ok, <<$1, Bin/binary>>};
-                        {error, E} when is_list(E) ->
-                            lager:warning("[zdoor] error: ~p", [E]),
-                            RJSON = jsx:encode([{error, list_to_binary(E)}]),
-                            {ok, <<$0, RJSON/binary>>};
                         {error, E} ->
                             lager:warning("[zdoor] error: ~p", [E]),
-                            RJSON = jsx:encode([{error, E}]),
+                            RJSON = jsx:encode([{error, list_to_binary(E)}]),
                             {ok, <<$0, RJSON/binary>>}
-
                     end,
             {reply, Reply, StateName, State}
     catch
@@ -1371,7 +1366,7 @@ wait_for_delete(UUID) when is_binary(UUID) ->
 wait_for_delete(UUID) ->
     UUIDn = UUID ++ "\n",
     case os:cmd(["/usr/sbin/zoneadm -z ", UUID, " list"]) of
-        {ok, R} when R == UUIDn ->
+        UUIDn ->
             ok;
         _ ->
             timer:sleep(1000),

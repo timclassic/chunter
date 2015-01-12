@@ -33,18 +33,20 @@ to_vmadm(Package, Dataset, OwnerData) ->
 
 to_sniffle(Spec) ->
     Spec1 = jsxd:from_list(Spec),
-    case jsxd:get(<<"brand">>, <<"joyent">>, Spec1) of
-        <<"kvm">> ->
-            generate_sniffle(Spec1, kvm);
-        <<"lx">> ->
-            generate_sniffle(Spec1, zone);
-        <<"sngl">> ->
-            generate_sniffle(Spec1, zone);
-        <<"joyent">> ->
-            generate_sniffle(Spec1, zone);
-        <<"joyent-minimal">> ->
-            generate_sniffle(Spec1, zone)
-    end.
+    Type = brand_to_type(jsxd:get(<<"brand">>, <<"joyent">>, Spec1)),
+    generate_sniffle(Spec1, Type).
+
+brand_to_type(<<"kvm">>) ->
+    kvm;
+brand_to_type(<<"lx">>) ->
+    zone;
+brand_to_type(<<"sngl">>) ->
+    zone;
+brand_to_type(<<"joyent">>) ->
+    zone;
+brand_to_type(<<"joyent-minimal">>) ->
+    zone.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -54,20 +56,25 @@ to_sniffle(Spec) ->
                        Type::fifo:vm_type()) -> fifo:config_list().
 
 generate_sniffle(In, _Type) ->
-    KeepKeys = [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>, <<"routes">>,
-                <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
-                <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
-                <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>],
+    KeepKeys =
+        [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>, <<"routes">>,
+         <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
+         <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
+         <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>,
+         <<"kernel_version">>],
     jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
                       jsxd:merge(Int, Obj);
                   (<<"dataset_uuid">>, V, Obj) ->
                       jsxd:set(<<"dataset">>, V, Obj);
                   (<<"image_uuid">>, V, Obj) ->
                       jsxd:set(<<"dataset">>, V, Obj);
-                  (<<"brand">>, <<"kvm">>, Obj) ->
-                      jsxd:set(<<"type">>, <<"kvm">>, Obj);
-                  (<<"brand">>, <<"joyent">>, Obj) ->
-                      jsxd:set(<<"type">>, <<"zone">>, Obj);
+                  (<<"brand">>, Brand, Obj) ->
+                      case brand_to_type(Brand) of
+                          kvm ->
+                              jsxd:set(<<"type">>, <<"kvm">>, Obj);
+                          zone ->
+                              jsxd:set(<<"type">>, <<"zone">>, Obj)
+                      end;
                   (<<"max_physical_memory">>, V, Obj) ->
                       jsxd:update(<<"ram">>, fun(E) -> E end, round(V/(1024*1024)), Obj);
                   (<<"zonepath">>, V, Obj) ->
@@ -198,34 +205,48 @@ generate_spec(Package, Dataset, OwnerData) ->
                                           {set, <<"image_uuid">>,
                                            jsxd:get(<<"uuid">>, <<"">>, Dataset)}],
                                          Base0),
-                    case jsxd:get(<<"compression">>, Package) of
-                        {ok, Compression} ->
-                            jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
+                    Base12 = case jsxd:get(<<"compression">>, Package) of
+                                 {ok, Compression} ->
+                                     jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
+                                 _ ->
+                                     Base11
+                             end,
+                    case jsxd:get([<<"zone_type">>], Dataset) of
+                        {ok, <<"lx">>} ->
+                            {ok, KVersion} = jsxd:get([<<"kernel_version">>], Dataset),
+                            jsxd:thread(
+                              [{set, <<"kernel_version">>, KVersion},
+                               {set, <<"brand">>, <<"lx">>}], Base12);
                         _ ->
-                            Base11
+                            Base12
                     end
             end,
     Base2 = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
-                              jsxd:set([<<"customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
-                          (<<"root_pw">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"root_pw">>], V, Obj);
+                              jsxd:set([<<"customer_metadata">>,
+                                        <<"root_authorized_keys">>], V, Obj);
                           (<<"resolvers">>, V, Obj) ->
                               jsxd:set(<<"resolvers">>, V, Obj);
                           (<<"hostname">>, V, Obj) ->
                               jsxd:set(<<"hostname">>, V, Obj);
-                          (<<"admin_pw">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"admin_pw">>], V, Obj);
                           (<<"metadata">>, V, Obj) ->
                               jsxd:update(<<"customer_metadata">>,
                                           fun(M) ->
                                                   jsxd:merge(M, V)
                                           end, V, Obj);
                           (<<"note">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"note">>], V, Obj);
+                              jsxd:set([<<"internal_metadata">>, <<"note">>],
+                                       V, Obj);
                           (<<"network_map">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"network_map">>], V, Obj);
-                          (_, _, Obj) ->
-                              Obj
+                              jsxd:set([<<"internal_metadata">>,
+                                        <<"network_map">>], V, Obj);
+                          (K, V, Obj) ->
+                              case re:run(K, "_pw$") of
+                                  nomatch ->
+                                      Obj;
+                                  _ ->
+                                      jsxd:set([<<"internal_metadata">>, K],
+                                               V, Obj)
+                              end
                       end, Base1, OwnerData),
     Result = case jsxd:get(<<"networks">>, Dataset) of
                  {ok, Nics} ->
@@ -235,7 +256,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                  _ ->
                      Base2
              end,
-    lager:debug("Converted ~p / ~p / ~p to: ~p.", [Package, Dataset, OwnerData, Result]),
+    lager:debug("Converted ~p / ~p / ~p to: ~p.",
+                [Package, Dataset, OwnerData, Result]),
     Result.
 
 
@@ -244,26 +266,30 @@ generate_spec(Package, Dataset, OwnerData) ->
                     Config::fifo:config()) -> fifo:config_list().
 
 create_update(_, undefined, Config) ->
-    KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>, <<"add_nics">>,
-                <<"update_nics">>, <<"autoboot">>, <<"max_swap">>, <<"set_routes">>, <<"remove_routes">>],
-    Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
-                               jsxd:set([<<"set_customer_metadata">>, <<"root_authorized_keys">>], V, Obj);
-                           (<<"root_pw">>, V, Obj) ->
-                               jsxd:set([<<"set_internal_metadata">>, <<"root_pw">>], V, Obj);
-                           (<<"admin_pw">>, V, Obj) ->
-                               jsxd:set([<<"set_internal_metadata">>, <<"admin_pw">>], V, Obj);
-                           (<<"metadata">>, V, Obj) ->
-                               jsxd:update(<<"set_customer_metadata">>,
-                                           fun(M) ->
-                                                   jsxd:merge(M, V)
-                                           end, V, Obj);
-                           (<<"note">>, V, Obj) ->
-                               jsxd:set([<<"set_internal_metadata">>, <<"note">>], V, Obj);
-                           (_, _, Obj) ->
-                               Obj
-                       end,
-                       jsxd:select(KeepKeys, Config),
-                       Config),
+    KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>,
+                <<"add_nics">>, <<"update_nics">>, <<"autoboot">>,
+                <<"max_swap">>, <<"set_routes">>, <<"remove_routes">>],
+    MDataFun = fun (<<"ssh_keys">>, V, Obj) ->
+                       jsxd:set([<<"set_customer_metadata">>,
+                                 <<"root_authorized_keys">>], V, Obj);
+                   (<<"metadata">>, V, Obj) ->
+                       jsxd:update(<<"set_customer_metadata">>,
+                                   fun(M) ->
+                                           jsxd:merge(M, V)
+                                   end, V, Obj);
+                   (<<"note">>, V, Obj) ->
+                       jsxd:set([<<"set_internal_metadata">>, <<"note">>],
+                                V, Obj);
+                   (K, V, Obj) ->
+                       case re:run(K, "_pw$") of
+                           nomatch ->
+                               Obj;
+                           _ ->
+                               jsxd:set([<<"set_internal_metadata">>, K],
+                                        V, Obj)
+                       end
+               end,
+        Result = jsxd:fold(MDataFun, jsxd:select(KeepKeys, Config), Config),
     R1 = jsxd:update([<<"add_nics">>],
                      fun(Ns) ->
                              [jsxd:update([<<"model">>],
@@ -292,18 +318,27 @@ create_update(Original, Package, Config) ->
                          {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, round((2048*RamPerc)), Package)},
                          {merge, jsxd:select([<<"cpu_cap">>], Package)}],
                         Base),
-    Result = case jsxd:get(<<"brand">>, Original) of
-                 {ok, <<"kvm">>} ->
+    Result = case brand_to_type(jsxd:get(<<"brand">>, <<"joyent">>, Original)) of
+                 kvm ->
                      Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
                                   {ok, V} ->
                                       jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
                                   _ ->
                                       Base0
                               end,
-                     jsxd:thread([{set, <<"ram">>, Ram},
-                                  {set, <<"max_physical_memory">>, Ram + 1024}],
-                                 Base01);
-                 {ok, <<"joyent">>} ->
+                     Base02 = jsxd:thread([{set, <<"ram">>, Ram},
+                                           {set, <<"max_physical_memory">>, Ram + 1024}],
+                                          Base01),
+                     case update_disk(jsxd:get(<<"disks">>, [], Original)) of
+                         {ok, Path} ->
+                             Size = jsxd:get(<<"quota">>, 0, Package) * 1024,
+                             jsxd:set(<<"update_disks">>,
+                                      [[{<<"path">>, Path}, {<<"size">>, Size}]],
+                                      Base02);
+                         _ ->
+                             Base02
+                     end;
+                 zone ->
                      jsxd:thread([{set, <<"max_physical_memory">>, Ram},
                                   {set, <<"quota">>,
                                    jsxd:get(<<"quota">>, 0, Package)}],
@@ -311,6 +346,16 @@ create_update(Original, Package, Config) ->
              end,
     lager:debug("Created Update package ~p / ~p / ~p to: ~p.", [Original, Package, Config, Result]),
     Result.
+
+update_disk([]) ->
+    error;
+update_disk([Disk | Rest]) ->
+    case {jsxd:get(<<"media">>, Disk), jsxd:get(<<"boot">>, Disk)} of
+        {{ok, <<"disk">>}, {ok, false}} ->
+            jsxd:get(<<"path">>, Disk);
+        _ ->
+            update_disk([Disk | Rest])
+    end.
 
 -spec ceiling(X::float()) -> integer().
 

@@ -211,7 +211,7 @@ handle_message({machines, snapshot, store,
                            {s3_host, Host},
                            {s3_port, Port},
                            {s3_bucket, Bucket},
-                           {quiet, true} | Opts],
+                           {quiet, true}| Opts],
                   ls_dataset:imported(Img, 0),
                   ls_dataset:status(Img, <<"pending">>),
 				  {ok, VM} = ls_vm:get(UUID),
@@ -223,7 +223,8 @@ handle_message({machines, snapshot, store,
 								 <<"/zones/", UUID/binary, "-disk0">>
 						 end,
                   case chunter_snap:upload(Path, UUID, SnapId, Opts1) of
-                      {ok, _} ->
+                      {ok, _, Digest} ->
+                          ls_dataset:sha1(Img, Digest),
                           ls_dataset:status(Img, <<"imported">>),
                           ls_dataset:imported(Img, 1);
                       {error, _, _} ->
@@ -241,7 +242,6 @@ handle_message({machines, snapshot, store, UUID, SnapId, Img}, State)
                   write_snapshot(UUID, SnapId, Img)
           end),
     {stop, ok, State};
-
 
 handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),

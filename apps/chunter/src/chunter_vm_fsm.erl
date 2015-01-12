@@ -13,9 +13,10 @@
 -endif.
 
 -behaviour(gen_fsm).
+-behaviour(ezdoor_behaviour).
 
 %% API
--export([start_link/1]).
+-export([start_link/1, door_event/3]).
 -ignore_xref([start_link/1,
               initialized/2,
               creating/2,
@@ -78,7 +79,13 @@
                 services = [],
                 listeners = [],
                 nsq = false,
-                public_state}).
+                public_state,
+                auth_ref,
+                api_ref}).
+
+-define(AUTH_DOOR, "_joyent_sshd_key_is_authorized").
+-define(API_DOOR, "_fifo").
+
 
 %%%===================================================================
 %%% API
@@ -103,8 +110,9 @@ load(UUID) ->
             chunter_vm_sup:start_child(UUID),
             gen_fsm:send_event({global, {vm, UUID}}, load);
         _ ->
-            register(UUID)
-    end.
+            ok
+    end,
+    register(UUID).
 
 -spec transition(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
 
@@ -119,7 +127,15 @@ delete(UUID) ->
 -spec force_state(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
 
 force_state(UUID, State) ->
-    gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State}).
+    case global:whereis_name({vm, UUID}) of
+        undefined ->
+            chunter_vm_sup:start_child(UUID),
+            gen_fsm:send_event({global, {vm, UUID}}, load),
+            register(UUID);
+        _ ->
+            gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State})
+    end.
+
 
 -spec register(UUID::fifo:uuid()) -> ok.
 
@@ -136,6 +152,12 @@ restore_backup(UUID, SnapID, Options) ->
             gen_fsm:sync_send_all_state_event(
               {global, {vm, UUID}}, {backup, restore, SnapID, Options})
     end.
+
+door_event(Pid, Ref, down) ->
+    gen_fsm:send_all_state_event(Pid, {door, Ref, down});
+
+door_event(Pid, Ref, Data) ->
+    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
 
 
 service_action(UUID, Action, Service)
@@ -209,7 +231,7 @@ init([UUID]) ->
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
     timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
-    timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second
+    %% timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second don't need this any longer?
     snapshot_sizes(UUID),
     NSQ = case application:get_env(nsq_producer) of
               {ok, _} ->
@@ -278,6 +300,13 @@ initialized({create, Package, Dataset, VMSpec},
             case chunter_vmadm:create(VMData1) of
                 ok ->
                     lager:debug("[create:~s] Done creating continuing on.", [UUID]),
+                    case jsxd:get(<<"owner">>, VMSpec) of
+                        {ok, Org} when Org =/= <<>> ->
+                            ls_org:resource_action(Org, UUID, timestamp(),
+                                                   confirm_create, []);
+                        _ ->
+                            ok
+                    end,
                     {next_state, creating,
                      State#state{type = Type,
                                  public_state = change_state(UUID, <<"creating">>)}};
@@ -314,7 +343,7 @@ initialized({restore, SnapID, Options},
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
-                [S || {_, S} <- Path,
+                [S || {_, S, _} <- Path,
                       jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
@@ -626,6 +655,7 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
             lager:info("Deleting ~s successfull, letting sniffle know.", [UUID]),
             ls_vm:delete(UUID)
     end,
+    wait_for_delete(UUID),
     {stop, normal, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
@@ -640,6 +670,18 @@ handle_event({console, send, _Data}, StateName, State) ->
 
 handle_event({console, link, _Pid}, StateName, State) ->
     {next_state, StateName, State};
+
+handle_event({door, _Ref, down}, StateName,
+             State = #state{auth_ref=_Ref, uuid=UUID}) ->
+    lager:warning("[vm:~s] auth door down!", [UUID]),
+    timer:send_after(1000, {init, zonedoor}),
+    {next_state, StateName, State#state{auth_ref = undefined}};
+
+handle_event({door, _Ref, down}, StateName,
+             State = #state{api_ref=_Ref, uuid=UUID}) ->
+    lager:warning("[vm:~s] api door down!", [UUID]),
+    timer:send_after(1000, {init, zonedoor}),
+    {next_state, StateName, State#state{api_ref = undefined}};
 
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
@@ -661,7 +703,42 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) ->
+
+handle_sync_event({door, Ref, Data}, _From, StateName,
+             State = #state{auth_ref=Ref, uuid=UUID}) ->
+    R = case auth_credintials(UUID, Data) of
+            true ->
+                <<"1">>;
+            false ->
+                <<"0">>
+        end,
+    {reply, {ok, R}, StateName, State};
+
+handle_sync_event({door, Ref, Data}, _From, StateName,
+             State = #state{api_ref=Ref, uuid=UUID}) ->
+    lager:info("[zone:~s] API: ~s", [UUID, Data]),
+    try jsx:decode(Data) of
+        JSON ->
+            JSON1 = jsxd:from_list(JSON),
+            Reply = case chunter_api:call(UUID, JSON1) of
+                        {ok, D} ->
+                            Bin = jsx:encode(D),
+                            {ok, <<$1, Bin/binary>>};
+                        {error, E} ->
+                            lager:warning("[zdoor] error: ~p", [E]),
+                            RJSON = jsx:encode([{error, list_to_binary(E)}]),
+                            {ok, <<$0, RJSON/binary>>}
+                    end,
+            {reply, Reply, StateName, State}
+    catch
+        _:_ ->
+            lager:warning("[zdoor] error: ~p", [Data]),
+            RJSON = jsx:encode([{error,  <<"format error: ", Data/binary>>}]),
+            Reply = {ok, <<$0, RJSON/binary>>},
+            {reply, Reply, StateName, State}
+    end;
+
+handle_sync_event({backup, restore, SnapID, Options}, _F, StateName, State) ->
     VM = State#state.uuid,
     {ok, VMObj} = ls_vm:get(VM),
     Remote = ft_vm:backups(VMObj),
@@ -670,7 +747,7 @@ handle_sync_event({backup, restore, SnapID, Options}, _From, StateName, State) -
         {ok, Path} ->
             chunter_snap:describe_restore(Path),
             Toss0 =
-                [S || {_, S} <- Path,
+                [S || {_, S, _} <- Path,
                       jsxd:get([S, <<"local">>], false, Remote)
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
@@ -867,7 +944,8 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-terminate(Reason, StateName, State = #state{uuid = UUID}) ->
+terminate(Reason, StateName,
+          State = #state{uuid = UUID, auth_ref=AuthRef, api_ref=APIRef}) ->
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
                   [UUID, StateName, Reason]),
     lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
@@ -878,7 +956,8 @@ terminate(Reason, StateName, State = #state{uuid = UUID}) ->
         _ ->
             incinerate(State#state.console)
     end,
-    gen_server:call(chunter_vm_auth, {remove_zonedoor, UUID}),
+    ezdoor_server:remove(AuthRef),
+    ezdoor_server:remove(APIRef),
     ok.
 
 %%--------------------------------------------------------------------
@@ -915,8 +994,19 @@ init_console(State) ->
     end.
 
 ensure_zonedoor(State) ->
-    gen_server:call(chunter_vm_auth, {verify_zonedoor, State#state.uuid}),
-    State.
+    State1 = case ezdoor_server:add(?MODULE, State#state.uuid, ?AUTH_DOOR) of
+                 {ok, AuthRef} ->
+                     State#state{auth_ref = AuthRef};
+                 {error, doublicate} ->
+                     State
+             end,
+    case ezdoor_server:add(?MODULE, State1#state.uuid, ?API_DOOR) of
+        {ok, APIRef} ->
+            State1#state{api_ref = APIRef};
+        {error, doublicate} ->
+            State1
+    end.
+
 
 
 do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
@@ -1001,6 +1091,8 @@ snapshot_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
                       case Fun(P1, VM, UUID, Opts) of
                           {ok, Res} ->
                               {S, <<Reply0/binary, "\n", Res/binary>>};
+                          {ok, Res, _} ->
+                              {S, <<Reply0/binary, "\n", Res/binary>>};
                           {error, Code, Res} ->
                               lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.", [P1, VM, Code, Res]),
                               ls_vm:log(
@@ -1024,7 +1116,13 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
             Spec = chunter_spec:to_sniffle(VMData),
             case jsxd:get(<<"zonepath">>, Spec) of
                 {ok, P} ->
-                    case Fun(P, VM, UUID, Opts) of
+                    R = case Fun(P, VM, UUID, Opts) of
+                            {ok, Rx, _} ->
+                                {ok, Rx};
+                            O ->
+                                O
+                        end,
+                    case R of
                         {ok, _} = R0 ->
                             Disks = jsxd:get(<<"disks">>, [], Spec),
                             case snapshot_action_on_disks(VM, UUID, Fun, R0, Disks, Opts) of
@@ -1074,9 +1172,9 @@ snapshot_sizes(VM) ->
             %% First we look at backups
             Bs = ft_vm:backups(V),
             KnownB = [ ID || {ID, _} <- Bs],
-            Backups1 =lists:filter(fun ({Name, _}) ->
-                                           lists:member(Name, KnownB)
-                                   end, Snaps),
+            Backups1 = lists:filter(fun ({Name, _}) ->
+                                            lists:member(Name, KnownB)
+                                    end, Snaps),
             Local = [N || {N, _ } <- Backups1],
             NonLocal = lists:subtract(KnownB, Local),
             Bs1 = [{[Name, <<"local_size">>], Size}
@@ -1091,9 +1189,14 @@ snapshot_sizes(VM) ->
             Snaps1 =lists:filter(fun ({Name, _}) ->
                                          lists:member(Name, KnownS)
                                  end, Snaps),
+            FlatSnaps = [Name || {Name, _Size} <- Snaps],
+            SnapsGone = lists:filter(fun (Name) ->
+                                             not lists:member(Name, FlatSnaps)
+                                      end, KnownS),
             Ss1 = [{[Name, <<"size">>], Size}
                    || {Name, Size} <- Snaps1],
-            ls_vm:set_snapshot(VM, Ss1);
+            Ss2 = [{[Name], delete} || Name <- SnapsGone],
+            ls_vm:set_snapshot(VM, Ss1 ++ Ss2);
         _ ->
             lager:warning("[~s] Could not read VM data.", [VM]),
             ok
@@ -1101,13 +1204,13 @@ snapshot_sizes(VM) ->
 
 do_restore(Path, VM, {local, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {full, SnapId}, Opts) ->
+do_restore(Path, VM, {full, SnapId, SHA1}, Opts) ->
     do_destroy(Path, VM, SnapId, Opts),
-    chunter_snap:download(Path, VM, SnapId, Opts),
+    chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {incr, SnapId}, Opts) ->
-    chunter_snap:download(Path, VM, SnapId, Opts),
+do_restore(Path, VM, {incr, SnapId, SHA1}, Opts) ->
+    chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts).
 
@@ -1228,3 +1331,44 @@ wait_image(N, Cmd) when N < 3 ->
 wait_image(_, _) ->
     lager:debug("<IMG> done waiting.", []),
     ok.
+
+timestamp() ->
+    {Mega,Sec,Micro} = erlang:now(),
+    (Mega*1000000+Sec)*1000000+Micro.
+
+auth_credintials(UUID, Data) ->
+    case re:split(Data, " ") of
+        [User, _UserID, KeyID] ->
+            chk_key(UUID, User, KeyID);
+        _ ->
+            lager:warning("[zonedoor] recived unknown data: ~p.", [Data]),
+            false
+    end.
+
+chk_key(UUID, User, KeyID) ->
+    KeyBin = libsnarl:keystr_to_id(KeyID),
+    case ls_user:key_find(KeyBin) of
+        {ok, UID} ->
+            Res = libsnarl:allowed(UID, [<<"vms">>, UUID, <<"console">>])
+                orelse libsnarl:allowed(UID, [<<"vms">>, UUID, <<"ssh">>])
+                orelse libsnarl:allowed(UID, [<<"vms">>, UUID, <<"ssh">>, User]),
+            lager:warning("[zonedoor:~s] User ~s trying to connect with key ~s -> ~s",
+                          [UUID, User, KeyID, Res]),
+            Res;
+        _ ->
+            lager:warning("[zonedoor:~s] denied.", [UUID]),
+            false
+    end.
+
+wait_for_delete(UUID) when is_binary(UUID) ->
+    wait_for_delete(binary_to_list(UUID));
+
+wait_for_delete(UUID) ->
+    UUIDn = UUID ++ "\n",
+    case os:cmd(["/usr/sbin/zoneadm -z ", UUID, " list"]) of
+        UUIDn ->
+            ok;
+        _ ->
+            timer:sleep(1000),
+            wait_for_delete(UUID)
+    end.

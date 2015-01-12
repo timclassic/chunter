@@ -9,7 +9,11 @@ cp-hooks:
 
 apps/chunter/priv/zonedoor: utils/zonedoor.c
 	gcc -lzdoor utils/zonedoor.c -o apps/chunter/priv/zonedoor
-zonedoor: apps/chunter/priv/zonedoor
+
+fifo: utils/fifo.c
+	gcc utils/fifo.c -o fifo
+
+zonedoor: apps/chunter/priv/zonedoor fifo
 
 version:
 	git describe > chunter.version

@@ -40,7 +40,7 @@ handle_info({data,Data}, State = #state{socket = Socket,
     {noreply, State};
 
 handle_info({_Closed, _Socket}, State = #state{
-                                           type = mornal,
+                                           type = normal,
                                            closed = _Closed}) ->
     {stop, normal, State};
 

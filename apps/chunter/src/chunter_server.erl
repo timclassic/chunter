@@ -81,6 +81,8 @@ disconnect() ->
 
 service_action(Action, Service)
   when Action =:= enable;
+       Action =:= refresh;
+       Action =:= restart;
        Action =:= disable;
        Action =:= clear ->
     gen_server:call(?SERVER, {service, Action, Service}).
@@ -182,6 +184,12 @@ handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
 
 handle_call({service, enable, Service}, _From, State) ->
     {reply, smurf:enable(Service, []), State};
+
+handle_call({service, refresh, Service}, _From, State) ->
+    {reply, smurf:refresh(Service, []), State};
+
+handle_call({service, restart, Service}, _From, State) ->
+    {reply, smurf:restart(Service, []), State};
 
 handle_call({service, disable, Service}, _From, State) ->
     {reply, smurf:disable(Service, []), State};

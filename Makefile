@@ -45,7 +45,7 @@ test: all
 quick-test: cp-hooks
 	$(REBAR) skip_deps=true eunit
 
-rel: compile
+rel: all
 	-rm -r ./rel/chunter/share
 	$(REBAR) generate
 

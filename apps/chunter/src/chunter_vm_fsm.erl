@@ -162,6 +162,8 @@ door_event(Pid, Ref, Data) ->
 
 service_action(UUID, Action, Service)
   when Action =:= enable;
+       Action =:= refresh;
+       Action =:= restart;
        Action =:= disable;
        Action =:= clear ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}},
@@ -766,13 +768,24 @@ handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
     {reply, ok, deleting_snapshot, State1, 0};
 
 handle_sync_event({service, enable, Service}, _From, StateName, State) ->
-    {reply, smurf:enable(Service, [{zone, State#state.uuid}]), StateName, State, 0};
+    {reply, smurf:enable(Service, [{zone, State#state.uuid}]),
+     StateName, State, 0};
+
+handle_sync_event({service, refresh, Service}, _From, StateName, State) ->
+    {reply, smurf:refresh(Service, [{zone, State#state.uuid}]),
+     StateName, State, 0};
+
+handle_sync_event({service, restart, Service}, _From, StateName, State) ->
+    {reply, smurf:restart(Service, [{zone, State#state.uuid}]),
+     StateName, State, 0};
 
 handle_sync_event({service, disable, Service}, _From, StateName, State) ->
-    {reply, smurf:disable(Service, [{zone, State#state.uuid}]), StateName, State, 0};
+    {reply, smurf:disable(Service, [{zone, State#state.uuid}]),
+     StateName, State, 0};
 
 handle_sync_event({service, clear, Service}, _From, StateName, State) ->
-    {reply, smurf:clear(Service, [{zone, State#state.uuid}]), StateName, State, 0};
+    {reply, smurf:clear(Service, [{zone, State#state.uuid}]),
+     StateName, State, 0};
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID, Options}},

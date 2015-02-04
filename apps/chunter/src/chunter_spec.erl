@@ -312,10 +312,15 @@ create_update(Original, Package, Config) ->
                   _ ->
                       0
               end,
+    RamShare = round(1024*RamPerc),
+    MaxSwap = jsxd:get(<<"max_swap">>, Ram*2, Package),
+    MaxSwap1 = erlang:max(256, MaxSwap),
+
     Base0 = jsxd:thread([{set, [<<"set_internal_metadata">>, <<"package">>],
                           jsxd:get(<<"uuid">>, <<"-">>, Package)},
-                         {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, round((1024*RamPerc)), Package)},
-                         {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, round((2048*RamPerc)), Package)},
+                         {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
+                         {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare*2, Package)},
+                         {set, <<"max_swap">>, MaxSwap1},
                          {merge, jsxd:select([<<"cpu_cap">>], Package)}],
                         Base),
     Result = case brand_to_type(jsxd:get(<<"brand">>, <<"joyent">>, Original)) of

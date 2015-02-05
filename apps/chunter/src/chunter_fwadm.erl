@@ -4,7 +4,22 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([build/1]).
+-export([convert/2, build/1]).
+
+
+convert(VM, {Action, inbound, Src, {Proto, Filter}}) ->
+    {Action, convert_target(Src), {vm, VM}, Proto, Filter};
+
+convert(VM, {Action, outbound, Dst, {Proto, Filter}}) ->
+    {Action, {vm, VM}, convert_target(Dst), Proto, Filter}.
+
+convert_target(all) ->
+    any.
+%% convert({vm, UUID}) ->
+%% convert({cluster, UUID}) ->
+%% convert({stack, UUID}) ->
+%% convert({network, UUID}) ->
+
 build({Action, Src, Dst, icmp, Tags}) ->
     [build1(Action, Src, Dst), "icmp (", build_filter(Tags), ")"];
 

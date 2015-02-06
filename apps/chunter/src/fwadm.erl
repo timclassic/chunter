@@ -39,7 +39,12 @@ build({Action, Src, Dst, Protocol, Ports})
      " (", build_filter(Ports), ")"].
 
 list() ->
-    jsx:decode(fwadm("list", [json])).
+    case fwadm("list", [json]) of
+        {ok, JSON} ->
+            {ok, jsx:decode(JSON)};
+        E ->
+            E
+    end.
 
 %%%===================================================================
 %%% Internal
@@ -71,11 +76,14 @@ fwadm_opts([] , Args) ->
     Args.
 
 read_result(P) ->
+    read_result(P, <<>>).
+
+read_result(P, Acc) ->
     receive
-        {P, {data, _}} ->
-            read_result(P);
-        {P,{exit_status, 0}} -> ok;
-        {P,{exit_status, N}} -> {error, N}
+        {P, {data, Data}} ->
+            read_result(P, <<Acc/binary, Data>>);
+        {P,{exit_status, 0}} -> {ok, Acc};
+        {P,{exit_status, N}} -> {error, N, Acc}
     end.
 
 convert_target({vm, _UUID}) ->

@@ -41,7 +41,7 @@ build({Action, Src, Dst, Protocol, Ports})
 
 add(Owner, Rule) ->
     RuleB = list_to_binary(build(Rule)),
-    Desc = <<"fifo:", (base64:encode(term_to_binary(Rule)))/binary>>,
+    Desc = base64:encode(term_to_binary(Rule)),
     File = os:cmd("mktemp") -- "\n",
     JSON = [{description, <<"fifo:", Desc/binary>>},
             {enabled, true},
@@ -61,14 +61,25 @@ delete(UUID) ->
 list() ->
     case fwadm("list", [json]) of
         {ok, JSON} ->
-            {ok, jsx:decode(JSON)};
+            {ok, [convert_to_fifo(E) || E <- jsx:decode(JSON)]};
         E ->
             E
     end.
 
+
 %%%===================================================================
 %%% Internal
 %%%===================================================================
+
+convert_to_fifo(R) ->
+    JSXD = jsxd:from_list(R),
+    case jsxd:get(<<"description">>, JSXD) of
+        {ok, <<"fifo:", Base64/binary>>} ->
+            jsxd:set(<<"rule">>, binary_to_term(base64:decode(Base64)), JSXD);
+        _ ->
+            JSXD
+    end.
+
 
 fwadm(Cmd, Args) ->
     fwadm([Cmd] ++ fwadm_opts(Args, [])).

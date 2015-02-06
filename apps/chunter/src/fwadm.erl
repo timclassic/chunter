@@ -41,9 +41,18 @@ build({Action, Src, Dst, Protocol, Ports})
 
 add(Owner, Rule) ->
     RuleB = list_to_binary(build(Rule)),
-    Desc = base64:encode(term_to_binary(Rule)),
-    Args = [{owner, Owner}, {desc, <<"fifo:", Desc/binary>>}, enable],
-    fwadm(["add"] ++ fwadm_opts(Args, [RuleB])).
+    Desc = <<"fifo:", (base64:encode(term_to_binary(Rule)))/binary>>,
+    File = os:cmd("mktemp") -- "\n",
+    JSON = [{description, <<"fifo:", Desc/binary>>},
+            {enabled, true},
+            {owner_uuid, Owner},
+            {rule, RuleB}],
+    case file:write_file(File, jsx:encode(JSON)) of
+        ok ->
+            fwadm("add", [{file, File}]);
+        E ->
+            E
+    end.
 
 
 delete(UUID) ->
@@ -80,6 +89,8 @@ fwadm_opts([dryrun | R] , Args) ->
     fwadm_opts(R, ["--dryrun" | Args]);
 fwadm_opts([{owner, UUID} | R] , Args) ->
     fwadm_opts(R, ["--owner_uuid", UUID | Args]);
+fwadm_opts([{file, File} | R] , Args) ->
+    fwadm_opts(R, ["-f", File | Args]);
 fwadm_opts([json | R] , Args) ->
     fwadm_opts(R, ["--json" | Args]);
 fwadm_opts([_ | R] , Args) ->

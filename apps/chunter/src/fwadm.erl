@@ -7,7 +7,8 @@
 -define(FWADM, "/usr/sbin/fwadm").
 -define(OPTS, [{line, 512}, binary, exit_status]).
 
--export([convert/2, build/1, add/3, delete/1, list/0, list_fifo/0]).
+-export([convert/2, build/1, add/3, delete/1, list/0, list_fifo/0,
+         list_fifo/1]).
 
 %%%===================================================================
 %%% fwadm API
@@ -74,6 +75,15 @@ list_fifo() ->
             E
     end.
 
+list_fifo(VM) ->
+    case list_fifo() of
+        {ok, L} ->
+            {ok, lists:filter(is_vm(VM), L)};
+        E ->
+            E
+    end.
+
+
 
 %%%===================================================================
 %%% Internal
@@ -91,6 +101,15 @@ extract_uuid(<<C, R/binary>>, Acc) when C =/= $\s ->
 extract_uuid(_, Acc) ->
     Acc.
 
+is_vm(VM) ->
+    fun(JSX) ->
+            case jsxd:get(<<"vm">>, JSX) of
+                {ok, VM} ->
+                    true;
+                _ ->
+                    false
+            end
+    end.
 
 is_fifo(JSX) ->
     case jsxd:get(<<"vm">>, JSX) of

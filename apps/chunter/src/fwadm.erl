@@ -7,7 +7,7 @@
 -define(FWADM, "/usr/sbin/fwadm").
 -define(OPTS, [{line, 512}, binary, exit_status]).
 
--export([convert/2, build/1, add/1, delete/1, list/0]).
+-export([convert/2, build/1, add/2, delete/1, list/0]).
 
 %%%===================================================================
 %%% fwadm API
@@ -38,10 +38,11 @@ build({Action, Src, Dst, Protocol, Ports})
     [build1(Action, Src, Dst), atom_to_list(Protocol),
      " (", build_filter(Ports), ")"].
 
-add(Rule) ->
+add(Owner, Rule) ->
     RuleB = list_to_binary(build(Rule)),
     Desc = base64:encode(term_to_binary(Rule)),
-    fwadm(["add"] ++ fwadm_opts([{desc, <<"fifo:", Desc/binary>>}], [RuleB])).
+    Args = [{owner, Owner}, {desc, <<"fifo:", Desc/binary>>}],
+    fwadm(["add"] ++ fwadm_opts(Args, [RuleB])).
 
 
 delete(UUID) ->

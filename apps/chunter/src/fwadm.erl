@@ -18,10 +18,10 @@
 %%%===================================================================
 
 convert(VM, {Action, inbound, Src, {Proto, Filter}}) ->
-    [{Action, S, {vm, VM}, Proto, Filter} || S <- convert_target(Src)];
+    [{Action, S, [{vm, VM}], Proto, Filter} || S <- convert_target(Src)];
 
 convert(VM, {Action, outbound, Dst, {Proto, Filter}}) ->
-    [{Action, {vm, VM}, D, Proto, Filter} || D <- convert_target(Dst)];
+    [{Action, [{vm, VM}], D, Proto, Filter} || D <- convert_target(Dst)];
 
 convert(VM, {Action, Dst, inbound, Src, {Proto, Filter}}) ->
     [{Action, S, D, Proto, Filter} ||

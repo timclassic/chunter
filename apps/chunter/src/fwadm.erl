@@ -42,7 +42,7 @@ build({Action, Src, Dst, Protocol, Ports})
 add(Owner, Rule) ->
     RuleB = list_to_binary(build(Rule)),
     Desc = base64:encode(term_to_binary(Rule)),
-    Args = [{owner, Owner}, {desc, <<"fifo:", Desc/binary>>}],
+    Args = [{owner, Owner}, {desc, <<"fifo:", Desc/binary>>}, enable],
     fwadm(["add"] ++ fwadm_opts(Args, [RuleB])).
 
 
@@ -65,6 +65,7 @@ fwadm(Cmd, Args) ->
     fwadm([Cmd] ++ fwadm_opts(Args, [])).
 
 fwadm(Args) ->
+    lager:info("[fwadm] ~s args: ~p", [?FWADM, Args]),
     P = erlang:open_port({spawn_executable, ?FWADM}, [{args, Args} | ?OPTS]),
     read_result(P).
 

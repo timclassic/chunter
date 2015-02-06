@@ -7,7 +7,7 @@
 -define(FWADM, "/usr/sbin/fwadm").
 -define(OPTS, [{line, 512}, binary, exit_status]).
 
--export([convert/2, build/1, add/2, delete/1, list/0]).
+-export([convert/2, build/1, add/3, delete/1, list/0, list_fifo/0]).
 
 %%%===================================================================
 %%% fwadm API
@@ -39,9 +39,9 @@ build({Action, Src, Dst, Protocol, Ports})
     [build1(Action, Src, Dst), atom_to_list(Protocol),
      " (", build_filter(Ports), ")"].
 
-add(Owner, Rule) ->
+add(Owner, VM, Rule) ->
     RuleB = list_to_binary(build(Rule)),
-    Desc = base64:encode(term_to_binary(Rule)),
+    Desc = base64:encode(term_to_binary({VM, Rule})),
     File = os:cmd("mktemp") -- "\n",
     JSON = [{description, <<"fifo:", Desc/binary>>},
             {enabled, true},
@@ -66,16 +66,36 @@ list() ->
             E
     end.
 
+list_fifo() ->
+    case fwadm:list() of
+        {ok, L} ->
+            {ok, lists:filter(fun is_fifo/1, L)};
+        E ->
+            E
+    end.
+
 
 %%%===================================================================
 %%% Internal
 %%%===================================================================
 
+is_fifo(JSX) ->
+    case jsxd:set(<<"vm">>, JSX) of
+        {ok, _} ->
+            true;
+        _ ->
+            false
+    end.
+
 convert_to_fifo(R) ->
     JSXD = jsxd:from_list(R),
     case jsxd:get(<<"description">>, JSXD) of
         {ok, <<"fifo:", Base64/binary>>} ->
-            jsxd:set(<<"rule">>, binary_to_term(base64:decode(Base64)), JSXD);
+            {VM, Rule} = binary_to_term(base64:decode(Base64)),
+            jsxd:thread([{delete, <<"description">>},
+                         {set, <<"vm">>, VM},
+                         {set, <<"rule">>, Rule}],
+                        JSXD);
         _ ->
             JSXD
     end.

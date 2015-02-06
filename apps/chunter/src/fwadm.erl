@@ -7,7 +7,7 @@
 -define(FWADM, "/usr/sbin/fwadm").
 -define(OPTS, [{line, 512}, binary, exit_status]).
 
--export([convert/2, build/1, list/0]).
+-export([convert/2, build/1, add/1, delete/1, list/0]).
 
 %%%===================================================================
 %%% fwadm API
@@ -37,6 +37,15 @@ build({Action, Src, Dst, Protocol, Ports})
   when Protocol =:= udp; Protocol =:= tcp ->
     [build1(Action, Src, Dst), atom_to_list(Protocol),
      " (", build_filter(Ports), ")"].
+
+add(Rule) ->
+    RuleB = list_to_binary(build(Rule)),
+    Desc = base64:encode(term_to_binary(Rule)),
+    fwadm(["add"] ++ fwadm_opts([{desc, <<"fifo:", Desc/binary>>}], [RuleB])).
+
+
+delete(UUID) ->
+    fwadm(["delete", UUID]).
 
 list() ->
     case fwadm("list", [json]) of

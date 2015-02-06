@@ -93,7 +93,7 @@ extract_uuid(_, Acc) ->
 
 
 is_fifo(JSX) ->
-    case jsxd:set(<<"vm">>, JSX) of
+    case jsxd:get(<<"vm">>, JSX) of
         {ok, _} ->
             true;
         _ ->

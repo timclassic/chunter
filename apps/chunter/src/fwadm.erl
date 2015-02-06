@@ -49,14 +49,14 @@ add(Owner, VM, Rule) ->
             {rule, RuleB}],
     case file:write_file(File, jsx:encode(JSON)) of
         ok ->
-            fwadm("add", [{file, File}]);
+            extract_uuid(fwadm("add", [{file, File}]));
         E ->
             E
     end.
 
 
 delete(UUID) ->
-    fwadm(["delete", UUID]).
+    extract_uuid(fwadm(["delete", UUID])).
 
 list() ->
     case fwadm("list", [json]) of
@@ -78,6 +78,19 @@ list_fifo() ->
 %%%===================================================================
 %%% Internal
 %%%===================================================================
+
+extract_uuid({ok, <<"Added rules:", Data/binary>>}) ->
+    {ok, extract_uuid(Data, <<>>)};
+extract_uuid({ok, <<"Deleted rules:", Data/binary>>}) ->
+    extract_uuid(Data, <<>>);
+extract_uuid(Res) ->
+    Res.
+
+extract_uuid(<<C, R/binary>>, Acc) when C =/= $\s ->
+    extract_uuid(R, <<Acc/binary, C>>);
+extract_uuid(_, Acc) ->
+    Acc.
+
 
 is_fifo(JSX) ->
     case jsxd:set(<<"vm">>, JSX) of

@@ -667,7 +667,15 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
 
 handle_event(update_fw, StateName, State = #state{uuid = UUID}) ->
     %% TODO: get the fw rules and do something with them
-    lager:info("[vm:~s] Updating FW rules.", [UUID]),
+    case {ls_vm:get(UUID), fwadm:list_fifo(UUID)} of
+        {{ok, VM}, {ok, OldRules}} ->
+            NewRules = ft_vm:get_fw_rules(VM),
+            {Delete, Add} = split_rules(OldRules, NewRules),
+            lager:info("[vm:~s] Updating FW rules, dding ~p deleting ~p.",
+                       [UUID, Add, Delete]);
+        _ ->
+            ok
+    end,
     {next_state, StateName, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
@@ -1395,3 +1403,24 @@ wait_for_delete(UUID) ->
             timer:sleep(1000),
             wait_for_delete(UUID)
     end.
+
+split_rules(OldRules, NewRules) ->
+    split_rules([map_rule(R) || R <- OldRules], NewRules, [], []).
+split_rules([], [], Add, Delete) ->
+    {Add, Delete};
+split_rules(OldRules, [], Add, Delete) ->
+    {Add, [UUID || {UUID, _} <- OldRules] ++ Delete};
+split_rules([], New, Add, Delete) ->
+    {New ++ Add, Delete};
+split_rules([{UUID, Rule} | OldRules], NewRules, Add, Delete) ->
+    case lists:member(Rule, NewRules) of
+        true ->
+            split_rules(OldRules, lists:delete(Rule, NewRules), Add, Delete);
+        false ->
+            split_rules(OldRules, NewRules, Add, [UUID |Delete])
+    end.
+
+map_rule(JSX) ->
+    {ok, UUID} = jsxd:get(<<"uuid">>, JSX),
+    {ok, Rule} = jsxd:get(<<"rule">>, JSX),
+    {UUID, Rule}.

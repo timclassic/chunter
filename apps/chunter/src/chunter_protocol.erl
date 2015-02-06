@@ -116,7 +116,8 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                      end),
             Now = now(),
             Transport:send(Socket, term_to_binary(Res1)),
-            lager:info("<~p> Dtrace ~p  took ~pus + ~pus + ~pus.", [Ref, Act, Time, Time1, timer:now_diff(now(), Now)])
+            lager:info("<~p> Dtrace ~p  took ~pus + ~pus + ~pus.",
+                       [Ref, Act, Time, Time1, timer:now_diff(now(), Now)])
     end,
     {noreply, State};
 
@@ -135,6 +136,10 @@ handle_info(_Info, State) ->
 
 -spec handle_message(Message::fifo:chunter_message(), State::term()) ->
                             {stop, term()} | {stop, term(), term()}.
+
+handle_message({fw, update, UUID}, State) when is_binary(UUID) ->
+    chunter_vm_fsm:update_fw(UUID),
+    {stop, State};
 
 handle_message({machines, start, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:start(UUID),

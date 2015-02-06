@@ -1,43 +1,114 @@
--module(chunter_fwadm).
+-module(fwadm).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([convert/2, build/1]).
+-define(FWADM, "/usr/sbin/fwadm").
+-define(OPTS, [{line, 512}, binary, exit_status]).
 
+-export([convert/2, build/1, list/0]).
+
+%%%===================================================================
+%%% fwadm API
+%%%===================================================================
+
+%%%===================================================================
+%%% fifo conversion
+%%%===================================================================
 
 convert(VM, {Action, inbound, Src, {Proto, Filter}}) ->
-    {Action, convert_target(Src), {vm, VM}, Proto, Filter};
+    [{Action, S, {vm, VM}, Proto, Filter} || S <- convert_target(Src)];
 
 convert(VM, {Action, outbound, Dst, {Proto, Filter}}) ->
-    {Action, {vm, VM}, convert_target(Dst), Proto, Filter}.
+    [{Action, {vm, VM}, D, Proto, Filter} || D <- convert_target(Dst)];
 
-convert_target(all) ->
-    any.
-%% convert({vm, UUID}) ->
-%% convert({cluster, UUID}) ->
-%% convert({stack, UUID}) ->
-%% convert({network, UUID}) ->
+convert(VM, {Action, Dst, inbound, Src, {Proto, Filter}}) ->
+    [{Action, S, D, Proto, Filter} ||
+        S <- convert_target(Src), D <- cervert_vm(VM, Dst)];
+
+convert(VM, {Action, Src, outbound, Dst, {Proto, Filter}}) ->
+    [{Action, S, D, Proto, Filter} ||
+        S <- cervert_vm(VM, Src), D <- convert_target(Dst)].
 
 build({Action, Src, Dst, icmp, Tags}) ->
     [build1(Action, Src, Dst), "icmp (", build_filter(Tags), ")"];
-
 build({Action, Src, Dst, Protocol, Ports})
   when Protocol =:= udp; Protocol =:= tcp ->
     [build1(Action, Src, Dst), atom_to_list(Protocol),
      " (", build_filter(Ports), ")"].
 
+list() ->
+    jsx:decode(fwadm("list", [json])).
+
+%%%===================================================================
+%%% Internal
+%%%===================================================================
+
+fwadm(Cmd, Args) ->
+    fwadm(fwadm_opts(Args, [Cmd])).
+
+fwadm(Args) ->
+    P = erlang:open_port({spawn_executable, ?FWADM}, [{args, Args} | ?OPTS]),
+    read_result(P).
+
+
+fwadm_opts([{desc, Desc} | R] , Args) ->
+    fwadm_opts(R, ["--desc", Desc | Args]);
+fwadm_opts([enable | R] , Args) ->
+    fwadm_opts(R, ["--enable" | Args]);
+fwadm_opts([global | R] , Args) ->
+    fwadm_opts(R, ["--global" | Args]);
+fwadm_opts([dryrun | R] , Args) ->
+    fwadm_opts(R, ["--dryrun" | Args]);
+fwadm_opts([{owner, UUID} | R] , Args) ->
+    fwadm_opts(R, ["--owner_uuid", UUID | Args]);
+fwadm_opts([json | R] , Args) ->
+    fwadm_opts(R, ["--json" | Args]);
+fwadm_opts([_ | R] , Args) ->
+    fwadm_opts(R,  Args);
+fwadm_opts([] , Args) ->
+    Args.
+
+read_result(P) ->
+    receive
+        {P, {data, _}} ->
+            read_result(P);
+        {P,{exit_status, 0}} -> ok;
+        {P,{exit_status, N}} -> {error, N}
+    end.
+
+convert_target({vm, _UUID}) ->
+    %% TODO: get the VM's interfaces
+    [any];
+convert_target({cluster, _UUID}) ->
+    %% TODO: get the VM's and the interfaces in the cluster
+    [any];
+convert_target({stack, _UUID}) ->
+    %% TODO: get the VM's and the interfaces in the stack
+    [any];
+convert_target({network, _UUID}) ->
+    %% TODO: get the subnets in the stack
+    [any];
+convert_target(all) ->
+    [any].
+
+cervert_vm(VM, {nic, _IFance}) ->
+    %% {ip, ...};
+    [{vm, VM}];
+cervert_vm(VM, {network, _UUID}) ->
+    %% {subnset, ...};
+    [{vm, VM}];
+cervert_vm(VM, all) ->
+    [{vm, VM}].
 
 build1(allow, Src, Dst) ->
     ["FROM (", build_targets(Src), ") TO (", build_targets(Dst), ") ALLOW "];
-
 build1(block, Src, Dst) ->
     ["FROM (", build_targets(Src), ") TO (", build_targets(Dst), ") BLOCK "].
 
 build_filter([F]) ->
     build_filter_element(F);
-
 build_filter([F | R]) ->
     [build_filter_element(F), " AND ", build_filter(R)].
 
@@ -83,6 +154,9 @@ encode_tag(<<C, R/binary>>, Acc) ->
 encode_tag(<<>>, Acc) ->
     Acc.
 
+%%%===================================================================
+%%% Tests
+%%%===================================================================
 
 -ifdef(TEST).
 

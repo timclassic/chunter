@@ -33,6 +33,7 @@
 
 -export([create/4,
          load/1,
+         update_fw/1,
          delete/1,
          transition/2,
          update/3,
@@ -113,6 +114,10 @@ load(UUID) ->
             ok
     end,
     register(UUID).
+
+update_fw(UUID) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, update_fw).
+
 
 -spec transition(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
 
@@ -659,6 +664,11 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
     end,
     wait_for_delete(UUID),
     {stop, normal, State};
+
+handle_event(update_fw, StateName, State = #state{uuid = UUID}) ->
+    %% TODO: get the fw rules and do something with them
+    lager:info("[vm:~s] Updating FW rules.", [UUID]),
+    {next_state, StateName, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
     port_command(C, Data),

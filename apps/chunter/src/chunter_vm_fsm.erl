@@ -670,7 +670,7 @@ handle_event(update_fw, StateName, State = #state{uuid = UUID}) ->
     case {ls_vm:get(UUID), fwadm:list_fifo(UUID)} of
         {{ok, VM}, {ok, OldRules}} ->
             NewRules = ft_vm:fw_rules(VM),
-            {Delete, Add} = split_rules(OldRules, NewRules),
+            {Add, Delete} = split_rules(OldRules, NewRules),
             lager:info("[vm:~s] Updating FW rules, dding ~p deleting ~p.",
                        [UUID, Add, Delete]);
         _ ->

@@ -670,9 +670,14 @@ handle_event(update_fw, StateName, State = #state{uuid = UUID}) ->
     case {ls_vm:get(UUID), fwadm:list_fifo(UUID)} of
         {{ok, VM}, {ok, OldRules}} ->
             NewRules = ft_vm:fw_rules(VM),
-            {Add, Delete} = split_rules(OldRules, NewRules),
-            lager:info("[vm:~s] Updating FW rules, dding ~p deleting ~p.",
-                       [UUID, Add, Delete]);
+            Owner = ft_vm:owner(VM),
+            NewRules1 = [fwadn:convert(UUID, R) || R <- NewRules],
+            NewRules2 = lists:flatten(NewRules1),
+            {Add, Delete} = split_rules(OldRules, NewRules2),
+            lager:info("[vm:~s(~s)] Updating FW rules, dding ~p deleting ~p.",
+                       [UUID, Owner, Add, Delete]),
+            [fwadm:add(Owner, UUID, R) || R <- Add],
+            [fwadm:delete(R) || R <- Delete];
         _ ->
             ok
     end,

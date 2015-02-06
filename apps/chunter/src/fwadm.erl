@@ -51,7 +51,7 @@ list() ->
 %%%===================================================================
 
 fwadm(Cmd, Args) ->
-    fwadm(fwadm_opts(Args, [Cmd])).
+    fwadm([Cmd] ++ fwadm_opts(Args, [])).
 
 fwadm(Args) ->
     P = erlang:open_port({spawn_executable, ?FWADM}, [{args, Args} | ?OPTS]),
@@ -80,7 +80,7 @@ read_result(P) ->
 
 read_result(P, Acc) ->
     receive
-        {P, {data, Data}} ->
+        {P, {data, {_, Data}}} ->
             read_result(P, <<Acc/binary, Data/binary>>);
         {P,{exit_status, 0}} -> {ok, Acc};
         {P,{exit_status, N}} -> {error, N, Acc}

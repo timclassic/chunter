@@ -81,7 +81,7 @@ read_result(P) ->
 read_result(P, Acc) ->
     receive
         {P, {data, Data}} ->
-            read_result(P, <<Acc/binary, Data>>);
+            read_result(P, <<Acc/binary, Data/binary>>);
         {P,{exit_status, 0}} -> {ok, Acc};
         {P,{exit_status, N}} -> {error, N, Acc}
     end.

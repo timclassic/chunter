@@ -145,7 +145,7 @@ install_image(DatasetUUID, VM) ->
             lager:debug("found.", []),
             ok;
         _ ->
-            {ok, {Host, Port, AKey, SKey, Bucket}} = libsniffle:s3(image),
+            {ok, {S3Host, S3Port, AKey, SKey, Bucket}} = libsniffle:s3(image),
             Chunk = case application:get_env(chunter, download_chunk) of
                         undefined ->
                             5242880;
@@ -153,7 +153,7 @@ install_image(DatasetUUID, VM) ->
                             S
                     end,
             {ok, Download} = fifo_s3_download:new(
-                               AKey, SKey, Host, Port, Bucket,
+                               AKey, SKey, S3Host, S3Port, Bucket,
                                DatasetUUID, [{chunk_size, Chunk}]),
             {Cmd, B} = case fifo_s3_download:get(Download) of
                            {ok, <<31:8, 139:8, _/binary>> = AB} ->

@@ -33,6 +33,7 @@
 
 -export([create/4,
          load/1,
+         update_fw/1,
          delete/1,
          transition/2,
          update/3,
@@ -113,6 +114,10 @@ load(UUID) ->
             ok
     end,
     register(UUID).
+
+update_fw(UUID) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, update_fw).
+
 
 -spec transition(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
 
@@ -659,6 +664,24 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
     end,
     wait_for_delete(UUID),
     {stop, normal, State};
+
+handle_event(update_fw, StateName, State = #state{uuid = UUID}) ->
+    %% TODO: get the fw rules and do something with them
+    case {ls_vm:get(UUID), fwadm:list_fifo(UUID)} of
+        {{ok, VM}, {ok, OldRules}} ->
+            NewRules = ft_vm:fw_rules(VM),
+            Owner = ft_vm:owner(VM),
+            NewRules1 = [fwadm:convert(UUID, R) || R <- NewRules],
+            NewRules2 = lists:flatten(NewRules1),
+            {Add, Delete} = split_rules(OldRules, NewRules2),
+            lager:info("[vm:~s(~s)] Updating FW rules, dding ~p deleting ~p.",
+                       [UUID, Owner, Add, Delete]),
+            [fwadm:add(Owner, UUID, R) || R <- Add],
+            [fwadm:delete(R) || R <- Delete];
+        _ ->
+            ok
+    end,
+    {next_state, StateName, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
     port_command(C, Data),
@@ -1385,3 +1408,24 @@ wait_for_delete(UUID) ->
             timer:sleep(1000),
             wait_for_delete(UUID)
     end.
+
+split_rules(OldRules, NewRules) ->
+    split_rules([map_rule(R) || R <- OldRules], NewRules, [], []).
+split_rules([], [], Add, Delete) ->
+    {Add, Delete};
+split_rules(OldRules, [], Add, Delete) ->
+    {Add, [UUID || {UUID, _} <- OldRules] ++ Delete};
+split_rules([], New, Add, Delete) ->
+    {New ++ Add, Delete};
+split_rules([{UUID, Rule} | OldRules], NewRules, Add, Delete) ->
+    case lists:member(Rule, NewRules) of
+        true ->
+            split_rules(OldRules, lists:delete(Rule, NewRules), Add, Delete);
+        false ->
+            split_rules(OldRules, NewRules, Add, [UUID |Delete])
+    end.
+
+map_rule(JSX) ->
+    {ok, UUID} = jsxd:get(<<"uuid">>, JSX),
+    {ok, Rule} = jsxd:get(<<"rule">>, JSX),
+    {UUID, Rule}.

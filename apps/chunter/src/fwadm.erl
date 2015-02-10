@@ -7,38 +7,13 @@
 -define(FWADM, "/usr/sbin/fwadm").
 -define(OPTS, [{line, 512}, binary, exit_status]).
 
--export([convert/2, build/1, add/3, delete/1, list/0, list_fifo/0,
+-export([convert/2, add/3, delete/1, list/0, list_fifo/0,
          list_fifo/1]).
 
+-ignore_xref([list_fifo/0]).
 %%%===================================================================
 %%% fwadm API
 %%%===================================================================
-
-%%%===================================================================
-%%% fifo conversion
-%%%===================================================================
-
-%% TODO: We should group that up to 20 later on.
-convert(VM, {Action, inbound, Src, {Proto, Filter}}) ->
-    [{Action, [S], [{vm, VM}], Proto, Filter} || S <- convert_target(Src)];
-
-convert(VM, {Action, outbound, Dst, {Proto, Filter}}) ->
-    [{Action, [{vm, VM}], [D], Proto, Filter} || D <- convert_target(Dst)];
-
-convert(VM, {Action, Dst, inbound, Src, {Proto, Filter}}) ->
-    [{Action, [S], [D], Proto, Filter} ||
-        S <- convert_target(Src), D <- cervert_vm(VM, Dst)];
-
-convert(VM, {Action, Src, outbound, Dst, {Proto, Filter}}) ->
-    [{Action, [S], [D], Proto, Filter} ||
-        S <- cervert_vm(VM, Src), D <- convert_target(Dst)].
-
-build({Action, Src, Dst, icmp, Tags}) ->
-    [build1(Action, Src, Dst), "icmp (", build_filter(Tags), ")"];
-build({Action, Src, Dst, Protocol, Ports})
-  when Protocol =:= udp; Protocol =:= tcp ->
-    [build1(Action, Src, Dst), atom_to_list(Protocol),
-     " (", build_filter(Ports), ")"].
 
 add(Owner, VM, Rule) ->
     RuleB = list_to_binary(build(Rule)),
@@ -83,7 +58,31 @@ list_fifo(VM) ->
             E
     end.
 
+%%%===================================================================
+%%% fifo conversion
+%%%===================================================================
 
+%% TODO: We should group that up to 20 later on.
+convert(VM, {Action, inbound, Src, {Proto, Filter}}) ->
+    [{Action, [S], [{vm, VM}], Proto, Filter} || S <- convert_target(Src)];
+
+convert(VM, {Action, outbound, Dst, {Proto, Filter}}) ->
+    [{Action, [{vm, VM}], [D], Proto, Filter} || D <- convert_target(Dst)];
+
+convert(VM, {Action, Dst, inbound, Src, {Proto, Filter}}) ->
+    [{Action, [S], [D], Proto, Filter} ||
+        S <- convert_target(Src), D <- cervert_vm(VM, Dst)];
+
+convert(VM, {Action, Src, outbound, Dst, {Proto, Filter}}) ->
+    [{Action, [S], [D], Proto, Filter} ||
+        S <- cervert_vm(VM, Src), D <- convert_target(Dst)].
+
+build({Action, Src, Dst, icmp, Tags}) ->
+    [build1(Action, Src, Dst), "icmp (", build_filter(Tags), ")"];
+build({Action, Src, Dst, Protocol, Ports})
+  when Protocol =:= udp; Protocol =:= tcp ->
+    [build1(Action, Src, Dst), atom_to_list(Protocol),
+     " (", build_filter(Ports), ")"].
 
 %%%===================================================================
 %%% Internal

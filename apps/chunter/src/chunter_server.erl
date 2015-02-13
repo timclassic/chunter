@@ -23,6 +23,7 @@
          update_mem/0,
          reserve_mem/1,
          service_action/2,
+         kvm_mem/0,
          disconnect/0]).
 
 
@@ -50,6 +51,7 @@
                 reserved_memory = 0,
                 nsq = false,
                 provisioned_memory = 0,
+                kvm_mem = 1024,
                 tick = 0}).
 
 %%%===================================================================
@@ -78,6 +80,9 @@ reserve_mem(N) ->
 
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
+
+kvm_mem() ->
+    gen_server:call(?SERVER, kvm_mem).
 
 service_action(Action, Service)
   when Action =:= enable;
@@ -150,13 +155,24 @@ init([]) ->
                       {ok, Mem} ->
                           Mem / (1024*1024)
                   end,
+    KVMMem =
+        try
+            MemStr = os:cmd("NODE_PATH=$NODE_PATH:/usr/vm/node_modules/ "
+                            "/usr/node/bin/node -e "
+                            "'console.log(require(\"VM\").KVM_MEM_OVERHEAD)'"),
+            list_to_integer(MemStr -- "\n")
+        catch
+            _:_ ->
+                1024
+        end,
 
     {ok, #state{
             reserved_memory = ReservedMem,
             sysinfo = SysInfo,
             name = Host,
             capabilities = Capabilities,
-            nsq = NSQ
+            nsq = NSQ,
+            kvm_mem = KVMMem
            }}.
 
 
@@ -174,6 +190,8 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(kvm_mem, _From, State) ->
+    {reply, State#state.kvm_mem, State};
 
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
     %%    statsderl:increment([Name, ".call.unknown"], 1, 1.0),

@@ -155,7 +155,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                              end,
                     Base02 = jsxd:thread([{set, <<"ram">>, Ram},
                                           {set, <<"brand">>, <<"kvm">>},
-                                          {set, <<"max_physical_memory">>, Ram + 1024},
+                                          {set, <<"max_physical_memory">>,
+                                           Ram + chunter_server:kvm_mem()},
                                           {set, [<<"disks">>, 0, <<"boot">>], true},
                                           %% Hack for dataset bug that image size is handled a string
                                           {set, [<<"disks">>, 0, <<"image_size">>],

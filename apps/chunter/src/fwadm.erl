@@ -7,8 +7,10 @@
 -define(FWADM, "/usr/sbin/fwadm").
 -define(OPTS, [{line, 512}, binary, exit_status]).
 
--export([convert/2, add/3, delete/1, list/0, list_fifo/0,
-         list_fifo/1]).
+-export([convert/2, add/3, delete/1,
+         list/0, list/1,
+         list_fifo/0, list_fifo/1,
+         start/1, stop/1]).
 
 -ignore_xref([list_fifo/0]).
 %%%===================================================================
@@ -42,6 +44,14 @@ list() ->
             E
     end.
 
+list(VM) ->
+    case list() of
+        {ok, L} ->
+            {ok, lists:filter(is_vm(VM), L)};
+        E ->
+            E
+    end.
+
 list_fifo() ->
     case fwadm:list() of
         {ok, L} ->
@@ -58,6 +68,12 @@ list_fifo(VM) ->
             E
     end.
 
+
+start(VM) ->
+    fwadm("start", [VM]).
+
+stop(VM) ->
+    fwadm("stop", [VM]).
 %%%===================================================================
 %%% fifo conversion
 %%%===================================================================
@@ -155,6 +171,8 @@ fwadm_opts([{file, File} | R] , Args) ->
     fwadm_opts(R, ["-f", File | Args]);
 fwadm_opts([json | R] , Args) ->
     fwadm_opts(R, ["--json" | Args]);
+fwadm_opts([B | R] , Args) when is_binary(B) ->
+    fwadm_opts(R,  [B | Args]);
 fwadm_opts([_ | R] , Args) ->
     fwadm_opts(R,  Args);
 fwadm_opts([] , Args) ->

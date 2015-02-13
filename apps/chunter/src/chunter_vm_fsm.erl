@@ -240,6 +240,7 @@ init([UUID]) ->
     timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
     %% timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second don't need this any longer?
     snapshot_sizes(UUID),
+    update_fw(UUID),
     NSQ = case application:get_env(nsq_producer) of
               {ok, _} ->
                   true;
@@ -599,6 +600,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             ls_vm:set_config(UUID, SniffleData),
             State1 = State#state{type = Type},
             change_state(State1#state.uuid, atom_to_binary(StateName), false),
+            update_fw(UUID),
             {next_state, StateName, State1#state{services = []}}
     end;
 
@@ -650,6 +652,7 @@ handle_event({update, Package, Config}, StateName,
 handle_event(remove, _StateName, State) ->
     lager:debug("[~s] Calling remove.", [State#state.uuid]),
     ls_vm:unregister(State#state.uuid),
+    %% TODO: Delete all FW rules for this vm?
     {stop, normal, State};
 
 handle_event(delete, _StateName, State = #state{uuid = UUID}) ->

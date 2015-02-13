@@ -677,7 +677,15 @@ handle_event(update_fw, StateName, State = #state{uuid = UUID}) ->
             lager:info("[vm:~s(~s)] Updating FW rules, dding ~p deleting ~p.",
                        [UUID, Owner, Add, Delete]),
             [fwadm:add(Owner, UUID, R) || R <- Add],
-            [fwadm:delete(R) || R <- Delete];
+            [fwadm:delete(R) || R <- Delete],
+            case fwadm:list(UUID) of
+                {ok, []} ->
+                    fwadm:stop(UUID);
+                {ok, _} ->
+                    fwadm:start(UUID);
+                _ ->
+                    ok
+            end;
         _ ->
             ok
     end,

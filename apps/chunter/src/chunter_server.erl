@@ -23,6 +23,7 @@
          update_mem/0,
          reserve_mem/1,
          service_action/2,
+         kvm_mem/0,
          disconnect/0]).
 
 
@@ -78,6 +79,18 @@ reserve_mem(N) ->
 
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
+
+kvm_mem() ->
+    try
+        MemStr = os:cmd("NODE_PATH=$NODE_PATH:/usr/vm/node_modules/ "
+                        "/usr/node/bin/node -e "
+                        "'console.log(require(\"VM\").KVM_MEM_OVERHEAD)'"),
+        list_to_integer(MemStr -- "\n")
+    catch
+        _:_ ->
+            1024
+    end.
+
 
 service_action(Action, Service)
   when Action =:= enable;
@@ -150,7 +163,6 @@ init([]) ->
                       {ok, Mem} ->
                           Mem / (1024*1024)
                   end,
-
     {ok, #state{
             reserved_memory = ReservedMem,
             sysinfo = SysInfo,
@@ -174,7 +186,6 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-
 handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
     %%    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
     lager:info([{fifo_component, chunter}],

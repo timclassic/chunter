@@ -1,7 +1,7 @@
 #!/bin/bash
 ETC=/opt/chunter/etc
 
-set -- `getopt bu: $*`
+set -- `getopt b:v:uf $*`
 if [ $? != 0 ]
 then
     cat <<EOF
@@ -66,7 +66,7 @@ LATEST_VER=$(sed -e 's/\n//' /tmp/chunter.version)
 
 ## If no target version is set and we do not upgrade then our
 ## target version is the same as the current base version.
-if [ "x${TARGET_VER}x" = "xx" -a "${UPGRADE}" -nq "1" ]
+if [ "x${TARGET_VER}x" = "xx" -a "${UPGRADE}" != "1" ]
 then
     TARGET_VER="${CUR_BASE}"
 fi

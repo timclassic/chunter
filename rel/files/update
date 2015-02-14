@@ -43,7 +43,7 @@ done
 
 case $BRANCH in
     dev)
-        if [ "x${TARGET_VER}x" -ne "xx" ]
+        if [ "x${TARGET_VER}x" != "xx" ]
         then
             echo "Error: -v is only supported for relase!"
         fi
@@ -56,7 +56,7 @@ case $BRANCH in
 esac
 
 BASE=http://release.project-fifo.net/chunter/${BRANCH}
-curl -s ${BASE}/chunter.version > /tmp/chunter.version
+curl -sL ${BASE}/chunter.version > /tmp/chunter.version
 
 CUR_VER=$(sed -e 's/\n//' ${ETC}/chunter.version)
 CUR_BASE=$(echo "${CUR_VER}"  | sed -e 's/p.*$//')
@@ -66,29 +66,29 @@ LATEST_VER=$(sed -e 's/\n//' /tmp/chunter.version)
 
 ## If no target version is set and we do not upgrade then our
 ## target version is the same as the current base version.
-if [ "x${TARGET_VER}x" -eq "xx" -a "${UPGRADE}" -nq "1" ]
+if [ "x${TARGET_VER}x" = "xx" -a "${UPGRADE}" -nq "1" ]
 then
     TARGET_VER="${CUR_BASE}"
 fi
 
 ## If we are on the dev branch we always update to latest.
-if [ "${BRANCH}" -eq "dev" ]
+if [ "${BRANCH}" = "dev" ]
 
 then
     CHUNTER_VER="latest"
     ## We check if a target version is set either manually or implictly if so
     ## we use that version to see if ther is new data
-elif [ "x${TARGET_VER}x" -ne "xx" ]
+elif [ "x${TARGET_VER}x" != "xx" ]
 then
-    CHUNTER_VER=$(curl "${BASE}" | sed -e 's/<a href="//' -e 's/\.gz".*//' | grep "^chunter-${TARGET_VER}" | sed -e 's/^chunter-//' | tail -n 1)
-    if [ "x${CHUNTER_VER}x" -eq "xx" ]
+    CHUNTER_VER=$(curl -sL "${BASE}" | sed -e 's/<a href="//' -e 's/\.gz".*//' | grep "^chunter-${TARGET_VER}" | sed -e 's/^chunter-//' | tail -n 1)
+    if [ "x${CHUNTER_VER}x" = "xx" ]
     then
         echo "No package for version $TARGET_VER found."
         exit 1
     fi
     ## If no target version was set we expect a it to be a upgrade and upgade to
     ## latest.
-elif [ "${UPGRADE}" -eq "1" ]
+elif [ "${UPGRADE}" = "1" ]
 then
     CHUNTER_VER="latest"
 else
@@ -98,7 +98,7 @@ fi
 
 
 ## Now we see if we need to download a new version
-if [ "${CUR_VER}" -eq "${CHUNTER_VER}" ]
+if [ "${CUR_VER}" = "${CHUNTER_VER}" ]
 then
     echo "No updates availalbe."
     exit 0

@@ -267,7 +267,7 @@ generate_spec(Package, Dataset, OwnerData) ->
 
 create_update(_, undefined, Config) ->
     KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>,
-                <<"add_nics">>, <<"update_nics">>, <<"autoboot">>,
+                <<"add_nics">>, <<"update_nics">>, <<"autoboot">>, <<"owner">>,
                 <<"max_swap">>, <<"set_routes">>, <<"remove_routes">>],
     MDataFun = fun (<<"ssh_keys">>, V, Obj) ->
                        jsxd:set([<<"set_customer_metadata">>,

@@ -109,8 +109,8 @@ fi
 (
     cd /opt;
     curl -O ${BASE}/${FILE}.gz &&
-        gunzip -f ${CHUNTER_VER}.gz &&
-        sh ${CHUNTER_VER} ${FORCE} &&
+        gunzip -f ${FILE}.gz &&
+        sh ${FILE} ${FORCE} &&
         svcadm restart chunter &&
         echo "Chunter was updated" ||
             echo "Chunter update failed, sorry you will have to look into that." && exit 1

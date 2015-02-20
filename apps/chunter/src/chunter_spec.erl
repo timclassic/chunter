@@ -292,15 +292,18 @@ create_update(_, undefined, Config) ->
                                         V, Obj)
                        end
                end,
-        Result = jsxd:fold(MDataFun, jsxd:select(KeepKeys, Config), Config),
-    R1 = jsxd:update([<<"add_nics">>],
-                     fun(Ns) ->
-                             [jsxd:update([<<"model">>],
-                                          fun(D) ->
-                                                  D
-                                          end, <<"virtio">>, N) ||
-                                 N <- Ns]
-                     end, [], Result),
+    Result = jsxd:fold(MDataFun, jsxd:select(KeepKeys, Config), Config),
+    R1 = case jsxd:get(<<"add_nics">>, Result) of
+             {ok, Nics} ->
+                 Nics1 = [jsxd:update([<<"model">>],
+                                      fun(D) ->
+                                              D
+                                      end, <<"virtio">>, N) ||
+                             N <- Nics],
+                 jsxd:set(<<"add_nics">>, Nics1, Result);
+             _ ->
+                 Result
+         end,
     lager:debug("Generated update: ~s.~n", [jsx:encode(R1)]),
     R1;
 

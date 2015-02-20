@@ -268,7 +268,7 @@ generate_spec(Package, Dataset, OwnerData) ->
 
 create_update(_, undefined, Config) ->
     KeepKeys = [<<"resolvers">>, <<"hostname">>, <<"alias">>, <<"remove_nics">>,
-                <<"add_nics">>, <<"update_nics">>, <<"autoboot">>, <<"owner">>,
+                <<"add_nics">>, <<"update_nics">>, <<"autoboot">>,
                 <<"max_swap">>, <<"set_routes">>, <<"remove_routes">>],
     MDataFun = fun (<<"ssh_keys">>, V, Obj) ->
                        jsxd:set([<<"set_customer_metadata">>,
@@ -281,6 +281,8 @@ create_update(_, undefined, Config) ->
                    (<<"note">>, V, Obj) ->
                        jsxd:set([<<"set_internal_metadata">>, <<"note">>],
                                 V, Obj);
+                   (<<"owner">>, V, Obj) ->
+                       jsxd:set([<<"owner_uuid">>], V, Obj);
                    (K, V, Obj) ->
                        case re:run(K, "_pw$") of
                            nomatch ->

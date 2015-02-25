@@ -194,11 +194,6 @@ read_result(P, Acc) ->
         {P,{exit_status, N}} -> {error, N, Acc}
     end.
 
-convert_target({ip, IP}) ->
-    [ft_iprange:to_bin(IP)];
-
-convert_target({subnet, Network, Mask}) ->
-    [list_to_binary([ft_iprange:to_bin(Network), $/, integer_to_list(Mask)])];
 convert_target({vm, _UUID}) ->
     %% TODO: get the VM's interfaces
     [any];
@@ -211,6 +206,13 @@ convert_target({stack, _UUID}) ->
 convert_target({network, _UUID}) ->
     %% TODO: get the subnets in the stack
     [any];
+%% Those are the supported targets so far
+convert_target({ip, IP}) ->
+    [{ip, IP}];
+
+convert_target({subnet, Network, Mask}) ->
+    [{subnet, Network, Mask}];
+
 convert_target(all) ->
     [any].
 

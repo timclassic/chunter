@@ -6,10 +6,10 @@ if [ $? != 0 ]
 then
     cat <<EOF
 update [-u] [-b dev|rel]
-  -u              will force a upgrade over versions
-  -b dev|rel      selects a specific branch
-  -v <version>    selects which version to install, only valid for rel branch, implies -u
-  -f              forces the update (no prompt for not supported versions)
+  -u              Forces a upgrade, will jump to a new versions.
+  -b dev|rel      Selects a specific branch.
+  -v <version>    Selects which version to install. Only valid for rel branch, implies -u!
+  -f              Forces the update (no prompt for not supported SmartOS versions)
 EOF
     exit 2
 fi

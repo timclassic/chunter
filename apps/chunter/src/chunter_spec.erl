@@ -249,7 +249,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                                                V, Obj)
                               end
                       end, Base1, OwnerData),
-    Result = case jsxd:get(<<"networks">>, Dataset) of
+    Result = case jsxd:get(<<"networks">>, OwnerData) of
                  {ok, Nics} ->
                      jsxd:thread([{set, <<"nics">>, Nics},
                                   {set, [<<"nics">>, 0, <<"primary">>], true}],
@@ -514,14 +514,14 @@ metadata_test() ->
 
 nics_test() ->
     InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10},{<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>},
-                          {<<"networks">>, [[{<<"ip">>, <<"127.0.0.1">>},
-                                             {<<"nic_tag">>, <<"admin">>}]]}]),
+    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
     InD1 = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>},
                            {<<"networks">>, [[{<<"ip">>, <<"127.0.0.1">>},
                                               {<<"nic_tag">>, <<"admin">>},
                                               {<<"primary">>, true}]]}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
+                          {<<"networks">>, [[{<<"ip">>, <<"127.0.0.1">>},
+                                             {<<"nic_tag">>, <<"admin">>}]]}]),
     In = apply_defaults(InP, InD1, InO),
     Expected = to_sniffle(to_vmadm(InP, InD, InO)),
     ?assertEqual(In, Expected).

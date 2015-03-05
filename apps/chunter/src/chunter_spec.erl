@@ -143,6 +143,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                          {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare, Package)},
                          {set, [<<"internal_metadata">>, <<"package">>],
                           jsxd:get(<<"uuid">>, <<"-">>, Package)},
+                         {set, [<<"package_name">>],
+                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
                          {set, <<"cpu_cap">>, jsxd:get([<<"cpu_cap">>], 100, Package)},
                          {merge, jsxd:select([<<"nic_driver">>,
                                               <<"disk_driver">>], Dataset)}],

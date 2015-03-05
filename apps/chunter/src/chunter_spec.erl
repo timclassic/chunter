@@ -515,7 +515,6 @@ nics_test() ->
                                          {<<"nic_tag">>, <<"admin">>}]]}]),
     In = apply_defaults(InP, InD1, InO),
     Expected = to_sniffle(to_vmadm(InP, InD, InO)),
-    io:format(user, "~p~n~p~n", [In, Expected]),
     ?assertEqual(In, Expected).
 
 apply_defaults(InP, InD, InO) ->

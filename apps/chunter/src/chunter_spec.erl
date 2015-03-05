@@ -130,7 +130,9 @@ generate_spec(Package, Dataset, OwnerData) ->
     RamShare = round(1024*RamPerc),
     MaxSwap = jsxd:get(<<"max_swap">>, Ram*2, Package),
     MaxSwap1 = erlang:max(256, MaxSwap),
-    Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>, <<"routes">>]},
+    Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>, <<"routes">>,
+                                   <<"nics">>]},
+                         {set, [<<"nics">>, 0, <<"primary">>], true},
                          {set, <<"autoboot">>,
                           jsxd:get(<<"autoboot">>, true,  OwnerData)},
                          {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
@@ -140,6 +142,8 @@ generate_spec(Package, Dataset, OwnerData) ->
                           jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>,  OwnerData)},
                          {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare, Package)},
                          {set, [<<"internal_metadata">>, <<"package">>],
+                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
+                         {set, [<<"package_name">>],
                           jsxd:get(<<"uuid">>, <<"-">>, Package)},
                          {set, <<"cpu_cap">>, jsxd:get([<<"cpu_cap">>], 100, Package)},
                          {merge, jsxd:select([<<"nic_driver">>,
@@ -222,41 +226,33 @@ generate_spec(Package, Dataset, OwnerData) ->
                             Base12
                     end
             end,
-    Base2 = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
-                              jsxd:set([<<"customer_metadata">>,
-                                        <<"root_authorized_keys">>], V, Obj);
-                          (<<"resolvers">>, V, Obj) ->
-                              jsxd:set(<<"resolvers">>, V, Obj);
-                          (<<"hostname">>, V, Obj) ->
-                              jsxd:set(<<"hostname">>, V, Obj);
-                          (<<"metadata">>, V, Obj) ->
-                              jsxd:update(<<"customer_metadata">>,
-                                          fun(M) ->
-                                                  jsxd:merge(M, V)
-                                          end, V, Obj);
-                          (<<"note">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>, <<"note">>],
-                                       V, Obj);
-                          (<<"network_map">>, V, Obj) ->
-                              jsxd:set([<<"internal_metadata">>,
-                                        <<"network_map">>], V, Obj);
-                          (K, V, Obj) ->
-                              case re:run(K, "_pw$") of
-                                  nomatch ->
-                                      Obj;
-                                  _ ->
-                                      jsxd:set([<<"internal_metadata">>, K],
-                                               V, Obj)
-                              end
-                      end, Base1, OwnerData),
-    Result = case jsxd:get(<<"networks">>, Dataset) of
-                 {ok, Nics} ->
-                     jsxd:thread([{set, <<"nics">>, Nics},
-                                  {set, [<<"nics">>, 0, <<"primary">>], true}],
-                                 Base2);
-                 _ ->
-                     Base2
-             end,
+    Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
+                               jsxd:set([<<"customer_metadata">>,
+                                         <<"root_authorized_keys">>], V, Obj);
+                           (<<"resolvers">>, V, Obj) ->
+                               jsxd:set(<<"resolvers">>, V, Obj);
+                           (<<"hostname">>, V, Obj) ->
+                               jsxd:set(<<"hostname">>, V, Obj);
+                           (<<"metadata">>, V, Obj) ->
+                               jsxd:update(<<"customer_metadata">>,
+                                           fun(M) ->
+                                                   jsxd:merge(M, V)
+                                           end, V, Obj);
+                           (<<"note">>, V, Obj) ->
+                               jsxd:set([<<"internal_metadata">>, <<"note">>],
+                                        V, Obj);
+                           (<<"network_map">>, V, Obj) ->
+                               jsxd:set([<<"internal_metadata">>,
+                                         <<"network_map">>], V, Obj);
+                           (K, V, Obj) ->
+                               case re:run(K, "_pw$") of
+                                   nomatch ->
+                                       Obj;
+                                   _ ->
+                                       jsxd:set([<<"internal_metadata">>, K],
+                                                V, Obj)
+                               end
+                       end, Base1, OwnerData),
     lager:debug("Converted ~p / ~p / ~p to: ~p.",
                 [Package, Dataset, OwnerData, Result]),
     Result.
@@ -514,14 +510,11 @@ metadata_test() ->
 
 nics_test() ->
     InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10},{<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>},
-                          {<<"networks">>, [[{<<"ip">>, <<"127.0.0.1">>},
-                                             {<<"nic_tag">>, <<"admin">>}]]}]),
-    InD1 = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>},
-                           {<<"networks">>, [[{<<"ip">>, <<"127.0.0.1">>},
-                                              {<<"nic_tag">>, <<"admin">>},
-                                              {<<"primary">>, true}]]}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
+    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
+    InD1 = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
+    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
+                          {<<"nics">>, [[{<<"ip">>, <<"127.0.0.1">>},
+                                         {<<"nic_tag">>, <<"admin">>}]]}]),
     In = apply_defaults(InP, InD1, InO),
     Expected = to_sniffle(to_vmadm(InP, InD, InO)),
     ?assertEqual(In, Expected).
@@ -537,6 +530,9 @@ apply_defaults(InP, InD, InO) ->
                  {delete, <<"name">>},
                  {set, <<"package">>, <<"p">>},
                  {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
+                 {set, <<"networks">>, jsxd:get(<<"nics">>, [], InO)},
+                 {set, [<<"networks">>, 0, <<"primary">>], true},
+                 {delete, <<"nics">>},
                  {merge, InD1},
                  {set, <<"dataset">>, Dataset},
                  {set, <<"cpu_shares">>, 0},

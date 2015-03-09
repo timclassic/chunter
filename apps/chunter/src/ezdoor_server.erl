@@ -87,7 +87,7 @@ init([]) ->
 %%--------------------------------------------------------------------
 handle_call({add, Module, ZoneUUID, DoorName}, {From, _},
             State = #state{port = Port, doors = Doors}) ->
-    lager:info("[ezdoor] Requesting door for ~s/~s", [ZoneUUID, DoorName]),
+    %%lager:info("[ezdoor] Requesting door for ~s/~s", [ZoneUUID, DoorName]),
     case zdoor_exists(ZoneUUID, DoorName, Doors) of
         true ->
             %%lager:info("[ezdoor] ~s/~s already exists.", [ZoneUUID, DoorName]),

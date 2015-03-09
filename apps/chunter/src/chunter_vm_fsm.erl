@@ -904,6 +904,7 @@ handle_info(get_info, stopped, State) ->
 handle_info(get_info, StateName, State=#state{type=zone}) ->
     State1 = init_console(State),
     State2 = ensure_zonedoor(State1),
+    timer:send_after(1000, get_info),
     {next_state, StateName, State2};
 
 handle_info(get_info, StateName, State=#state{type=kvm}) ->

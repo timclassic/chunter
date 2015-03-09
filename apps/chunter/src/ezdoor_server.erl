@@ -90,7 +90,7 @@ handle_call({add, Module, ZoneUUID, DoorName}, {From, _},
     lager:info("[ezdoor] Requesting door for ~s/~s", [ZoneUUID, DoorName]),
     case zdoor_exists(ZoneUUID, DoorName, Doors) of
         true ->
-            lager:info("[ezdoor] ~s/~s already exists.", [ZoneUUID, DoorName]),
+            %%lager:info("[ezdoor] ~s/~s already exists.", [ZoneUUID, DoorName]),
             {reply, {error, doublicate}, State};
         false ->
             Ref = make_ref(),

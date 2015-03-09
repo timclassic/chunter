@@ -59,8 +59,6 @@ addVMDoor(char *zoneID, char *doorName, char *doorBiscuit)
 		(void) fprintf(stderr, "Out of memory?\n");
 		return;
 	}
-	(void) fprintf(stderr, "[zonedoor:%s] opening door '%s' in zone %s.\n",
-	    doorBiscuit, doorName, zoneID);
 	switch (zdoor_open(zdid, zoneID, doorName, doorBiscuit, server)) {
 	case 0:
 		return;
@@ -86,8 +84,6 @@ addVMDoor(char *zoneID, char *doorName, char *doorBiscuit)
 	(void) fprintf(stderr,
 	    "Error [zonedoor] opening door '%s' in zone %s: %s.\n",
 	    doorName, zoneID, err);
-	//  printf("ok\n"); //no sure if responce is necessary. right now chunter_vm_auth does not handle it.
-	//  fflush(stdout);
 	free(doorBiscuit);
 }
 

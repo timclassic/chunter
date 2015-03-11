@@ -709,7 +709,7 @@ handle_event({console, link, _Pid}, StateName, State) ->
 
 handle_event({door, _Ref, down}, StateName,
              State = #state{auth_ref=_Ref, uuid=UUID}) ->
-    lager:warning("[vm:~s] auth door down!", [UUID]),
+    lager:warning("[vm:~s] door down!", [UUID]),
     timer:send_after(1000, {init, zonedoor}),
     {next_state, StateName, State#state{auth_ref = undefined}};
 
@@ -891,20 +891,20 @@ handle_info({_C,{exit_status, Status}}, StateName,
     lager:warning("[console:~s] Exited with status: ~p",
                   [State#state.uuid, Status]),
     timer:send_after(1000, {init, console}),
-    {next_state, StateName, State};
+    {next_state, StateName, State#state{console = undefined}};
 
 handle_info({'EXIT', _C, PosixCode}, stopped,
             State = #state{console = _C, type=zone}) ->
     lager:warning("[console:~s] Exited with status ~p but vm in stopped.",
                   [State#state.uuid, PosixCode]),
-    {next_state, stopped, State};
+    {next_state, stopped, State#state{console = undefined}};
 
 handle_info({'EXIT', _C, PosixCode}, StateName,
             State = #state{console = _C, type=zone}) ->
     lager:warning("[console:~s] Exited with code: ~p",
                   [State#state.uuid, PosixCode]),
     timer:send_after(1000, {init, console}),
-    {next_state, StateName, State};
+    {next_state, StateName, State#state{console = undefined}};
 
 handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
     {next_state, StateName, State};
@@ -997,7 +997,7 @@ terminate(Reason, StateName,
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
                   [UUID, StateName, Reason]),
     lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
-    case erlang:port_info(State#state.console) of
+    case State#state.console of
         undefined ->
             lager:debug("[terminate:~s] console not running.", [UUID]),
             ok;
@@ -1031,7 +1031,7 @@ incinerate(Port) ->
     os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
 
 init_console(State) ->
-    case erlang:port_info(State#state.console) of
+    case State#state.console of
         undefined ->
             [{_, Name, _, _, _, _}] = zoneadm(State#state.uuid),
             Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -C " ++ binary_to_list(Name),

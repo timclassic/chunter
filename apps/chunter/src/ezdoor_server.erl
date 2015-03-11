@@ -162,8 +162,9 @@ handle_info({'EXIT', _Port, Reason},
         #door{ref=Ref, zone=UUID, door=Door} <- Doors],
     {noreply, State#state{port = DoorPort}};
 
-handle_info({'DOWN', MRef, _Type, _Object, _Info},
+handle_info({'DOWN', MRef, _Type, _Object, _Info} = Msg,
             State = #state{doors = Doors, port = Port}) ->
+    lager:error("[zonedoor] Client down: ~p", [Msg]),
     Doors1 = [D || D<-Doors, D#door.monitor /= MRef],
     [port_command(Port, [$d, Zone, $\s, Door, $\n])
      || #door{zone=Zone, door=Door, monitor=AMRef}<-Doors, AMRef == MRef],

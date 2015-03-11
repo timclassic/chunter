@@ -10,10 +10,8 @@ cp-hooks:
 apps/chunter/priv/zonedoor: utils/zonedoor.c
 	gcc -lzdoor utils/zonedoor.c -o apps/chunter/priv/zonedoor
 
-fifo: utils/fifo.c
-	gcc utils/fifo.c -o fifo
-
-zonedoor: apps/chunter/priv/zonedoor fifo
+apps/chunter/priv/runpty: utils/runpty.c
+	gcc utils/runpty.c -o apps/chunter/priv/runpty
 
 version:
 	echo "$(shell git symbolic-ref HEAD 2> /dev/null | cut -b 12-)-$(shell git log --pretty=format:'%h, %ad' -1)" > chunter.version
@@ -25,7 +23,7 @@ version_header: version
 package: rel
 	make -C rel/pkg package
 
-compile: zonedoor version_header
+compile: apps/chunter/priv/runpty apps/chunter/priv/zonedoor version_header
 	$(REBAR) compile
 
 deps:

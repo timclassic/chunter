@@ -9,16 +9,16 @@
  * i.e.: ./zonedoor <uuid> _joyent_sshd_key_is_authorized
  * gets: /zones/<uuid>/root/var/tmp/._joyent_sshd_key_is_authorized
  */
- 
+
 /*
  * protocol:
  * All data are newline terminated and space sperated commands
- * 
+ *
  * Erlang                                            C
  * a<zone-uuid> <doorname> <cookie>         ->       // creates a new zone door in zone <zone-uuid> as the file <doorname>
  * d<zone-uuid> <doorname>                  ->       // deletes the given zone door
  * h                                        ->       // heartbeet to ensure the c program shuts down in the case the communication with erlang fails
- * 
+ *
  * //sends a message to the erlang process  <-       <cookie> <message(might include spaces)>
  * r<reply(might include spaces)>           ->       //sends a reply to the last request gotten
  */
@@ -59,8 +59,6 @@ addVMDoor(char *zoneID, char *doorName, char *doorBiscuit)
 		(void) fprintf(stderr, "Out of memory?\n");
 		return;
 	}
-	(void) fprintf(stderr, "[zonedoor:%s] opening door '%s' in zone %s.\n",
-	    doorBiscuit, doorName, zoneID);
 	switch (zdoor_open(zdid, zoneID, doorName, doorBiscuit, server)) {
 	case 0:
 		return;
@@ -86,8 +84,6 @@ addVMDoor(char *zoneID, char *doorName, char *doorBiscuit)
 	(void) fprintf(stderr,
 	    "Error [zonedoor] opening door '%s' in zone %s: %s.\n",
 	    doorName, zoneID, err);
-	//  printf("ok\n"); //no sure if responce is necessary. right now chunter_vm_auth does not handle it.
-	//  fflush(stdout);
 	free(doorBiscuit);
 }
 

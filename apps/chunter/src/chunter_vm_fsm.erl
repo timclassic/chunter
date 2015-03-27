@@ -253,7 +253,7 @@ preloading(_, State = #state{uuid = UUID}) ->
     snapshot_sizes(UUID),
     update_fw(UUID),
     register(UUID),
-    {state, initialized, State#state{hypervisor = Hypervisor}}.
+    {next_state, initialized, State#state{hypervisor = Hypervisor}}.
 
 %%--------------------------------------------------------------------
 %% @private

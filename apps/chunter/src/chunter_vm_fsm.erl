@@ -18,6 +18,7 @@
 %% API
 -export([start_link/1, door_event/3]).
 -ignore_xref([start_link/1,
+              preloading/2,
               initialized/2,
               creating/2,
               loading/2,
@@ -56,7 +57,8 @@
          code_change/4]).
 
 %% This functions have to be exported but are only used internally.
--export([initialized/2,
+-export([preloading/2,
+         initialized/2,
          creating/2,
          loading/2,
          stopped/2,
@@ -225,6 +227,16 @@ start_link(UUID) ->
 %%--------------------------------------------------------------------
 init([UUID]) ->
     process_flag(trap_exit, true),
+    NSQ = case application:get_env(nsq_producer) of
+              {ok, _} ->
+                  true;
+              _ ->
+                  false
+          end,
+    {ok, preloading, #state{uuid = UUID, nsq = NSQ}, 0}.
+
+
+preloading(_, State = #state{uuid = UUID}) ->
     {Hypervisor, _, _} = chunter_server:host_info(),
     ls_vm:register(UUID, Hypervisor),
     SnapshotIVal = application:get_env(chunter, snapshot_update_interval, 900000),
@@ -233,13 +245,7 @@ init([UUID]) ->
     timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
     %% timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second don't need this any longer?
     snapshot_sizes(UUID),
-    NSQ = case application:get_env(nsq_producer) of
-              {ok, _} ->
-                  true;
-              _ ->
-                  false
-          end,
-    {ok, initialized, #state{uuid = UUID, hypervisor = Hypervisor, nsq = NSQ}}.
+    {ok, initialized, State#state{hypervisor = Hypervisor}}.
 
 %%--------------------------------------------------------------------
 %% @private

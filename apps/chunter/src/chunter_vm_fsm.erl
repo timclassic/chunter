@@ -141,7 +141,6 @@ force_state(UUID, State) ->
             gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State})
     end.
 
-
 -spec register(UUID::fifo:uuid()) -> ok.
 
 register(UUID) ->

@@ -246,7 +246,7 @@ preloading(_, State = #state{uuid = UUID}) ->
     %% timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second don't need this any longer?
     snapshot_sizes(UUID),
     register(UUID),
-    {ok, initialized, State#state{hypervisor = Hypervisor}}.
+    {next_state, initialized, State#state{hypervisor = Hypervisor}}.
 
 %%--------------------------------------------------------------------
 %% @private

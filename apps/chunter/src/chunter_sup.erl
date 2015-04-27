@@ -24,17 +24,11 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    PerfSrvs = case application:get_env(chunter, kstat_metrics) of
-                   {ok, false} ->
-                       [];
-                   _ ->
-                       [?CHILD(chunter_perf_plugin, worker)]
-                   end,
     ArkSrvs = case application:get_env(chunter, kstat_arc) of
                   {ok, false} ->
-                      PerfSrvs;
+                      [];
                   _ ->
-                      [?CHILD(chunter_kstat_arc, worker) | PerfSrvs]
+                      [?CHILD(chunter_kstat_arc, worker)]
               end,
     {ok, {{one_for_one, 5, 10},
           [

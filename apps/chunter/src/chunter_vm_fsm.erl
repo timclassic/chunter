@@ -1040,7 +1040,7 @@ init_console(State) ->
     case State#state.console of
         undefined ->
             [{_, Name, _, _, _, _}] = zoneadm(State#state.uuid),
-            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -C " ++ binary_to_list(Name),
+            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin " ++ binary_to_list(Name),
             ConsolePort = open_port({spawn, Console}, [binary]),
             State#state{console = ConsolePort};
         _ ->

@@ -583,7 +583,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
     case load_vm(UUID) of
         {error, not_found} ->
             lager:debug("[~s] Stopping in load, notfound.", [State#state.uuid]),
-            {stop, not_found, State};
+            {stop, {shutdown, not_found}, State};
         VMData ->
             snapshot_sizes(UUID),
             timer:send_after(500, get_info),
@@ -608,7 +608,7 @@ handle_event({update, Package, Config}, StateName,
         {error, not_found} ->
             lager:debug("[~s] Stopping in update, notfound.",
                         [State#state.uuid]),
-            {stop, not_found, State};
+            {stop, {shutdown, not_found}, State};
         VMData ->
             P = case Package of
                     undefined ->
@@ -623,7 +623,7 @@ handle_event({update, Package, Config}, StateName,
                         {error, not_found} ->
                             lager:debug("[~s] Stopping in load, notfound.",
                                         [State#state.uuid]),
-                            {stop, not_found, State};
+                            {stop, {shutdown, not_found}, State};
                         VMData1 ->
                             chunter_server:update_mem(),
                             SniffleData = chunter_spec:to_sniffle(VMData1),
@@ -805,7 +805,7 @@ handle_sync_event(delete, _From, StateName, State) ->
     case load_vm(State#state.uuid) of
         {error, not_found} ->
             lager:debug("[~s] Delete sync event.", [State#state.uuid]),
-            {stop, not_found, State};
+            {stop, {shutdown, not_found}, State};
         _VM ->
             spawn(chunter_vmadm, delete, [State#state.uuid]),
             libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),

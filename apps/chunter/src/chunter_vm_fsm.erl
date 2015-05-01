@@ -1031,10 +1031,14 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 
 incinerate(Port) ->
-    {os_pid, OsPid} = erlang:port_info(Port, os_pid),
-    port_close(Port),
-    lager:warning("Killing ~p with -9", [OsPid]),
-    os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
+    case erlang:port_info(Port, os_pid) of
+        {os_pid, OsPid} ->
+            port_close(Port),
+            lager:warning("Killing ~p with -9", [OsPid]),
+            os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid]));
+        _ ->
+            ok
+    end.
 
 init_console(State) ->
     case State#state.console of

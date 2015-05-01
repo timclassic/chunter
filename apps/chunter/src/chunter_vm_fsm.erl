@@ -1418,13 +1418,15 @@ wait_for_delete(UUID) when is_binary(UUID) ->
     wait_for_delete(binary_to_list(UUID));
 
 wait_for_delete(UUID) ->
-    UUIDn = UUID ++ "\n",
-    case os:cmd(["/usr/sbin/zoneadm -z ", UUID, " list"]) of
-        UUIDn ->
-            ok;
-        _ ->
-            timer:sleep(1000),
-            wait_for_delete(UUID)
+    Cmd = "/usr/sbin/zoneadm",
+    Port = open_port({spawn_executable, Cmd},
+                     [{args, ["-z", UUID, "list"]}, use_stdio, binary,
+                      stderr_to_stdout, exit_status]),
+    receive
+        {Port, {exit_status, 0}} ->
+            wait_for_delete(UUID);
+        {Port, {exit_status, 1}} ->
+            ok
     end.
 
 split_rules(OldRules, NewRules) ->

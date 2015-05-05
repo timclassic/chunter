@@ -590,7 +590,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
     case load_vm(UUID) of
         {error, not_found} ->
             lager:debug("[~s] Stopping in load, notfound.", [State#state.uuid]),
-            {stop, not_found, State};
+            {stop, {shutdown, not_found}, State};
         VMData ->
             snapshot_sizes(UUID),
             timer:send_after(500, get_info),
@@ -616,7 +616,7 @@ handle_event({update, Package, Config}, StateName,
         {error, not_found} ->
             lager:debug("[~s] Stopping in update, notfound.",
                         [State#state.uuid]),
-            {stop, not_found, State};
+            {stop, {shutdown, not_found}, State};
         VMData ->
             P = case Package of
                     undefined ->
@@ -631,7 +631,7 @@ handle_event({update, Package, Config}, StateName,
                         {error, not_found} ->
                             lager:debug("[~s] Stopping in load, notfound.",
                                         [State#state.uuid]),
-                            {stop, not_found, State};
+                            {stop, {shutdown, not_found}, State};
                         VMData1 ->
                             chunter_server:update_mem(),
                             SniffleData = chunter_spec:to_sniffle(VMData1),
@@ -851,7 +851,7 @@ handle_sync_event(delete, _From, StateName, State) ->
     case load_vm(State#state.uuid) of
         {error, not_found} ->
             lager:debug("[~s] Delete sync event.", [State#state.uuid]),
-            {stop, not_found, State};
+            {stop, {shutdown, not_found}, State};
         _VM ->
             spawn(chunter_vmadm, delete, [State#state.uuid]),
             libhowl:send(State#state.uuid, [{<<"event">>, <<"delete">>}]),
@@ -1031,10 +1031,14 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 
 incinerate(Port) ->
-    {os_pid, OsPid} = erlang:port_info(Port, os_pid),
-    port_close(Port),
-    lager:warning("Killing ~p with -9", [OsPid]),
-    os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
+    case erlang:port_info(Port, os_pid) of
+        {os_pid, OsPid} ->
+            port_close(Port),
+            lager:warning("Killing ~p with -9", [OsPid]),
+            os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid]));
+        _ ->
+            ok
+    end.
 
 init_console(State) ->
     case State#state.console of
@@ -1418,13 +1422,15 @@ wait_for_delete(UUID) when is_binary(UUID) ->
     wait_for_delete(binary_to_list(UUID));
 
 wait_for_delete(UUID) ->
-    UUIDn = UUID ++ "\n",
-    case os:cmd(["/usr/sbin/zoneadm -z ", UUID, " list"]) of
-        UUIDn ->
-            ok;
-        _ ->
-            timer:sleep(1000),
-            wait_for_delete(UUID)
+    Cmd = "/usr/sbin/zoneadm",
+    Port = open_port({spawn_executable, Cmd},
+                     [{args, ["-z", UUID, "list"]}, use_stdio, binary,
+                      stderr_to_stdout, exit_status]),
+    receive
+        {Port, {exit_status, 0}} ->
+            wait_for_delete(UUID);
+        {Port, {exit_status, 1}} ->
+            ok
     end.
 
 split_rules(OldRules, NewRules) ->

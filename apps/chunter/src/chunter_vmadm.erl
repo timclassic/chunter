@@ -175,6 +175,7 @@ create(Data) ->
     lager:info([{fifi_component, chunter}],
                "vmadm:create - updating memory.", []),
     chunter_server:update_mem(),
+    ls_vm:creting(UUID, false),
     Res.
 
 update(UUID, Data) ->

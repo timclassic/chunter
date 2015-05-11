@@ -579,7 +579,7 @@ handle_event({force_state, NextState}, StateName, State) ->
         StateName ->
             {next_state, StateName, State#state{public_state = change_state(State#state.uuid, NextState, false)}};
         running = N ->
-            {next_state, running,State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= N)}};
+            {next_state, running, State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= N)}};
         Other ->
             {next_state, Other, State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= Other)}}
     end;
@@ -1324,8 +1324,9 @@ change_state(UUID, State, true) ->
     %%          end,
     %% This will stay out untill someone provides a propper solution
     State1 = State,
-    ls_vm:log(UUID, <<"Transitioning ", State1/binary>>),
     ls_vm:state(UUID, State1),
+    ls_vm:log(UUID, <<"Transitioning ", State1/binary>>),
+    ls_vm:get(UUID),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1;
 
@@ -1339,6 +1340,7 @@ change_state(UUID, State, false) ->
     %% This will stay out untill someone provides a propper solution
     State1 = State,
     ls_vm:state(UUID, State1),
+    ls_vm:get(UUID),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1.
 

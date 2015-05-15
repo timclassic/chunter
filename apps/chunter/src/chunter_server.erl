@@ -131,8 +131,8 @@ init([]) ->
               chunter_vm_fsm:load(UUID)
       end, 0, list_vms()),
 
-    SysInfo = jsx:decode(list_to_binary(os:cmd("sysinfo"))),
-
+    SysInfo0 = jsxd:from_list(jsx:decode(list_to_binary(os:cmd("sysinfo")))),
+    SysInfo = jsxd:delete([<<"Boot Parameters">>, <<"root_shadow">>], SysInfo0),
 
     Capabilities = case os:cmd("ls /dev/kvm") of
                        "/dev/kvm\n" ->

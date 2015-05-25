@@ -40,6 +40,24 @@
  [{default, 10},
   {datatype, integer}]}.
 
+%% @doc Enables or disables the ARC stats for this server.
+
+{mapping, "kstat.arc", "chunter.kstat_arc",
+ [{default, enabled},
+  {datatype, {enum, [enabled, disabled]}}]}.
+
+{translation,
+ "chunter.kstat_arc",
+ fun(Conf) ->
+         case cuttlefish:conf_get("kstat.arc", Conf) of
+             enabled ->
+                 true;
+             disabled ->
+                 false
+         end
+ end
+}.
+
 %% @doc The interval services for a zone are checked, the default is 10s
 %% changes are noted even when the state is the same at least for the nsq
 %% logging.

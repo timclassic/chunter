@@ -75,7 +75,7 @@ fi
 [ -d /var/imgadm ] || imgadm update
 [ -d /var/imgadm/images ] || mkdir -p /var/imgadm/images
 
-(cd "$DST"; uudecode -p "$DIR/$BASE"|tar xzf -)
+(cd "$DST"; uudecode -p "$DIR/$BASE"| tar xf -)
 mkdir -p /var/log/chunter
 
 

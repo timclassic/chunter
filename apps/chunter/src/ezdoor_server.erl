@@ -63,13 +63,18 @@ remove(Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    Cmd = code:priv_dir(chunter) ++ "/zonedoor",
-    PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
-                binary],
-    DoorPort = open_port({spawn_executable, Cmd},  PortOpts),
-    erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
-    process_flag(trap_exit, true),
-    {ok, #state{port = DoorPort}}.
+    case chunter_utils:system() of
+        smartos ->
+            Cmd = code:priv_dir(chunter) ++ "/zonedoor",
+            PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
+                        binary],
+            DoorPort = open_port({spawn_executable, Cmd},  PortOpts),
+            erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
+            process_flag(trap_exit, true),
+            {ok, #state{port = DoorPort}};
+        _ ->
+            {ok, #state{}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -85,6 +90,15 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+
+%% TODO: None SmartOS
+handle_call({add, _, _, _}, _, State = #state{port = undefined}) ->
+    {reply, {ok, not_supported}, State};
+
+%% TODO: None SmartOS
+handle_call({remove, _}, _, State = #state{port = undefined}) ->
+    {reply, ok, State};
+
 handle_call({add, Module, ZoneUUID, DoorName}, {From, _},
             State = #state{port = Port, doors = Doors}) ->
     %%lager:info("[ezdoor] Requesting door for ~s/~s", [ZoneUUID, DoorName]),

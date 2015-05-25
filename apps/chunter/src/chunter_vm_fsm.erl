@@ -81,7 +81,6 @@
                 args,
                 services = [],
                 listeners = [],
-                nsq = false,
                 public_state,
                 auth_ref,
                 api_ref}).
@@ -233,13 +232,7 @@ start_link(UUID) ->
 %%--------------------------------------------------------------------
 init([UUID]) ->
     process_flag(trap_exit, true),
-    NSQ = case application:get_env(nsq_producer) of
-              {ok, _} ->
-                  true;
-              _ ->
-                  false
-          end,
-    {ok, preloading, #state{uuid = UUID, nsq = NSQ}, 0}.
+    {ok, preloading, #state{uuid = UUID}, 0}.
 
 
 preloading(_, State = #state{uuid = UUID}) ->
@@ -917,7 +910,6 @@ handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
 
 handle_info(update_services, running, State=#state{
                                                uuid=UUID,
-                                               nsq=NSQ,
                                                services = OldServices,
                                                type = zone
                                               }) ->
@@ -941,7 +933,7 @@ handle_info(update_services, running, State=#state{
             ls_vm:set_service(UUID,
                               [{Srv, delete}
                                || {Srv, _, <<"removed">>} <- Changed]),
-            update_services(UUID, Changed, NSQ),
+            update_services(UUID, Changed),
             {next_state, running, State#state{services = ServiceSet}};
         _ ->
             {next_state, running, State}
@@ -1362,17 +1354,10 @@ backup_update(VM, SnapID, K, V) ->
                    [{<<"action">>, <<"update">>},
                     {<<"data">>, [{K, V}]},
                     {<<"uuid">>, SnapID}]}]).
-update_services(_, [], _) ->
+update_services(_, []) ->
     ok;
 
-update_services(UUID, Changed, true) ->
-    Changed1 = [{Srv, [{<<"old">>, Old},
-                       {<<"new">>, New}]} || {Srv, Old, New} <- Changed],
-    JSON = jsx:encode([{vm, UUID}, {data, Changed1}]),
-    ensq:send(services, JSON),
-    update_services(UUID, Changed, false);
-
-update_services(UUID, Changed, false) ->
+update_services(UUID, Changed) ->
     case [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New] of
         [] ->
             ok;

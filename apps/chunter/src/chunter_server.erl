@@ -46,10 +46,10 @@
                 sysinfo,
                 connected = false,
                 services = [],
+                system,
                 capabilities = [],
                 total_memory = 0,
                 reserved_memory = 0,
-                nsq = false,
                 provisioned_memory = 0,
                 tick = 0}).
 
@@ -117,13 +117,16 @@ service_action(Action, Service)
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    System = chunter_utils:system(),
     random:seed(now()),
     lager:info([{fifo_component, chunter}],
                "chunter:init.", []),
-    %% We subscribe to sniffle register channel - that way we can reregister to dead sniffle processes.
+    %% We subscribe to sniffle register channel - that way we can reregister to
+    %% dead sniffle processes.
     mdns_client_lib_connection_event:add_handler(chunter_connect_event),
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
-    timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
+    %% This is every 10 seconds
+    timer:send_interval(ServiceIVal, update_services),
     register_hypervisor(),
     lists:foldl(
       fun (VM, _) ->
@@ -131,32 +134,25 @@ init([]) ->
               chunter_vm_fsm:load(UUID)
       end, 0, list_vms()),
 
-    SysInfo0 = jsxd:from_list(jsx:decode(list_to_binary(os:cmd("sysinfo")))),
-    SysInfo = jsxd:delete([<<"Boot Parameters">>, <<"root_shadow">>], SysInfo0),
-
-    Capabilities = case os:cmd("ls /dev/kvm") of
-                       "/dev/kvm\n" ->
-                           [<<"zone">>, <<"kvm">>];
-                       _ ->
-                           [<<"zone">>]
-                   end,
+    SysInfo = chunter_utils:sysinfo(),
+    Capabilities =
+        case System of
+            omnios ->
+                [<<"ipkg">>, <<"lipkg">>];
+            smartos ->
+                case os:cmd("ls /dev/kvm") of
+                    "/dev/kvm\n" ->
+                        [<<"zone">>, <<"kvm">>];
+                    _ ->
+                        [<<"zone">>]
+                end;
+            _ ->
+                []
+        end,
     {Host, _IPStr, _Port} = host_info(),
     ls_hypervisor:sysinfo(Host, SysInfo),
     ls_hypervisor:version(Host, ?VERSION),
     ls_hypervisor:virtualisation(Host, Capabilities),
-    case application:get_env(nsq_producer) of
-        {ok, {NSQHost, NSQPort}} ->
-            ensq:producer(services, NSQHost, NSQPort),
-            true;
-        _ ->
-            false
-    end,
-    NSQ = case application:get_env(nsq_producer) of
-              {ok, _} ->
-                  true;
-              _ ->
-                  false
-          end,
     ReservedMem = case application:get_env(reserved_memory) of
                       undefined ->
                           0;
@@ -168,7 +164,7 @@ init([]) ->
             sysinfo = SysInfo,
             name = Host,
             capabilities = Capabilities,
-            nsq = NSQ
+            system = System
            }}.
 
 
@@ -329,7 +325,6 @@ handle_info(update_services, State=#state{tick = _T}) when _T >= ?MAX_TICK ->
 
 handle_info(update_services, State=#state{
                                       name=Host,
-                                      nsq=NSQ,
                                       services = OldServices
                                      }) ->
     case {chunter_smf:update(OldServices), OldServices} of
@@ -354,7 +349,7 @@ handle_info(update_services, State=#state{
                                SrvState
                        end}
                || {Srv, _, SrvState} <- Changed]),
-            update_services(Host, Changed, NSQ),
+            update_services(Host, Changed),
             {noreply, State#state{services = ServiceSet}};
         _ ->
             {noreply, State}
@@ -458,17 +453,10 @@ register_hypervisor() ->
             ok
     end.
 
-update_services(_, [], _) ->
+update_services(_, []) ->
     ok;
 
-update_services(UUID, Changed, true) ->
-    Changed1 = [{Srv, [{<<"old">>, Old},
-                       {<<"new">>, New}]} || {Srv, Old, New} <- Changed],
-    JSON = jsx:encode([{hypervisor, UUID}, {data, Changed1}]),
-    ensq:send(services, JSON),
-    update_services(UUID, Changed, false);
-
-update_services(UUID, Changed, false) ->
+update_services(UUID, Changed) ->
     case [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New] of
         [] ->
             ok;

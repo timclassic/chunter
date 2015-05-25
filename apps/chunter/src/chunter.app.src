@@ -20,7 +20,6 @@
                   public_key,
                   ssl,
                   fifo_s3,
-                  ensq,
                   ranch
                  ]},
   {mod, { chunter_app, []}},

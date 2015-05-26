@@ -132,7 +132,7 @@ init([]) ->
       fun (VM, _) ->
               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
               chunter_vm_fsm:load(UUID)
-      end, 0, list_vms()),
+      end, 0, chunter_zone:list()),
 
     SysInfo = chunter_utils:sysinfo(),
     Capabilities =
@@ -224,7 +224,7 @@ handle_cast(update_mem, State = #state{
                                    reserved_memory = ReservedMem,
                                    name = Host
                                   }) ->
-    VMS = list_vms(),
+    VMS = chunter_zone:list(),
     ProvMem = round(lists:foldl(
                       fun (VM, Mem) ->
                               {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
@@ -271,7 +271,7 @@ handle_cast(connect, #state{name = Host,
                   ",\\s*|\n"),
     Etherstub1 = lists:delete(<<>>, Etherstub),
     register_hypervisor(),
-    VMS = list_vms(),
+    VMS = chunter_zone:list(),
 
     {ProvMemA, _} = lists:foldl(
                       fun (VM, {Mem, Delay}) ->
@@ -389,13 +389,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-list_vms() ->
-    [chunter_zoneparser:load([{<<"name">>, Name}, {<<"uuid">>, UUID}]) ||
-        [ID,Name,_VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
-            [ re:split(Line, ":")
-              || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-        ID =/= <<"0">>].
 
 
 host_info() ->

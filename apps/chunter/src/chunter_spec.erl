@@ -14,6 +14,7 @@
 -endif.
 
 -export([to_vmadm/3,
+         %%to_zonecfg/3,
          to_sniffle/1,
          create_update/3
         ]).
@@ -36,6 +37,10 @@ to_sniffle(Spec) ->
     Type = brand_to_type(jsxd:get(<<"brand">>, <<"joyent">>, Spec1)),
     generate_sniffle(Spec1, Type).
 
+brand_to_type(<<"ipkg">>) ->
+    ipgk;
+brand_to_type(<<"lipkg">>) ->
+    ipkg;
 brand_to_type(<<"kvm">>) ->
     kvm;
 brand_to_type(<<"lx">>) ->

@@ -2,6 +2,10 @@ REBAR = $(shell pwd)/rebar
 
 .PHONY: deps rel package quick-test
 
+quick-test: cp-hooks
+	-$(REBAR) compile 
+	$(REBAR) skip_deps=true eunit
+
 all: cp-hooks deps compile
 
 cp-hooks:
@@ -38,9 +42,6 @@ distclean: clean
 
 test: all
 	$(REBAR) skip_deps=true xref
-	$(REBAR) skip_deps=true eunit
-
-quick-test: cp-hooks
 	$(REBAR) skip_deps=true eunit
 
 rel: all

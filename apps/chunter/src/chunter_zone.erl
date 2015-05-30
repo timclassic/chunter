@@ -17,12 +17,23 @@
 
 
 list() ->
-    [chunter_zoneparser:load([{<<"name">>, Name}, {<<"uuid">>, UUID}]) ||
-        %% SmartOS seems to have one more coumn
-        [ID,Name,_VMState,_Path,UUID,_Type,_IP | _] <-
-            [ re:split(Line, ":")
-              || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-        ID =/= <<"0">>].
+    %% TODO: find a way to unify this!
+    case chunter_utils:system() of
+        smartos ->
+            [chunter_zoneparser:load([{<<"name">>, Name}, {<<"uuid">>, UUID}]) ||
+                %% SmartOS seems to have one more coumn
+                [ID,Name,_VMState,_Path,UUID,_Type,_IP | _] <-
+                    [ re:split(Line, ":")
+                      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
+                ID =/= <<"0">>];
+        omnios ->
+            [chunter_zoneparser:load([{<<"name">>, UUID}, {<<"uuid">>, UUID}]) ||
+                %% SmartOS seems to have one more coumn
+                [ID,UUID,_VMState,_Path,_OtherUUID,_Type,_IP | _] <-
+                    [ re:split(Line, ":")
+                      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
+                ID =/= <<"0">>]
+    end.
 
 
 get(ZUUID) ->
@@ -37,11 +48,19 @@ get(ZUUID) ->
             {error, not_found}
     end.
 
-get1(UUID) when is_binary(UUID) ->
-    Zones = [ re:split(Line, ":")
-              || Line <- re:split(os:cmd([?ZONEADM, " -u ", UUID, " list -p"]), "\n")],
-    [{ID, Name, VMState, Path, UUID1, Type} ||
-        [ID, Name, VMState, Path, UUID1, Type, _IP | _] <- Zones].
+get1(ZUUID) when is_binary(ZUUID) ->
+    case chunter_utils:system() of
+        smartos ->
+            Zones = [ re:split(Line, ":")
+                      || Line <- re:split(os:cmd([?ZONEADM, " -u ", ZUUID, " list -p"]), "\n")],
+            [{ID, Name, VMState, Path, UUID, Type} ||
+                [ID, Name, VMState, Path, UUID, Type, _IP | _] <- Zones];
+        omnios ->
+            Zones = [ re:split(Line, ":")
+                      || Line <- re:split(os:cmd([?ZONEADM, " -z ", ZUUID, " list -p"]), "\n")],
+            [{ID, UUID, VMState, Path, UUID, Type} ||
+                [ID, UUID, VMState, Path, _UUID, Type, _IP | _] <- Zones]
+    end.
 
 %% create
 %% set zonename=<uuid>
@@ -152,13 +171,13 @@ zonecfg1({property, Name, Value}) ->
     ["add property ", val_list([{name, Name}, {value, [$\", Value, $\"]}]), $\n];
 
 zonecfg1({add, What, Opts}) ->
-    add(What, Opts);
+                                                              add(What, Opts);
 
-zonecfg1({attr, Name, Type, Value}) ->
-    add(attr,
-        [{name, Name},
-         {type, Type},
-         {value, Value}]).
+                                                           zonecfg1({attr, Name, Type, Value}) ->
+                                                              add(attr,
+                                                                  [{name, Name},
+                                                                   {type, Type},
+                                                                   {value, Value}]).
 
 add(Type, Values) ->
     ["add ", v(Type), $\n,

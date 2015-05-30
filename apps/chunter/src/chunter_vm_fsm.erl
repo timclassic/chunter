@@ -1475,8 +1475,9 @@ create_ipkg(_Dataset, _Package, _VMSpec, State = #state{ uuid = UUID}) ->
     R1 = os:cmd(["/usr/sbin/zonecfg -z ", UUIDs, " -f ", File]),
     lager:info("[zonecfg:~s] ~p", [UUID, R1]),
     R2 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " install"]),
-    lager:info("[zonecfg:~s] ~p", [UUID, R1]),
-    R2 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
+    lager:info("[zonecfg:~s] ~p", [UUID, R2]),
+    R3 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
+    lager:info("[zonecfg:~s] ~p", [UUID, R3]),
 
     {next_state, creating,
      State#state{type = zone,

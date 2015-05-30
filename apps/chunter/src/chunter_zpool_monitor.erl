@@ -151,12 +151,26 @@ get_stats(Cmd) ->
     lists:foldl(
       fun (Line, Acc) ->
               [Name, Size, Alloc, Free, Dedup, Health] = re:split(Line, "\t"),
+              %% TODO: might be able to strip that later
+              %% Not all systems return dedup as a integer, some have a float
+              %% of the form "1.00x" - we need to sanatize
+              D = case binary:lasT(Dedup) of
+                      $x ->
+                          round(binary_to_float(strip_x(Dedup, <<>>)) * 100);
+                      _ ->
+                          binary_to_integer(Dedup)
+                  end,
               [{[Name, <<"size">>], bin_to_gb(Size)},
                {[Name, <<"used">>], bin_to_gb(Alloc)},
                {[Name, <<"free">>], bin_to_gb(Free)},
-               {[Name, <<"dedup">>], binary_to_integer(Dedup)},
+               {[Name, <<"dedup">>], D},
                {[Name, <<"health">>], Health} | Acc]
       end, [], re:split(os:cmd(Cmd), "\n", [trim])).
+
+strip_x(<<"x">>, Acc) ->
+    Acc;
+strip_x(<<C, R/binary>>, Acc) ->
+    strip_x(R, <<Acc/binary, C>>).
 
 bin_to_gb(B) ->
     round(binary_to_integer(B)/(1024*1024)).

@@ -154,7 +154,7 @@ get_stats(Cmd) ->
               %% TODO: might be able to strip that later
               %% Not all systems return dedup as a integer, some have a float
               %% of the form "1.00x" - we need to sanatize
-              D = case binary:lasT(Dedup) of
+              D = case binary:last(Dedup) of
                       $x ->
                           round(binary_to_float(strip_x(Dedup, <<>>)) * 100);
                       _ ->

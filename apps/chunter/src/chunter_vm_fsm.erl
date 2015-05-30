@@ -78,6 +78,7 @@
                 uuid,
                 console,
                 orig_state,
+                system = smartos,
                 args,
                 services = [],
                 listeners = [],
@@ -232,12 +233,12 @@ start_link(UUID) ->
 %%--------------------------------------------------------------------
 init([UUID]) ->
     process_flag(trap_exit, true),
-    {ok, preloading, #state{uuid = UUID}, 0}.
+    System = chunter_utils:system(),
+    {ok, preloading, #state{uuid = UUID, system = System}, 0}.
 
 
 preloading(_, State = #state{uuid = UUID}) ->
     {Hypervisor, _, _} = chunter_server:host_info(),
-
     SnapshotIVal = application:get_env(chunter, snapshot_update_interval, 900000),
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
@@ -675,7 +676,7 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
     wait_for_delete(UUID),
     {stop, normal, State};
 
-handle_event(update_fw, StateName, State = #state{uuid = UUID}) ->
+handle_event(update_fw, StateName, State = #state{uuid = UUID, system = smartos}) ->
     %% TODO: get the fw rules and do something with them
     case {ls_vm:get(UUID), fwadm:list_fifo(UUID)} of
         {{ok, VM}, {ok, OldRules}} ->
@@ -699,6 +700,10 @@ handle_event(update_fw, StateName, State = #state{uuid = UUID}) ->
         _ ->
             ok
     end,
+    {next_state, StateName, State};
+
+%% TODO: Only SmartOS supports FW rules
+handle_event(update_fw, StateName, State) ->
     {next_state, StateName, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->

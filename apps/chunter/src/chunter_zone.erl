@@ -11,7 +11,7 @@
 -define(ZONEADM, "/usr/sbin/zoneadm").
 
 
--export([list/0, get/1, zonecfg/1]).
+-export([list/0, get/1, get_raw/1, zonecfg/1]).
 
 -export([ex1/0, ex2/0]).
 
@@ -36,19 +36,28 @@ list() ->
     end.
 
 
+-spec get(ZUUID::fifo:uuid()) -> fifo:vm_config() | {error, not_found}.
+
 get(ZUUID) ->
     case [chunter_zoneparser:load([{<<"name">>,Name},
                                    {<<"state">>, VMState},
                                    {<<"zonepath">>, Path},
                                    {<<"type">>, Type}]) ||
-             {_ID, Name, VMState, Path, _UUID, Type} <- get1(ZUUID)] of
+             {_ID, Name, VMState, Path, _UUID, Type} <- get_raw(ZUUID)] of
         [VM | _] ->
             VM;
         [] ->
             {error, not_found}
     end.
 
-get1(ZUUID) when is_binary(ZUUID) ->
+-spec get_raw(ZUUID::fifo:uuid()) -> [{ID::binary(),
+                                       Name::binary(),
+                                       VMState::binary(),
+                                       Path::binary(),
+                                       UUID::binary(),
+                                       Type::binary()}].
+
+get_raw(ZUUID) when is_binary(ZUUID) ->
     case chunter_utils:system() of
         smartos ->
             Zones = [ re:split(Line, ":")

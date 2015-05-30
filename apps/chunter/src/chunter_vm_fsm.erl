@@ -1048,7 +1048,7 @@ incinerate(Port) ->
 init_console(State) ->
     case State#state.console of
         undefined ->
-            [{_, Name, _, _, _, _}] = zoneadm(State#state.uuid),
+            [{_, Name, _, _, _, _}] = chunter_zone:get_raw(State#state.uuid),
             Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin " ++ binary_to_list(Name),
             ConsolePort = open_port({spawn, Console}, [binary]),
             State#state{console = ConsolePort};
@@ -1284,34 +1284,10 @@ do_destroy(<<_:1/binary, P/binary>>, _VM, _SnapID, _) ->
 %%% Utility
 %%%===================================================================
 
--spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
-                                       Name::binary(),
-                                       VMState::binary(),
-                                       Path::binary(),
-                                       UUID::binary(),
-                                       Type::binary()}].
-
-zoneadm(ZUUID) ->
-    Zones = [ re:split(Line, ":")
-              || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++
-                                             binary_to_list(ZUUID) ++
-                                             " list -p"), "\n")],
-    [{ID, Name, VMState, Path, UUID, Type} ||
-        [ID, Name, VMState, Path, UUID, Type, _IP, _SomeNumber] <- Zones].
-
 -spec load_vm(ZUUID::fifo:uuid()) -> fifo:vm_config() | {error, not_found}.
 
-load_vm(ZUUID) ->
-    case [chunter_zoneparser:load([{<<"name">>,Name},
-                                   {<<"state">>, VMState},
-                                   {<<"zonepath">>, Path},
-                                   {<<"type">>, Type}]) ||
-             {_ID, Name, VMState, Path, _UUID, Type} <- zoneadm(ZUUID)] of
-        [VM | _] ->
-            VM;
-        [] ->
-            {error, not_found}
-    end.
+load_vm(UUID) ->
+    chunter_zone:get(UUID).
 
 -spec change_state(UUID::binary(), State::fifo:vm_state()) -> fifo:vm_state().
 

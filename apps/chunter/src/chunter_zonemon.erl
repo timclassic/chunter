@@ -113,11 +113,20 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
-    [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-        [ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
-            [ re:split(Line, ":")
-              || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-        ID =/= <<"0">>],
+    case chunter_utils:system() of
+        smartos ->
+            [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
+                [ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
+                    [re:split(Line, ":")
+                     || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
+                ID =/= <<"0">>];
+        omnios ->
+            [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
+                [ID, UUID, VMState, _Path,_OtherUUID,_Type,_IP,_SomeNumber] <-
+                    [re:split(Line, ":")
+                     || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
+                ID =/= <<"0">>]
+        end,
     {noreply, State};
 
 

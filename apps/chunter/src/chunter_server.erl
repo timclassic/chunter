@@ -273,7 +273,12 @@ handle_cast(connect, #state{name = Host,
                               {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
                               timer:apply_after(
                                 500 + Delay, chunter_vm_fsm, load, [UUID]),
-                              {<<"max_physical_memory">>, M} = lists:keyfind(<<"max_physical_memory">>, 1, VM),
+                              M = case lists:keyfind(<<"max_physical_memory">>, 1, VM) of
+                                    {<<"max_physical_memory">>, Mx} ->  
+                                          Mx;
+                                      _ ->
+                                          0
+                                  end,
                               {Mem + M, Delay + 100}
                       end, {0, 300}, VMS),
     ProvMem = round(ProvMemA / (1024*1024)),

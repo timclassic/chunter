@@ -1469,10 +1469,15 @@ create_ipkg(_Dataset, _Package, _VMSpec, State = #state{ uuid = UUID}) ->
             verify,
             commit,
             exit],
-    File = ["/tmp/", binary_to_list(UUID), ".conf"],
+    UUIDs = binary_to_list(UUID),
+    File = ["/tmp/", UUIDs, ".conf"],
     file:write_file(File, chunter_zone:zonecfg(Conf)),
-    R1 = os:cmd(["/usr/sbin/zonecfg -z ", UUID, "-f ", File]),
+    R1 = os:cmd(["/usr/sbin/zonecfg -z ", UUIDs, " -f ", File]),
     lager:info("[zonecfg:~s] ~p", [UUID, R1]),
+    R2 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " install"]),
+    lager:info("[zonecfg:~s] ~p", [UUID, R1]),
+    R2 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
+
     {next_state, creating,
      State#state{type = zone,
                  public_state = change_state(UUID, <<"creating">>)}}.

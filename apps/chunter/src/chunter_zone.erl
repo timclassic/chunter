@@ -58,15 +58,16 @@ get(ZUUID) ->
                                        Type::binary()}].
 
 get_raw(ZUUID) when is_binary(ZUUID) ->
+    UUIDs = binary_to_list(ZUUID),
     case chunter_utils:system() of
         smartos ->
             Zones = [ re:split(Line, ":")
-                      || Line <- re:split(os:cmd([?ZONEADM, " -u ", ZUUID, " list -p"]), "\n")],
+                      || Line <- re:split(os:cmd([?ZONEADM, " -u ", UUIDs, " list -p"]), "\n")],
             [{ID, Name, VMState, Path, UUID, Type} ||
                 [ID, Name, VMState, Path, UUID, Type, _IP | _] <- Zones];
         omnios ->
             Zones = [ re:split(Line, ":")
-                      || Line <- re:split(os:cmd([?ZONEADM, " -z ", ZUUID, " list -p"]), "\n")],
+                      || Line <- re:split(os:cmd([?ZONEADM, " -z ", UUIDs, " list -p"]), "\n")],
             [{ID, UUID, VMState, Path, UUID, Type} ||
                 [ID, UUID, VMState, Path, _UUID, Type, _IP | _] <- Zones]
     end.

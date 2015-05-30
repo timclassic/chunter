@@ -11,7 +11,7 @@
 -define(ZONEADM, "/usr/sbin/zoneadm").
 
 
--export([list/0, get/1]).
+-export([list/0, get/1, zonecfg/1]).
 
 -export([ex1/0, ex2/0]).
 

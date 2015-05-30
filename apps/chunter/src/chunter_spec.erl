@@ -41,7 +41,7 @@ to_zonecfg(Package, _Dataset, OwnerData) ->
     generate_zonecfg(Package, _Dataset, OwnerData).
 
 brand_to_type(<<"ipkg">>) ->
-    ipgk;
+    ipkg;
 brand_to_type(<<"lipkg">>) ->
     ipkg;
 brand_to_type(<<"kvm">>) ->

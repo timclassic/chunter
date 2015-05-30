@@ -122,7 +122,7 @@ handle_info(zonecheck, State) ->
                 ID =/= <<"0">>];
         omnios ->
             [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-                [ID, UUID, VMState, _Path,_OtherUUID,_Type,_IP,_SomeNumber] <-
+                [ID, UUID, VMState, _Path,_OtherUUID,_Type,_IP] <-
                     [re:split(Line, ":")
                      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
                 ID =/= <<"0">>]

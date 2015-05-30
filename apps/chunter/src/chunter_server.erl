@@ -261,15 +261,10 @@ handle_cast({reserve_mem, N}, State =
                }};
 
 handle_cast(connect, #state{name = Host,
+                            system = System,
                             reserved_memory = ReservedMem,
                             capabilities = Caps} = State) ->
     {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
-    Networks = re:split(os:cmd("cat /usbkey/config  | grep -v '^#' | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
-    Networks1 = lists:delete(<<>>, Networks),
-    Etherstub = re:split(
-                  os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
-                  ",\\s*|\n"),
-    Etherstub1 = lists:delete(<<>>, Etherstub),
     register_hypervisor(),
     VMS = chunter_zone:list(),
 
@@ -286,14 +281,28 @@ handle_cast(connect, #state{name = Host,
                [Host, ProvMem, TotalMem]),
     ls_hypervisor:sysinfo(Host, State#state.sysinfo),
     ls_hypervisor:version(Host, ?VERSION),
-    ls_hypervisor:networks(Host, Networks1),
     ls_hypervisor:set_resource(
       Host,
       [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
        {[<<"reserved-memory">>], ReservedMem},
        {[<<"provisioned-memory">>], ProvMem},
        {[<<"total-memory">>], TotalMem}]),
-    ls_hypervisor:etherstubs(Host, Etherstub1),
+    case System of
+        omnios ->
+            %% TODO read this somehow
+            Networks = [<<"admin">>],
+            ls_hypervisor:networks(Host, Networks);
+        smartos ->
+            Networks = re:split(os:cmd("cat /usbkey/config  | grep -v '^#' | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
+            Networks1 = lists:delete(<<>>, Networks),
+            Etherstub = re:split(
+                                     os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
+                          ",\\s*|\n"),
+            Etherstub1 = lists:delete(<<>>, Etherstub),
+            ls_hypervisor:networks(Host, Networks1),
+            ls_hypervisor:etherstubs(Host, Etherstub1)
+    end,
+
     ls_hypervisor:virtualisation(Host, Caps),
     {noreply, State#state{
                 total_memory = TotalMem,

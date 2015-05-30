@@ -264,6 +264,7 @@ preloading(_, State = #state{uuid = UUID}) ->
 %% @end
 %%--------------------------------------------------------------------
 
+
 -spec initialized(Action::load |
                           {create,  PackageSpec::fifo:package(),
                            DatasetSpec::fifo:dataset(), VMSpec::fifo:config()}, State::term()) ->
@@ -283,51 +284,58 @@ initialized({create, Package, Dataset, VMSpec},
     VMData1 = eplugin:fold('vm:create_json', VMData),
     lager:debug("Creating with spec: ~p", [VMData1]),
     eplugin:call('vm:create', UUID, VMData1),
-    SniffleData  = chunter_spec:to_sniffle(VMData1),
-    {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
-    chunter_server:reserve_mem(Ram),
-    SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
-    change_state(UUID, <<"installing_dataset">>),
-    libhowl:send(UUID, [{<<"event">>, <<"update">>},
-                        {<<"data">>,
-                         [{<<"hypervisor">>, Hypervisor},
-                          {<<"config">>, SniffleData1},
-                          {<<"package">>, jsxd:get(<<"uuid">>, <<>>, PackageSpec)}]}]),
-    Type = case jsxd:get(<<"type">>, SniffleData1) of
-               {ok, <<"kvm">>} -> kvm;
-               _ -> zone
-           end,
-    ls_vm:set_config(UUID, SniffleData1),
-    lager:debug("[create:~s] Done generating config, handing to img install.",
-                [UUID]),
-    case chunter_dataset_srv:install(DatasetUUID, UUID) of
-        ok ->
-            lager:debug("[create:~s] Done installing image going to create now.",
+    chunter_server:reserve_mem(ft_package:ram(Package)),
+    case ft_dataset:zone_type(Dataset) of
+        ipkg ->
+            create_ipkg(Dataset, Package, VMSpec, State);
+        lipkg ->
+            create_ipkg(Dataset, Package, VMSpec, State);
+        _ ->
+            SniffleData  = chunter_spec:to_sniffle(VMData1),
+            {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
+            SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
+            change_state(UUID, <<"installing_dataset">>),
+            libhowl:send(UUID, [{<<"event">>, <<"update">>},
+                                {<<"data">>,
+                                 [{<<"hypervisor">>, Hypervisor},
+                                  {<<"config">>, SniffleData1},
+                                  {<<"package">>, jsxd:get(<<"uuid">>, <<>>, PackageSpec)}]}]),
+            Type = case jsxd:get(<<"type">>, SniffleData1) of
+                       {ok, <<"kvm">>} -> kvm;
+                       _ -> zone
+                   end,
+            ls_vm:set_config(UUID, SniffleData1),
+            lager:debug("[create:~s] Done generating config, handing to img install.",
                         [UUID]),
-            case chunter_vmadm:create(VMData1) of
+            case chunter_dataset_srv:install(DatasetUUID, UUID) of
                 ok ->
-                    lager:debug("[create:~s] Done creating continuing on.", [UUID]),
-                    case jsxd:get(<<"owner">>, VMSpec) of
-                        {ok, Org} when Org =/= <<>> ->
-                            ls_org:resource_action(Org, UUID, timestamp(),
-                                                   confirm_create, []);
-                        _ ->
-                            ok
-                    end,
-                    {next_state, creating,
-                     State#state{type = Type,
-                                 public_state = change_state(UUID, <<"creating">>)}};
-                {error, E} ->
-                    lager:error("[create:~s] Failed to create with error: ~p",
+                    lager:debug("[create:~s] Done installing image going to create now.",
+                                [UUID]),
+                    case chunter_vmadm:create(VMData1) of
+                        ok ->
+                            lager:debug("[create:~s] Done creating continuing on.", [UUID]),
+                            case jsxd:get(<<"owner">>, VMSpec) of
+                                {ok, Org} when Org =/= <<>> ->
+                                    ls_org:resource_action(Org, UUID, timestamp(),
+                                                           confirm_create, []);
+                                _ ->
+                                    ok
+                            end,
+                            {next_state, creating,
+                             State#state{type = Type,
+                                         public_state = change_state(UUID, <<"creating">>)}};
+                        {error, E} ->
+                            lager:error("[create:~s] Failed to create with error: ~p",
+                                        [UUID, E]),
+                            change_state(UUID, <<"failed">>),
+                            {stop, normal, State}
+                    end;
+                E ->
+                    lager:error("[create:~s] Dataset import failed with: ~p",
                                 [UUID, E]),
                     change_state(UUID, <<"failed">>),
                     {stop, normal, State}
-            end;
-        E ->
-			lager:error("[create:~s] Dataset import failed with: ~p",
-						[UUID, E]),
-			change_state(UUID, <<"failed">>),
-            {stop, normal, State}
+            end
     end;
 
 initialized({restore, SnapID, Options},
@@ -740,7 +748,7 @@ handle_event(_Event, StateName, State) ->
 
 
 handle_sync_event({door, Ref, Data}, _From, StateName,
-             State = #state{auth_ref=Ref, uuid=UUID}) ->
+                  State = #state{auth_ref=Ref, uuid=UUID}) ->
     R = case auth_credintials(UUID, Data) of
             true ->
                 <<"1">>;
@@ -750,7 +758,7 @@ handle_sync_event({door, Ref, Data}, _From, StateName,
     {reply, {ok, R}, StateName, State};
 
 handle_sync_event({door, Ref, Data}, _From, StateName,
-             State = #state{api_ref=Ref, uuid=UUID}) ->
+                  State = #state{api_ref=Ref, uuid=UUID}) ->
     lager:info("[zone:~s] API: ~s", [UUID, Data]),
     try jsx:decode(Data) of
         JSON ->
@@ -1242,7 +1250,7 @@ snapshot_sizes(VM) ->
             FlatSnaps = [Name || {Name, _Size} <- Snaps],
             SnapsGone = lists:filter(fun (Name) ->
                                              not lists:member(Name, FlatSnaps)
-                                      end, KnownS),
+                                     end, KnownS),
             Ss1 = [{[Name, <<"size">>], Size}
                    || {Name, Size} <- Snaps1],
             Ss2 = [{[Name], delete} || Name <- SnapsGone],
@@ -1440,3 +1448,13 @@ map_rule(JSX) ->
     {ok, UUID} = jsxd:get(<<"uuid">>, JSX),
     {ok, Rule} = jsxd:get(<<"rule">>, JSX),
     {UUID, Rule}.
+
+
+create_ipkg(_Dataset, _Package, VMSpec, State) ->
+    {ok, UUID} = jsxd:get(<<"uuid">>, VMSpec),
+    lager:info("The very first create request to a omnios hypervisor: ~s.",
+               [UUID]),
+    {stop, normal, State}.
+    %% {next_state, creating,
+    %%  State#state{type = ipkg,
+    %%              public_state = change_state(UUID, <<"creating">>)}}.

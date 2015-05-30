@@ -138,7 +138,7 @@ init([]) ->
     Capabilities =
         case System of
             omnios ->
-                [<<"ipkg">>, <<"lipkg">>];
+                [<<"ipkg">>];
             smartos ->
                 case os:cmd("ls /dev/kvm") of
                     "/dev/kvm\n" ->

@@ -13,7 +13,7 @@
 
 -export([list/0, get/1]).
 
--export([ex1/0]).
+-export([ex1/0, ex2/0]).
 
 
 list() ->
@@ -68,6 +68,44 @@ ex1() ->
              commit,
              exit]).
 
+ex2() ->
+    zonecfg(
+      [create,
+       {zonepath, <<"/zones/2398fe7c-032f-11e5-abb0-b33f9f953915">>},
+       {brand, ipkg},
+       {autoboot, true},
+       {limitpriv, default},
+       {'ip-type', exclusive},
+       {add, net,
+        [{physical, <<"net0">>},
+         {'mac-addr', <<"12:1e:96:73:04:17">>},
+         {'global-nic', admin},
+         {property, gateway, "192.168.1.1"},
+         {property, ip, "192.168.1.44"},
+         {property, netmask, "255.255.255.0"},
+         {property, primary, "true"}
+        ]},
+       {rctl, <<"zone.cpu-shares">>, privileged, 100, none},
+       {rctl, <<"zone.max-lwps">>, privileged, 2000, deny},
+       {rctl, <<"zone.max-msg-ids">>, privileged, 4096, deny},
+       {rctl, <<"zone.max-sem-ids">>, privileged, 4096, deny},
+       {rctl, <<"zone.max-shm-ids">>, privileged, 4096, deny},
+       {rctl, <<"zone.max-shm-memory">>, privileged, 3221225472, deny},
+       {rctl, <<"zone.zfs-io-priority">>, privileged, 100, none},
+       {rctl, <<"zone.cpu-cap">>, privileged, 400, deny},
+       {rctl, <<"zone.max-physical-memory">>, privileged, 6442450944, deny},
+       {rctl, <<"zone.max-locked-memory">>, privileged, 6442450944, deny},
+       {rctl, <<"zone.max-swap">>, privileged, 6442450944, deny},
+       {attr, <<"vm-version">>, string, 1},
+       {attr, <<"create-timestamp">>, string, <<"2015-04-26T11:29:31.297Z">>},
+       {attr, <<"billing-id">>, string, <<"00000000-0000-0000-0000-000000000000">>},
+       {attr, <<"owner-uuid">>, string, <<"00000000-0000-0000-0000-000000000000">>},
+       {attr, <<"hostname">>, string, <<"fifo01">>},
+       {attr, <<"dns-domain">>, string, <<"local">>},
+       {attr, <<"resolvers">>, string, <<"8.8.8.8,8.8.4.4">>},
+       {attr, <<"alias">>, string, <<"ZmlmbzAx">>},
+       {attr, <<"tmpfs">>, string, 6144}]).
+
 %% zonecfg -z 2398fe7c-032f-11e5-abb0-b33f9f953915 delete -F
 
 %% zoneadm: zone '2398fe7c-032f-11e5-abb0-b33f9f953915': WARNING: Ignoring unrecognized rctl 'zone.max-physical-memory'.
@@ -99,12 +137,19 @@ zonecfg1(commit) ->
 zonecfg1(exit) ->
     "exit\n";
 
+
 zonecfg1({N, V}) when is_atom(N) ->
     set(N, V);
 
+
 zonecfg1({rctl, Name, Priv, Limit, Action}) ->
-    add(rctl, [{name, Name},
-               {value, rctl_val(Priv, Limit, Action)}]);
+    ["add rctl\n",
+     "set name=", v(Name), $\n,
+     "add value ", rctl_val(Priv, Limit, Action), $\n,
+     "end\n"];
+
+zonecfg1({property, Name, Value}) ->
+    ["add property ", val_list([{name, Name}, {value, [$\", Value, $\"]}]), $\n];
 
 zonecfg1({add, What, Opts}) ->
     add(What, Opts);
@@ -116,8 +161,8 @@ zonecfg1({attr, Name, Type, Value}) ->
          {value, Value}]).
 
 add(Type, Values) ->
-    ["add ", v(Type),
-     [set(K, V) || {K, V} <- Values],
+    ["add ", v(Type), $\n,
+     [zonecfg1(Value) || Value <- Values],
      "end\n"].
 
 set(Name, Value) ->
@@ -127,7 +172,7 @@ rctl_val(Priv, Limit, Action) ->
     val_list([{priv, Priv}, {limit, Limit}, {action, rctl_action(Action)}]).
 
 val_list(Vs) ->
-    [$(, v([[v(N), $=, v(V)] || {N, V} <- Vs]),  $)].
+    [$(, string:join([[v(N), $=, v(V)] || {N, V} <- Vs], ","),  $)].
 
 rctl_action(none) ->
     "none";

@@ -4,7 +4,7 @@ REBAR = $(shell pwd)/rebar
 
 quick-test: cp-hooks
 	-$(REBAR) compile 
-	$(REBAR) skip_deps=true eunit
+	$(REBAR) skip_deps=true compile eunit
 
 all: cp-hooks deps compile
 

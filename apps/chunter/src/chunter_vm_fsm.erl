@@ -1450,8 +1450,7 @@ map_rule(JSX) ->
     {UUID, Rule}.
 
 
-create_ipkg(_Dataset, _Package, VMSpec, State) ->
-    {ok, UUID} = jsxd:get(<<"uuid">>, VMSpec),
+create_ipkg(_Dataset, _Package, _VMSpec, State = #state{ uuid = UUID}) ->
     lager:info("The very first create request to a omnios hypervisor: ~s.",
                [UUID]),
     {stop, normal, State}.

@@ -1435,7 +1435,7 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     lager:info("The very first create request to a omnios hypervisor: ~s.",
                [UUID]),
     VMSpect1 = jsxd:set(<<"uuid">>, UUID, VMSpec),
-    Conf = chunter_spec:to_zonecfg(Package, Dataset, VMSpect1),
+    {_NICS, Conf} = chunter_spec:to_zonecfg(Package, Dataset, VMSpect1),
     UUIDs = binary_to_list(UUID),
     File = ["/tmp/", UUIDs, ".conf"],
     file:write_file(File, chunter_zone:zonecfg(Conf)),

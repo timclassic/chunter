@@ -3,9 +3,9 @@
 -export([get_vnic/1]).
 
 get_vnic(Network) ->
-    NIC = find_vnic(),
+    {NIC, NICB} = find_vnic(),
     os:cmd(["dladm create-vnic -t -l ", nic_for(Network), " ", NIC]),
-    list_to_binary(NIC).
+    NICB.
 
 
 %% TODO: Nope not going to work like that.
@@ -17,11 +17,12 @@ find_vnic() ->
 find_vnic(I, Nics) ->
     ID = integer_to_list(I),
     NIC = "net" ++ ID,
-    case lists:member(NIC, Nics) of
+    NICB = list_to_binary(NIC),
+    case lists:member(NICB, Nics) of
         true ->
             find_vnic(I + 1, Nics);
         false ->
-            NIC
+            {NIC, NICB}
     end.
 
 vnics() ->

@@ -181,13 +181,13 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
             {add, 'capped-memory',
              [{physical, RamB},
               {swap, MaxSwap1},
-              {locked, RamB}]},
-            %% TODO: find a workaround
-            %% {rctl, <<"zone.max-physical-memory">>, privileged, RamB, deny},
-            %% TODO: What is the diff
-            {rctl, <<"zone.max-locked-memory">>, privileged, RamB, deny},
-             %% TODO: where is the diff
-            {rctl, <<"zone.max-swap">>, privileged, MaxSwap1, deny}],
+              {locked, RamB}]}],
+    %% TODO: find a workaround
+    %% {rctl, <<"zone.max-physical-memory">>, privileged, RamB, deny},
+    %% TODO: What is the diff
+    %% {rctl, <<"zone.max-locked-memory">>, privileged, RamB, deny},
+    %% TODO: where is the diff
+    %% {rctl, <<"zone.max-swap">>, privileged, MaxSwap1, deny}],
     Attr = [{attr, <<"vm-version">>, string, 1},
             %% TODO: generte proper date
             {attr, <<"create-timestamp">>, string, <<"2015-04-26T11:29:31.297Z">>},
@@ -199,7 +199,8 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
                         (<<"hostname">>, V, Acc) ->
                             [{attr, <<"hostname">>, string, V} | Acc];
                         (<<"alias">>, V, Acc) ->
-                            [{attr, <<"alias">>, string, base64:encode(V)} | Acc];
+                            Base64 = base64:encode(V),
+                            [{attr, <<"alias">>, string, <<"\"", Base64/binary, "\"">>} | Acc];
                         %% (<<"ssh_keys">>, V, Obj) ->
                         %%     jsxd:set([<<"customer_metadata">>,
                         %%               <<"root_authorized_keys">>], V, Obj);
@@ -217,15 +218,14 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
                         (K, _V, Acc) ->
                             lager:warning("[zonecfg] Unsupported key: ~s", [K]),
                             Acc
-                        %%     case re:run(K, "_pw$") of
-                        %%         nomatch ->
-                        %%             Obj;
-                        %%         _ ->
-                        %%             jsxd:set([<<"internal_metadata">>, K],
-                        %%                      V, Obj)
-                        %%     end
-                        end, [], OwnerData),
-
+                            %%     case re:run(K, "_pw$") of
+                            %%         nomatch ->
+                            %%             Obj;
+                            %%         _ ->
+                            %%             jsxd:set([<<"internal_metadata">>, K],
+                            %%                      V, Obj)
+                            %%     end
+                    end, [], OwnerData),
     Finish = [verify,
               commit,
               exit],

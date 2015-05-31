@@ -199,7 +199,7 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
                         (<<"hostname">>, V, Acc) ->
                             [{attr, <<"hostname">>, string, V} | Acc];
                         (<<"alias">>, V, Acc) ->
-                            [{attr, <<"alias">>, string, base64:encode(V)} | Acc]
+                            [{attr, <<"alias">>, string, base64:encode(V)} | Acc];
                         %% (<<"ssh_keys">>, V, Obj) ->
                         %%     jsxd:set([<<"customer_metadata">>,
                         %%               <<"root_authorized_keys">>], V, Obj);
@@ -214,7 +214,9 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
                         %% (<<"network_map">>, V, Obj) ->
                         %%     jsxd:set([<<"internal_metadata">>,
                         %%               <<"network_map">>], V, Obj);
-                        %% (K, V, Obj) ->
+                        (K, _V, Acc) ->
+                            lager:warning("[zonecfg] Unsupported key: ~s", [K]),
+                            Acc
                         %%     case re:run(K, "_pw$") of
                         %%         nomatch ->
                         %%             Obj;

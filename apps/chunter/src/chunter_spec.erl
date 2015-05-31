@@ -137,7 +137,12 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
                       0
               end,
     RamShare = round(1024*RamPerc),
-    MaxSwap = jsxd:get(<<"max_swap">>, Ram * 2, Package),
+    MaxSwap = case ft_package:max_swap(Package) of
+                  undefined ->
+                      Ram * 2;
+                  MaxSwapX ->
+                      MaxSwapX
+              end,
     MaxSwap1 = erlang:max(256, MaxSwap) * 1024 * 1024,
     {ok, UUID} = jsxd:get(<<"uuid">>, OwnerData),
     NICs = [chunter_nic_srv:get_vnic(<<"admin">>)],

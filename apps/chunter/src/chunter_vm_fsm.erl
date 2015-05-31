@@ -1431,20 +1431,11 @@ map_rule(JSX) ->
     {UUID, Rule}.
 
 
-create_ipkg(_Dataset, _Package, _VMSpec, State = #state{ uuid = UUID}) ->
+create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     lager:info("The very first create request to a omnios hypervisor: ~s.",
                [UUID]),
-    NIC = chunter_nic_srv:get_vnic(<<"admin">>),
-    Conf = [create,
-            {zonename, UUID},
-            {zonepath, <<"/data/zones/", UUID/binary>>},
-            {autoboot, true},
-            {limitpriv, [default,dtrace_proc,dtrace_user]},
-            {'ip-type', exclusive},
-            {add, net, [{physical, NIC}]},
-            verify,
-            commit,
-            exit],
+    VMSpect1 = jsxd:set(<<"uuid">>, UUID, VMSpec),
+    Conf = chunter_spec:to_zonecfg(Package, Dataset, VMSpect1),
     UUIDs = binary_to_list(UUID),
     File = ["/tmp/", UUIDs, ".conf"],
     file:write_file(File, chunter_zone:zonecfg(Conf)),
@@ -1454,7 +1445,6 @@ create_ipkg(_Dataset, _Package, _VMSpec, State = #state{ uuid = UUID}) ->
     lager:info("[zonecfg:~s] ~p", [UUID, R2]),
     R3 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
     lager:info("[zonecfg:~s] ~p", [UUID, R3]),
-
     {next_state, creating,
      State#state{type = zone,
                  public_state = change_state(UUID, <<"creating">>)}}.

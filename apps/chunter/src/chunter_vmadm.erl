@@ -25,6 +25,32 @@
 %%% API
 %%%===================================================================
 
+zoneadm(UUID, SubCmd) when is_atom(SubCmd) ->
+    zoneadm(UUID, atom_to_list(SubCmd));
+zoneadm(UUID, SubCmd) when is_list(SubCmd) ->
+    zoneadm(UUID, list_to_binary(SubCmd));
+
+zoneadm(UUID, SubCmd) ->
+    Cmd = <<"/usr/sbin/zoneadm -z ", UUID/binary, " ", SubCmd/binary>>,
+    lager:debug([{fifi_component, chunter}],
+                "zoneadm:cmd - ~s.", [Cmd]),
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[zoneadm] ~s", [R]),
+    R.
+
+zonecfg(UUID, SubCmd) when is_atom(SubCmd) ->
+    zonecfg(UUID, atom_to_list(SubCmd));
+zonecfg(UUID, SubCmd) when is_list(SubCmd) ->
+    zonecfg(UUID, list_to_binary(SubCmd));
+
+zonecfg(UUID, SubCmd) ->
+    Cmd = <<"/usr/sbin/zonecfg -z ", UUID/binary, " ", SubCmd/binary>>,
+    lager:debug([{fifi_component, chunter}],
+                "zonecfg:cmd - ~s.", [Cmd]),
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[zonecfg] ~s", [R]),
+    R.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% @spec
@@ -33,108 +59,167 @@
 
 -spec start(UUID::fifo:uuid()) -> list().
 start(UUID) ->
-    lager:info([{fifi_component, chunter}],
-               "vmadm:start - UUID: ~s.", [UUID]),
-    Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
-    lager:debug([{fifi_component, chunter}],
-                "vmadm:cmd - ~s.", [Cmd]),
-    R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", [R]),
-    R.
+    case chunter_utils:system() of
+        smartos ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:start - UUID: ~s.", [UUID]),
+            Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
+            lager:debug([{fifi_component, chunter}],
+                        "vmadm:cmd - ~s.", [Cmd]),
+            R = os:cmd(binary_to_list(Cmd)),
+            lager:debug("[vmadm] ~s", [R]),
+            R;
+        omnios ->
+            lager:info([{fifi_component, chunter}],
+                       "zoneadm:start - UUID: ~s.", [UUID]),
+            zoneadm(UUID, boot)
+    end.
 
 -spec start(UUID::fifo:uuid(), Image::binary()) -> list().
 
 start(UUID, Image) ->
-    lager:info([{fifi_component, chunter}],
-               "vmadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
-    Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
-    lager:debug([{fifi_component, chunter}],
-                "vmadm:cmd - ~s.", [Cmd]),
-    R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", [R]),
-    R.
+    case chunter_utils:system() of
+        smartos ->
+            lager:inafo([{fifi_component, chunter}],
+                        "vmadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
+            Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
+            lager:debug([{fifi_component, chunter}],
+                        "vmadm:cmd - ~s.", [Cmd]),
+            R = os:cmd(binary_to_list(Cmd)),
+            lager:debug("[vmadm] ~s", [R]),
+            R;
+        omnios ->
+            lager:inafo([{fifi_component, chunter}],
+                        "zoneadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
+            zoneadm(UUID, boot)
+    end.
 
 -spec delete(UUID::fifo:uuid()) -> ok.
 
 delete(UUID) ->
-    lager:info([{fifi_component, chunter}],
-               "vmadm:delete - UUID: ~s.", [UUID]),
-    Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
-    lager:debug([{fifi_component, chunter}],
-                "vmadm:cmd - ~s.", [Cmd]),
-    R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", [R]),
-
-    chunter_server:update_mem().
+    R1 = case chunter_utils:system() of
+             smartos ->
+                 lager:info([{fifi_component, chunter}],
+                            "vmadm:delete - UUID: ~s.", [UUID]),
+                 Cmd = <<"/usr/sbin/vmadm delete ", UUID/binary>>,
+                 lager:debug([{fifi_component, chunter}],
+                             "vmadm:cmd - ~s.", [Cmd]),
+                 R = os:cmd(binary_to_list(Cmd)),
+                 lager:debug("[vmadm] ~s", [R]),
+                 R;
+             omnios ->
+                 force_stop(UUID),
+                 lager:info([{fifi_component, chunter}],
+                            "zoneadm:uninstall - UUID: ~s.", [UUID]),
+                 zoneadm(UUID, uninstall),
+                 zonecfg(UUID, delete)
+         end,
+    chunter_server:update_mem(),
+    R1.
 
 -spec info(UUID::fifo:uuid()) -> fifo:config_list().
 
 info(UUID) ->
-    lager:info([{fifi_component, chunter}],
-               "vmadm:info - UUID: ~s.", [UUID]),
-    Cmd = <<"/usr/sbin/vmadm info ", UUID/binary>>,
-    lager:debug([{fifi_component, chunter}],
-                "vmadm:cmd - ~s.", [Cmd]),
-    case os:cmd(binary_to_list(Cmd)) of
-        "Unable" ++ _ ->
-            {error, no_info};
-        JSON ->
-            case jsx:to_term(list_to_binary(JSON)) of
-                {incomplete, _} ->
+    case chunter_utils:system() of
+        smartos ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:info - UUID: ~s.", [UUID]),
+            Cmd = <<"/usr/sbin/vmadm info ", UUID/binary>>,
+            lager:debug([{fifi_component, chunter}],
+                        "vmadm:cmd - ~s.", [Cmd]),
+            case os:cmd(binary_to_list(Cmd)) of
+                "Unable" ++ _ ->
                     {error, no_info};
-                R ->
-                    {ok, R}
-            end
+                JSON ->
+                    case jsx:to_term(list_to_binary(JSON)) of
+                        {incomplete, _} ->
+                            {error, no_info};
+                        R ->
+                            {ok, R}
+                    end
+            end;
+
+        omnios ->
+            {error, no_info}
     end.
 
 -spec stop(UUID::fifo:uuid()) -> list().
 
 stop(UUID) ->
-    lager:info([{fifi_component, chunter}],
-               "vmadm:stop - UUID: ~s.", [UUID]),
-    Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary>>,
-    lager:debug([{fifi_component, chunter}],
-                "vmadm:cmd - ~s.", [Cmd]),
-    R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", [R]),
-    R.
+    case chunter_utils:system() of
+        smartos ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:stop - UUID: ~s.", [UUID]),
+            Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary>>,
+            lager:debug([{fifi_component, chunter}],
+                        "vmadm:cmd - ~s.", [Cmd]),
+            R = os:cmd(binary_to_list(Cmd)),
+            lager:debug("[vmadm] ~s", [R]),
+            R;
+        omnios ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:stop - UUID: ~s.", [UUID]),
+            zoneadm(UUID, shutdown)
+    end.
 
 -spec force_stop(UUID::fifo:uuid()) -> list().
 
 force_stop(UUID) ->
-    lager:info([{fifi_component, chunter}],
-               "vmadm:stop - UUID: ~s.", [UUID]),
-    Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary, " -F">>,
-    lager:debug([{fifi_component, chunter}],
-                "vmadm:cmd - ~s.", [Cmd]),
-    R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", [R]),
-    R.
+    case chunter_utils:system() of
+        smartos ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:force-stop - UUID: ~s.", [UUID]),
+            Cmd = <<"/usr/sbin/vmadm stop ", UUID/binary, " -F">>,
+            lager:debug([{fifi_component, chunter}],
+                        "vmadm:cmd - ~s.", [Cmd]),
+            R = os:cmd(binary_to_list(Cmd)),
+            lager:debug("[vmadm] ~s", [R]),
+            R;
+        omnios ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:force-stop - UUID: ~s.", [UUID]),
+            zoneadm(UUID, halt)
+    end.
 
 -spec reboot(UUID::fifo:uuid()) -> list().
 
 reboot(UUID) ->
-    lager:info([{fifi_component, chunter}],
-               "vmadm:reboot - UUID: ~s.", [UUID]),
-    Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary>>,
-    lager:debug([{fifi_component, chunter}],
-                "vmadm:cmd - ~s.", [Cmd]),
-    R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", [R]),
-    R.
+    case chunter_utils:system() of
+        smartos ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:reboot - UUID: ~s.", [UUID]),
+            Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary>>,
+            lager:debug([{fifi_component, chunter}],
+                        "vmadm:cmd - ~s.", [Cmd]),
+            R = os:cmd(binary_to_list(Cmd)),
+            lager:debug("[vmadm] ~s", [R]),
+            R;
+        omnios ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:reboot - UUID: ~s.", [UUID]),
+            stop(UUID),
+            start(UUID)
+    end.
 
 
 -spec force_reboot(UUID::fifo:uuid()) -> list().
 
 force_reboot(UUID) ->
-    lager:info([{fifi_component, chunter}],
-               "vmadm:reboot - UUID: ~s.", [UUID]),
-    Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary, " -F">>,
-    lager:debug([{fifi_component, chunter}],
-                "vmadm:cmd - ~s.", [Cmd]),
-    R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[vmadm] ~s", [R]),
-    R.
+    case chunter_utils:system() of
+        smartos ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:reboot - UUID: ~s.", [UUID]),
+            Cmd = <<"/usr/sbin/vmadm reboot ", UUID/binary, " -F">>,
+            lager:debug([{fifi_component, chunter}],
+                        "vmadm:cmd - ~s.", [Cmd]),
+            R = os:cmd(binary_to_list(Cmd)),
+            lager:debug("[vmadm] ~s", [R]),
+            R;
+        omnios ->
+            lager:info([{fifi_component, chunter}],
+                       "vmadm:reboot - UUID: ~s.", [UUID]),
+            zoneadm(UUID, reboot)
+    end.
 
 -spec create(UUID::fifo:vm_config()) -> ok |
                                         {error, binary() |
@@ -206,6 +291,7 @@ update(UUID, Data) ->
             chunter_server:update_mem(),
             chunter_vm_fsm:load(UUID)
     end.
+
 
 %% This function reads the process's input untill it knows that the vm was created or failed.
 %%-spec wait_for_text(Port::any()) ->

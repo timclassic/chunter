@@ -18,9 +18,9 @@ sysinfo() ->
             SysInfo = jsxd:delete([<<"Boot Parameters">>, <<"root_shadow">>], SysInfo0),
             {ok, SysInfo};
         omnios ->
-            [];
+            {ok, []};
         _ ->
-            []
+            {ok, []}
     end.
 
 system() ->

@@ -134,7 +134,7 @@ init([]) ->
               chunter_vm_fsm:load(UUID)
       end, 0, chunter_zone:list()),
 
-    SysInfo = chunter_utils:sysinfo(),
+    {ok, SysInfo} = chunter_utils:sysinfo(),
     Capabilities =
         case System of
             omnios ->

@@ -158,7 +158,7 @@ stop(UUID) ->
             R;
         omnios ->
             lager:info([{fifi_component, chunter}],
-                       "vmadm:stop - UUID: ~s.", [UUID]),
+                       "zoneadm:stop - UUID: ~s.", [UUID]),
             zoneadm(UUID, shutdown)
     end.
 
@@ -197,8 +197,7 @@ reboot(UUID) ->
         omnios ->
             lager:info([{fifi_component, chunter}],
                        "vmadm:reboot - UUID: ~s.", [UUID]),
-            stop(UUID),
-            start(UUID)
+            zoneadm(UUID, "shutdown -r")
     end.
 
 

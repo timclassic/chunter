@@ -192,8 +192,17 @@ finish_image(UUID) ->
     %% Need to set the correct type
     Manifest1 = case ft_dataset:type(DS) of
                     zone ->
-                        jsxd:set([<<"manifest">>, <<"type">>],
-                                 <<"zone-dataset">>, Manifest);
+                        case ft_dataset:zone_type(DS) of
+                            lx ->
+                                jsxd:set([<<"manifest">>, <<"type">>],
+                                         <<"lx-dataset">>, Manifest);
+                            docker ->
+                                jsxd:set([<<"manifest">>, <<"type">>],
+                                         <<"docker">>, Manifest);
+                            _ ->
+                                jsxd:set([<<"manifest">>, <<"type">>],
+                                         <<"zone-dataset">>, Manifest)
+                        end;
                     _ ->
                         Manifest
                 end,

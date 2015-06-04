@@ -4,7 +4,7 @@
 
 get_vnic(Network) ->
     {NIC, NICB} = find_vnic(),
-    os:cmd(["dladm create-vnic -t -l ", nic_for(Network), " ", NIC]),
+    os:cmd(["dladm create-vnic -l ", nic_for(Network), " ", NIC]),
     NICB.
 
 

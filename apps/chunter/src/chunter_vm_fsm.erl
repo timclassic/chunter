@@ -1435,7 +1435,7 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     lager:info("The very first create request to a omnios hypervisor: ~s.",
                [UUID]),
     VMSpect1 = jsxd:set(<<"uuid">>, UUID, VMSpec),
-    {_NICS, Conf} = chunter_spec:to_zonecfg(Package, Dataset, VMSpect1),
+    {NICS, Conf} = chunter_spec:to_zonecfg(Package, Dataset, VMSpect1),
     UUIDs = binary_to_list(UUID),
     File = ["/tmp/", UUIDs, ".conf"],
     file:write_file(File, chunter_zone:zonecfg(Conf)),
@@ -1445,6 +1445,48 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     lager:info("[zonecfg:~s] ~p", [UUID, R2]),
     R3 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
     lager:info("[zonecfg:~s] ~p", [UUID, R3]),
+    lager:info("[setup:~s] Starting zone setup.", [UUID]),
+    lager:info("[setup:~s] Initializing networks.", [UUID]),
+    lists:map(fun({NicBin, Spec}) ->
+                      Nic = binary_to_list(NicBin),
+                      {ok, IPBin} = jsxd:get(<<"ip">>, Spec),
+                      IP = binary_to_list(IPBin),
+                      {ok, Netmask} = jsxd:get(<<"netmask">>, Spec),
+                      CIDR = ft_iprange:mask_to_cidr(Netmask),
+                      CIDRS = integer_to_list(CIDR),
+                      zlogin(UUID, ["ipadm create-if ", Nic]),
+                      zlogin(UUID, ["ipadm create-addr -T static ",
+                                    " -a ", IP, "/", CIDRS,
+                                    " ", Nic, "/v4"]),
+                      case jsxd:get(<<"primary">>, Spec) of
+                          {ok, true} ->
+                              {ok, GWBin} = jsxd:get(<<"gateway">>, Spec),
+                              GW = binary_to_list(GWBin),
+                              zlogin(UUID, ["route -p add default ", GW]);
+                          _ ->
+                              ok
+                      end
+              end, NICS),
+    lager:info("[setup:~s] nsswitch conf.", [UUID]),
+    zlogin(UUID, "cp -f /etc/nsswitch.dns /etc/nsswitch.conf"),
+    lager:info("[setup:~s] dns.", [UUID]),
+    zlogin(UUID, "echo > /etc/resolv.conf"),
+    case jsxd:get(<<"resolvers">>, VMSpec) of
+        {ok, ResolversL} ->
+            ResolversBin = re:split(ResolversL, ","),
+            Resolvers = [binary_to_list(Rslvr) || Rslvr <- ResolversBin],
+            [zlogin(UUID, ["echo 'nameserver ", Rslvr, "' >> /etc/resolv.conf"])
+             || Rslvr <- Resolvers];
+        _ ->
+            ok
+    end,
+    DomainBin = jsxd:get(<<"dns_domain">>, <<"local">>, VMSpec),
+    Domain = binary_to_list(DomainBin),
+    zlogin(UUID, ["echo 'domain ", Domain, "' >> /etc/resolv.conf"]),
+    zlogin(UUID, ["echo 'search ", Domain, "' >> /etc/resolv.conf"]),
+    zlogin(UUID, "svcadm refresh name-service-cache"),
+    lager:info("[setup:~s] Zone setup completed.", [UUID]),
+
     {next_state, creating,
      State#state{type = zone,
                  public_state = change_state(UUID, <<"creating">>)}}.
@@ -1455,3 +1497,11 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
 
 
 
+
+zlogin(UUID, Cmd) ->
+    UUIDs = binary_to_list(UUID),
+    FullCmd = ["/usr/sbin/zlogin ", UUIDs, " ", Cmd],
+    lager:info("[zlogin:~s] ~s", [UUID, FullCmd]),
+    Rx = os:cmd(FullCmd),
+    lager:info("[zlogin:~s]-> ~s", [Rx]),
+    Rx.

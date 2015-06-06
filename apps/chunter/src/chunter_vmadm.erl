@@ -31,7 +31,7 @@ zoneadm(UUID, SubCmd) when is_list(SubCmd) ->
     zoneadm(UUID, list_to_binary(SubCmd));
 
 zoneadm(UUID, SubCmd) ->
-    Cmd = <<"/usr/sbin/zoneadm -z ", UUID/binary, " ", SubCmd/binary>>,
+    Cmd = <<"/usr/sbin/zoneadm -z ", UUID/binary, " ", SubCmd/binary, " -F">>,
     lager:debug([{fifi_component, chunter}],
                 "zoneadm:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
@@ -44,7 +44,7 @@ zonecfg(UUID, SubCmd) when is_list(SubCmd) ->
     zonecfg(UUID, list_to_binary(SubCmd));
 
 zonecfg(UUID, SubCmd) ->
-    Cmd = <<"/usr/sbin/zonecfg -z ", UUID/binary, " ", SubCmd/binary>>,
+    Cmd = <<"/usr/sbin/zonecfg -z ", UUID/binary, " ", SubCmd/binary, " -F">>,
     lager:debug([{fifi_component, chunter}],
                 "zonecfg:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
@@ -108,11 +108,17 @@ delete(UUID) ->
                  lager:debug("[vmadm] ~s", [R]),
                  R;
              omnios ->
+                 VM = chunter_zone:get(UUID),
                  force_stop(UUID),
                  lager:info([{fifi_component, chunter}],
-                            "zoneadm:uninstall - UUID: ~s.", [UUID]),
+                            "zoneadm:uninstall - UUID: ~s / ~p.", [UUID, VM]),
                  zoneadm(UUID, uninstall),
-                 zonecfg(UUID, delete)
+                 zonecfg(UUID, delete),
+                 {ok, Nics} = jsxd:get(<<"nics">>, VM),
+                 lists:map(fun(N) ->
+                                   {ok, IFace} = jsxd:get(<<"interface">>, N),
+                                   chunter_nic_srv:delete(IFace)
+                           end, Nics)
          end,
     chunter_server:update_mem(),
     R1.

@@ -143,9 +143,11 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
                   MaxSwapX ->
                       MaxSwapX
               end,
+    {ok, NicsIn} = jsxd:get(<<"nics">>, OwnerData),
+    lager:info("nics: ~p", [NicsIn]),
     MaxSwap1 = erlang:max(256, MaxSwap) * 1024 * 1024,
     {ok, UUID} = jsxd:get(<<"uuid">>, OwnerData),
-    NICs = [chunter_nic_srv:get_vnic(<<"admin">>)],
+    NICs = [chunter_nic_srv:get_vnic(N) || N <- NicsIn],
     %% TODO: make base pool configurable!
     Base = [create,
             {zonename, UUID},
@@ -154,7 +156,7 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
             {autoboot, true},
             {limitpriv, [default,dtrace_proc,dtrace_user]},
             {'ip-type', exclusive}],
-    Network = [{add, net, [{physical, NIC}]} || NIC <- NICs],
+    Network = [{add, net, [{physical, NIC}]} || {NIC, _} <- NICs],
     RamB = Ram * 1024 * 1024,
     CPUShares = case ft_package:cpu_shares(Package) of
                     undefined ->

@@ -25,12 +25,22 @@
 %%% API
 %%%===================================================================
 
+zoneadm(UUID, uninstall) ->
+    zoneadmf(UUID, <<"uninstall">>);
 zoneadm(UUID, SubCmd) when is_atom(SubCmd) ->
     zoneadm(UUID, atom_to_list(SubCmd));
 zoneadm(UUID, SubCmd) when is_list(SubCmd) ->
     zoneadm(UUID, list_to_binary(SubCmd));
 
 zoneadm(UUID, SubCmd) ->
+    Cmd = <<"/usr/sbin/zoneadm -z ", UUID/binary, " ", SubCmd/binary>>,
+    lager:debug([{fifi_component, chunter}],
+                "zoneadm:cmd - ~s.", [Cmd]),
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[zoneadm] ~s", [R]),
+    R.
+
+zoneadmf(UUID, SubCmd) ->
     Cmd = <<"/usr/sbin/zoneadm -z ", UUID/binary, " ", SubCmd/binary, " -F">>,
     lager:debug([{fifi_component, chunter}],
                 "zoneadm:cmd - ~s.", [Cmd]),
@@ -38,18 +48,31 @@ zoneadm(UUID, SubCmd) ->
     lager:debug("[zoneadm] ~s", [R]),
     R.
 
+zonecfg(UUID, delete) ->
+    zonecfgf(UUID, <<"delete">>);
 zonecfg(UUID, SubCmd) when is_atom(SubCmd) ->
     zonecfg(UUID, atom_to_list(SubCmd));
 zonecfg(UUID, SubCmd) when is_list(SubCmd) ->
     zonecfg(UUID, list_to_binary(SubCmd));
 
 zonecfg(UUID, SubCmd) ->
+    Cmd = <<"/usr/sbin/zonecfg -z ", UUID/binary, " ", SubCmd/binary>>,
+    lager:debug([{fifi_component, chunter}],
+                "zonecfg:cmd - ~s.", [Cmd]),
+    R = os:cmd(binary_to_list(Cmd)),
+    lager:debug("[zonecfg] ~s", [R]),
+    R.
+
+zonecfgf(UUID, SubCmd) ->
     Cmd = <<"/usr/sbin/zonecfg -z ", UUID/binary, " ", SubCmd/binary, " -F">>,
     lager:debug([{fifi_component, chunter}],
                 "zonecfg:cmd - ~s.", [Cmd]),
     R = os:cmd(binary_to_list(Cmd)),
     lager:debug("[zonecfg] ~s", [R]),
     R.
+
+
+
 
 %%--------------------------------------------------------------------
 %% @doc

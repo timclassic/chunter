@@ -1446,7 +1446,8 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     R3 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
     lager:info("[zonecfg:~s] ~p", [UUID, R3]),
     lager:info("[setup:~s] Starting zone setup.", [UUID]),
-    timer:sleep(10000), %%TODO: sleeping 10s isn't a good solition!
+    lager:info("[setup:~s] VM: ~p", [UUID, chunter_zone:get_raw(UUID)]),
+    ok = wait_for_running(UUID),
     lager:info("[setup:~s] Initializing networks.", [UUID]),
     lists:map(fun({NicBin, Spec}) ->
                       Nic = binary_to_list(NicBin),
@@ -1492,12 +1493,15 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
      State#state{type = zone,
                  public_state = change_state(UUID, <<"creating">>)}}.
 
-    %% {next_state, creating,
-    %%  State#state{type = ipkg,
-    %%              public_state = change_state(UUID, <<"creating">>)}}.
-
-
-
+wait_for_running(UUID) ->
+    timer:sleep(1000),
+    case chunter_zone:get_raw(UUID) of
+        [{_, _, <<"running">>, _, _, _}] ->
+            ok;
+        [{_, _, State, _, _, _}] ->
+            lager:info("[setup:~s] Waiting: ~p", [UUID, State]),
+            wait_for_running(UUID)
+    end.
 
 zlogin(UUID, Cmd) ->
     UUIDs = binary_to_list(UUID),

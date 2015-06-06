@@ -1446,8 +1446,16 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     R3 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
     lager:info("[zonecfg:~s] ~p", [UUID, R3]),
     lager:info("[setup:~s] Starting zone setup.", [UUID]),
-    lager:info("[setup:~s] VM: ~p", [UUID, chunter_zone:get_raw(UUID)]),
-    ok = wait_for_started(UUID),
+    lager:info("[setup:~s] Waiting for zone to boot .", [UUID]),
+    S = <<"svc:/milestone/multi-user-server:default">>,
+    ok = wait_for_started(UUID, S),
+    %% TODO: this is entirely stupid but for some reason we can't do the
+    %% network setup on the first zone boot so for some reason, we'll need
+    %% to reboot the zone before we can go on - bug reported, lets hope someone
+    %% smarter then me knows why this would hapen.
+    chunter_vmadm:reboot(UUID),
+    timer:sleep(5000),
+    ok = wait_for_started(UUID, S),
     lager:info("[setup:~s] Initializing networks.", [UUID]),
     lists:map(fun({NicBin, Spec}) ->
                       Nic = binary_to_list(NicBin),
@@ -1457,7 +1465,7 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
                       CIDR = ft_iprange:mask_to_cidr(Netmask),
                       CIDRS = integer_to_list(CIDR),
                       zlogin(UUID, ["ipadm create-if ", Nic]),
-                      zlogin(UUID, ["ipadm create-addr -T static ",
+                      zlogin(UUID, ["ipadm create-addr -T static",
                                     " -a ", IP, "/", CIDRS,
                                     " ", Nic, "/v4"]),
                       case jsxd:get(<<"primary">>, Spec) of
@@ -1493,14 +1501,13 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
      State#state{type = zone,
                  public_state = change_state(UUID, <<"creating">>)}}.
 
-wait_for_started(UUID) ->
+wait_for_started(UUID, S) ->
     timer:sleep(1000),
-    S = <<"svc:/milestone/sysconfig:default">>,
     case smurf:status(UUID, S) of
         {ok,{S,<<"online">>, _}} ->
             ok;
         _ ->
-            wait_for_started(UUID)
+            wait_for_started(UUID, S)
     end.
 
 zlogin(UUID, Cmd) ->

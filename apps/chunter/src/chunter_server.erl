@@ -224,25 +224,7 @@ handle_cast(update_mem, State = #state{
                                    reserved_memory = ReservedMem,
                                    name = Host
                                   }) ->
-    VMS = chunter_zone:list(),
-    ProvMem = round(lists:foldl(
-                      fun (VM, Mem) ->
-                              M = case jsxd:get(<<"max_physical_memory">>, VM) of
-                                      {ok, Mx} ->
-                                          Mx;
-                                      _ ->
-                                          case jsxd:get([<<"mcap">>, <<"physcap">>], VM) of
-                                              {ok, MCap} ->
-                                                  binary_to_integer(MCap);
-                                              _ ->
-                                                  0
-                                          end
-                                  end,
-                              Mem + M
-                      end, 0, VMS) / (1024*1024)),
-    {TotalMem, _} =
-        string:to_integer(
-          os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    {TotalMem, ProvMem} = mem(),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
     ls_hypervisor:set_resource(Host, [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
@@ -274,24 +256,8 @@ handle_cast(connect, #state{name = Host,
                             system = System,
                             reserved_memory = ReservedMem,
                             capabilities = Caps} = State) ->
-    {TotalMem, _} = string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
     register_hypervisor(),
-    VMS = chunter_zone:list(),
-
-    {ProvMemA, _} = lists:foldl(
-                      fun (VM, {Mem, Delay}) ->
-                              {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, VM),
-                              timer:apply_after(
-                                500 + Delay, chunter_vm_fsm, load, [UUID]),
-                              M = case lists:keyfind(<<"max_physical_memory">>, 1, VM) of
-                                    {<<"max_physical_memory">>, Mx} ->  
-                                          Mx;
-                                      _ ->
-                                          0
-                                  end,
-                              {Mem + M, Delay + 100}
-                      end, {0, 300}, VMS),
-    ProvMem = round(ProvMemA / (1024*1024)),
+    {TotalMem, ProvMem} = mem(),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
     ls_hypervisor:sysinfo(Host, State#state.sysinfo),
@@ -480,3 +446,26 @@ update_services(UUID, Changed) ->
         Changed1 ->
             libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}])
     end.
+
+mem() ->
+    VMS = chunter_zone:list(),
+    ProvMemA = round(lists:foldl(
+                      fun (VM, Mem) ->
+                              M = case jsxd:get(<<"max_physical_memory">>, VM) of
+                                      {ok, Mx} ->
+                                          Mx;
+                                      _ ->
+                                          case jsxd:get([<<"mcap">>, <<"physcap">>], VM) of
+                                              {ok, MCap} ->
+                                                  binary_to_integer(MCap);
+                                              _ ->
+                                                  0
+                                          end
+                                  end,
+                              Mem + M
+                      end, 0, VMS) / (1024*1024)),
+    ProvMem = round(ProvMemA / (1024*1024)),
+    {TotalMem, _} =
+        string:to_integer(
+          os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")),
+    {TotalMem, ProvMem}.

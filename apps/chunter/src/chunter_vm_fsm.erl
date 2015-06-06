@@ -1446,6 +1446,7 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     R3 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
     lager:info("[zonecfg:~s] ~p", [UUID, R3]),
     lager:info("[setup:~s] Starting zone setup.", [UUID]),
+    timer:sleep(10000), %%TODO: sleeping 10s isn't a good solition!
     lager:info("[setup:~s] Initializing networks.", [UUID]),
     lists:map(fun({NicBin, Spec}) ->
                       Nic = binary_to_list(NicBin),
@@ -1503,5 +1504,5 @@ zlogin(UUID, Cmd) ->
     FullCmd = ["/usr/sbin/zlogin ", UUIDs, " ", Cmd],
     lager:info("[zlogin:~s] ~s", [UUID, FullCmd]),
     Rx = os:cmd(FullCmd),
-    lager:info("[zlogin:~s]-> ~s", [Rx]),
+    lager:info("[zlogin:~s]-> ~s", [UUID, Rx]),
     Rx.

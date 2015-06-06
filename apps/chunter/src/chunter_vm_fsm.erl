@@ -1484,8 +1484,8 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     end,
     DomainBin = jsxd:get(<<"dns_domain">>, <<"local">>, VMSpec),
     Domain = binary_to_list(DomainBin),
-    zlogin(UUID, ["echo 'domain ", Domain, "' >> /etc/resolv.conf"]),
-    zlogin(UUID, ["echo 'search ", Domain, "' >> /etc/resolv.conf"]),
+    zlogin(UUID, ["echo \"domain ", Domain, "\" >> /etc/resolv.conf"]),
+    zlogin(UUID, ["echo \"search ", Domain, "\" >> /etc/resolv.conf"]),
     zlogin(UUID, "svcadm refresh name-service-cache"),
     lager:info("[setup:~s] Zone setup completed.", [UUID]),
 
@@ -1505,7 +1505,7 @@ wait_for_running(UUID) ->
 
 zlogin(UUID, Cmd) ->
     UUIDs = binary_to_list(UUID),
-    FullCmd = ["/usr/sbin/zlogin ", UUIDs, " ", Cmd],
+    FullCmd = ["/usr/sbin/zlogin ", UUIDs, " '", Cmd, "'"],
     lager:info("[zlogin:~s] ~s", [UUID, FullCmd]),
     Rx = os:cmd(FullCmd),
     lager:info("[zlogin:~s]-> ~s", [UUID, Rx]),

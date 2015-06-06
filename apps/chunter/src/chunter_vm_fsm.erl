@@ -1447,7 +1447,7 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     lager:info("[zonecfg:~s] ~p", [UUID, R3]),
     lager:info("[setup:~s] Starting zone setup.", [UUID]),
     lager:info("[setup:~s] VM: ~p", [UUID, chunter_zone:get_raw(UUID)]),
-    ok = wait_for_running(UUID),
+    ok = wait_for_started(UUID),
     lager:info("[setup:~s] Initializing networks.", [UUID]),
     lists:map(fun({NicBin, Spec}) ->
                       Nic = binary_to_list(NicBin),
@@ -1493,14 +1493,14 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
      State#state{type = zone,
                  public_state = change_state(UUID, <<"creating">>)}}.
 
-wait_for_running(UUID) ->
+wait_for_started(UUID) ->
     timer:sleep(1000),
-    case chunter_zone:get_raw(UUID) of
-        [{_, _, <<"running">>, _, _, _}] ->
+    S = <<"svc:/milestone/sysconfig:default">>,
+    case smurf:status(UUID, S) of
+        {ok,{S,<<"online">>, _}} ->
             ok;
-        [{_, _, State, _, _, _}] ->
-            lager:info("[setup:~s] Waiting: ~p", [UUID, State]),
-            wait_for_running(UUID)
+        _ ->
+            wait_for_started(UUID)
     end.
 
 zlogin(UUID, Cmd) ->

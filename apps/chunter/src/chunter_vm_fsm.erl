@@ -1446,15 +1446,18 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     R3 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
     lager:info("[zonecfg:~s] ~p", [UUID, R3]),
     lager:info("[setup:~s] Starting zone setup.", [UUID]),
-    lager:info("[setup:~s] Waiting for zone to boot .", [UUID]),
+    lager:info("[setup:~s] Waiting for zone to boot for the first time.", [UUID]),
     S = <<"svc:/milestone/multi-user-server:default">>,
     ok = wait_for_started(UUID, S),
     %% TODO: this is entirely stupid but for some reason we can't do the
     %% network setup on the first zone boot so for some reason, we'll need
     %% to reboot the zone before we can go on - bug reported, lets hope someone
     %% smarter then me knows why this would hapen.
+    lager:info("[setup:~s] Now reboot it.", [UUID]),
     chunter_vmadm:reboot(UUID),
+    lager:info("[setup:~s] Giveit a few seconds.", [UUID]),
     timer:sleep(5000),
+    lager:info("[setup:~s] And wait for the system to come up agian.", [UUID]),
     ok = wait_for_started(UUID, S),
     lager:info("[setup:~s] Initializing networks.", [UUID]),
     lists:map(fun({NicBin, Spec}) ->

@@ -144,10 +144,11 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
                       MaxSwapX
               end,
     {ok, NicsIn} = jsxd:get(<<"nics">>, OwnerData),
-    lager:info("nics: ~p", [NicsIn]),
+    NicsIn1 = jsxd:set([0, <<"primary">>], true, NicsIn),
+    lager:info("nics: ~p", [NicsIn1]),
     MaxSwap1 = erlang:max(256, MaxSwap) * 1024 * 1024,
     {ok, UUID} = jsxd:get(<<"uuid">>, OwnerData),
-    NICs = [chunter_nic_srv:get_vnic(N) || N <- NicsIn],
+    NICs = [chunter_nic_srv:get_vnic(N) || N <- NicsIn1],
     %% TODO: make base pool configurable!
     Base = [create,
             {zonename, UUID},

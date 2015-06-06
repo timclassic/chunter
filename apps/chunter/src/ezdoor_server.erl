@@ -63,18 +63,13 @@ remove(Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    case chunter_utils:system() of
-        smartos ->
-            Cmd = code:priv_dir(chunter) ++ "/zonedoor",
-            PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
-                        binary],
-            DoorPort = open_port({spawn_executable, Cmd},  PortOpts),
-            erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
-            process_flag(trap_exit, true),
-            {ok, #state{port = DoorPort}};
-        _ ->
-            {ok, #state{}}
-    end.
+    Cmd = code:priv_dir(chunter) ++ "/zonedoor",
+    PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
+                binary],
+    DoorPort = open_port({spawn_executable, Cmd},  PortOpts),
+    erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
+    process_flag(trap_exit, true),
+    {ok, #state{port = DoorPort}}.
 
 %%--------------------------------------------------------------------
 %% @private

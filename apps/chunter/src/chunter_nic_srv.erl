@@ -31,8 +31,6 @@ get_vnic(Spec) ->
 
     {NICB, Spec}.
 
-
-%% TODO: Nope not going to work like that.
 link_for(Network) when is_binary(Network) ->
     link_for(binary_to_list(Network));
 

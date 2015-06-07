@@ -149,7 +149,6 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
     MaxSwap1 = erlang:max(256, MaxSwap) * 1024 * 1024,
     {ok, UUID} = jsxd:get(<<"uuid">>, OwnerData),
     NICs = [chunter_nic_srv:get_vnic(N) || N <- NicsIn1],
-    %% TODO: make base pool configurable!
     {ok, ZoneRootS} = application:get_env(chunter, zone_root),
     ZoneRoot = list_to_binary(ZoneRootS),
     Base = [create,
@@ -187,11 +186,10 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
              [{physical, RamB},
               {swap, MaxSwap1},
               {locked, RamB}]}],
-    %% TODO: find a workaround
+    %% TODO: find a workaround, for some reason those things collide,
+    %% is it the same as the others, where is the difference?
     %% {rctl, <<"zone.max-physical-memory">>, privileged, RamB, deny},
-    %% TODO: What is the diff
     %% {rctl, <<"zone.max-locked-memory">>, privileged, RamB, deny},
-    %% TODO: where is the diff
     %% {rctl, <<"zone.max-swap">>, privileged, MaxSwap1, deny}],
     Attr = [{attr, <<"vm-version">>, string, 1},
             %% TODO: generte proper date

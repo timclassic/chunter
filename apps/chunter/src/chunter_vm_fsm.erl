@@ -1449,6 +1449,32 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
     lager:info("[setup:~s] Waiting for zone to boot for the first time.", [UUID]),
     S = <<"svc:/milestone/multi-user-server:default">>,
     ok = wait_for_started(UUID, S),
+    %% Do the basic setup we can do on the first boot.
+    lager:info("[setup:~s] nsswitch conf.", [UUID]),
+    zlogin(UUID, "cp -f /etc/nsswitch.dns /etc/nsswitch.conf"),
+    lager:info("[setup:~s] dns.", [UUID]),
+    zlogin(UUID, "echo > /etc/resolv.conf"),
+    case jsxd:get(<<"resolvers">>, VMSpec) of
+        {ok, ResolversL} ->
+            ResolversBin = re:split(ResolversL, ","),
+            Resolvers = [binary_to_list(Rslvr) || Rslvr <- ResolversBin],
+            [zlogin(UUID, ["echo 'nameserver ", Rslvr, "' >> /etc/resolv.conf"])
+             || Rslvr <- Resolvers];
+        _ ->
+            ok
+    end,
+    DomainBin = jsxd:get(<<"dns_domain">>, <<"local">>, VMSpec),
+    Domain = binary_to_list(DomainBin),
+    zlogin(UUID, ["echo \"domain ", Domain, "\" >> /etc/resolv.conf"]),
+    zlogin(UUID, ["echo \"search ", Domain, "\" >> /etc/resolv.conf"]),
+
+    case jsxd:get(<<"hostname">>, VMSpec) of
+        {ok, Hostname} ->
+            lager:info("[setup:~s] hostname.", [UUID]),
+            zlogin(UUID, ["hostname ", binary_to_list(Hostname)]);
+        _ ->
+            ok
+    end,
     %% TODO: this is entirely stupid but for some reason we can't do the
     %% network setup on the first zone boot so for some reason, we'll need
     %% to reboot the zone before we can go on - bug reported, lets hope someone
@@ -1480,29 +1506,10 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
                               ok
                       end
               end, NICS),
-    lager:info("[setup:~s] nsswitch conf.", [UUID]),
-    zlogin(UUID, "cp -f /etc/nsswitch.dns /etc/nsswitch.conf"),
-    lager:info("[setup:~s] dns.", [UUID]),
-    zlogin(UUID, "echo > /etc/resolv.conf"),
-    case jsxd:get(<<"resolvers">>, VMSpec) of
-        {ok, ResolversL} ->
-            ResolversBin = re:split(ResolversL, ","),
-            Resolvers = [binary_to_list(Rslvr) || Rslvr <- ResolversBin],
-            [zlogin(UUID, ["echo 'nameserver ", Rslvr, "' >> /etc/resolv.conf"])
-             || Rslvr <- Resolvers];
-        _ ->
-            ok
-    end,
-    DomainBin = jsxd:get(<<"dns_domain">>, <<"local">>, VMSpec),
-    Domain = binary_to_list(DomainBin),
-    zlogin(UUID, ["echo \"domain ", Domain, "\" >> /etc/resolv.conf"]),
-    zlogin(UUID, ["echo \"search ", Domain, "\" >> /etc/resolv.conf"]),
-    zlogin(UUID, "svcadm refresh name-service-cache"),
     lager:info("[setup:~s] Zone setup completed.", [UUID]),
-
     {next_state, creating,
      State#state{type = zone,
-                 public_state = change_state(UUID, <<"creating">>)}}.
+                 public_state = change_state(UUID, <<"running">>)}}.
 
 wait_for_started(UUID, S) ->
     timer:sleep(1000),

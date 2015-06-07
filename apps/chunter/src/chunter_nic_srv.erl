@@ -37,7 +37,7 @@ link_for(Network) when is_binary(Network) ->
     link_for(binary_to_list(Network));
 
 link_for(Network) ->
-    {ok, Networks} = application:get_env(chunter, zoon_root),
+    {ok, Networks} = application:get_env(chunter, network_tags),
     {Network, IFace} = lists:keyfind(Network, 1, Networks),
     IFace.
 

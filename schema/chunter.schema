@@ -117,7 +117,7 @@
  [{default, default},
   {datatype, {enum, [default, qemu64, host]}}]}.
 
-%% @doc zone root for creating new zones, please do not use a leading /
+%% @doc zone root for creating new zones
 {mapping, "zone_root", "chunter.zone_root",
  [{default, "/zones"},
   {datatype, string}]}.
@@ -126,11 +126,12 @@
 %% @doc network mappings only apply for OmniOS hosts, they are handled in the
 %% /usbkey/config in SmartOS and this setting iwll be ignored there.
 {mapping, "network_tag.$name", "chunter.network_tags",
- [{default, "/zones"},
+ [{commented, "bge0"},
   {datatype, string}]}.
 
 {translation,
  "chunter.network_tags",
  fun(Conf) ->
-         cuttlefish_variable:filter_by_prefix("network_tag", Conf)
+         Tags = cuttlefish_variable:filter_by_prefix("network_tag", Conf),
+         [{Tag, Nic} || {[_, Tag], Nic} <- Tags]
  end}.

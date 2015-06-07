@@ -150,9 +150,11 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
     {ok, UUID} = jsxd:get(<<"uuid">>, OwnerData),
     NICs = [chunter_nic_srv:get_vnic(N) || N <- NicsIn1],
     %% TODO: make base pool configurable!
+    {ok, ZoneRootS} = application:get_env(chunter, zoon_root),
+    ZoneRoot = list_to_binary(ZoneRootS),
     Base = [create,
             {zonename, UUID},
-            {zonepath, <<"/data/zones/", UUID/binary>>},
+            {zonepath, <<ZoneRoot/binary, "/", UUID/binary>>},
             {brand, ft_dataset:zone_type(Dataset)},
             {autoboot, true},
             {limitpriv, [default,dtrace_proc,dtrace_user]},

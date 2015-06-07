@@ -270,9 +270,9 @@ handle_cast(connect, #state{name = Host,
        {[<<"total-memory">>], TotalMem}]),
     case System of
         omnios ->
-            %% TODO read this somehow
-            Networks = [<<"admin">>],
-            ls_hypervisor:networks(Host, Networks);
+            {ok, Networks} = application:get_env(chunter, zoon_root),
+            Networks1 = [list_to_binary(N) || {N, _} <- Networks],
+            ls_hypervisor:networks(Host, Networks1);
         smartos ->
             Networks = re:split(os:cmd("cat /usbkey/config  | grep -v '^#' | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
             Networks1 = lists:delete(<<>>, Networks),

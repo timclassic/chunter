@@ -33,8 +33,13 @@ get_vnic(Spec) ->
 
 
 %% TODO: Nope not going to work like that.
-link_for(_) ->
-    "bge0".
+link_for(Network) when is_binary(Network) ->
+    link_for(binary_to_list(Network));
+
+link_for(Network) ->
+    {ok, Networks} = application:get_env(chunter, zoon_root),
+    {Network, IFace} = lists:keyfind(Network, 1, Networks),
+    IFace.
 
 find_vnic() ->
     find_vnic(0, vnics()).

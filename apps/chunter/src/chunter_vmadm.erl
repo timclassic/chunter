@@ -112,7 +112,7 @@ start(UUID, Image) ->
             lager:debug("[vmadm] ~s", [R]),
             R;
         omnios ->
-            lager:inafo([{fifi_component, chunter}],
+            lager:info([{fifi_component, chunter}],
                         "zoneadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
             zoneadm(UUID, boot)
     end.

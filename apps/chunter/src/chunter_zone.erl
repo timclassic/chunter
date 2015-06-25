@@ -14,6 +14,7 @@
 -export([list/0, get/1, get_raw/1, zonecfg/1]).
 
 -export([ex1/0, ex2/0]).
+-ignore_xref([ex1/0, ex2/0]).
 
 
 list() ->

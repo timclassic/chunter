@@ -103,7 +103,7 @@ start(UUID) ->
 start(UUID, Image) ->
     case chunter_utils:system() of
         smartos ->
-            lager:inafo([{fifi_component, chunter}],
+            lager:info([{fifi_component, chunter}],
                         "vmadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
             Cmd = <<"/usr/sbin/vmadm start ", UUID/binary>>,
             lager:debug([{fifi_component, chunter}],

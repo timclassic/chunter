@@ -9,7 +9,7 @@ clean:
 
 package:
 	cp install.sh $(BASENAME)
-	cd .. && tar -cf ../../_build/prod/rel/$(BASENAME).tar $(COMPONENT)
+	tar -cf $(BASENAME).tar ../../_build/prod/rel/$(COMPONENT)
 	uuencode $(BASENAME).tar $(BASENAME).tar >> $(BASENAME)
 	[ -f $(BASENAME).gz ] && rm $(BASENAME).gz || true
 	rm  $(BASENAME).tar

@@ -40,7 +40,7 @@ test: all
 
 rel: all
 	-rm -r ./rel/chunter/share
-	$(REBAR) release
+	$(REBAR) as prod release
 
 ###
 ### Docs

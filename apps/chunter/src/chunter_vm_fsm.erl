@@ -317,8 +317,8 @@ initialized({create, Package, Dataset, VMSpec},
                             lager:debug("[create:~s] Done creating continuing on.", [UUID]),
                             case jsxd:get(<<"owner">>, VMSpec) of
                                 {ok, Org} when Org =/= <<>> ->
-                                    ls_org:resource_action(Org, UUID, timestamp(),
-                                                           confirm_create, []);
+                                    ls_acc:update(Org, UUID, timestamp(),
+                                                  [{<<"event">>, <<"confirm_create">>}]);
                                 _ ->
                                     ok
                             end,
@@ -1367,8 +1367,7 @@ wait_image(_, _) ->
     ok.
 
 timestamp() ->
-    {Mega,Sec,Micro} = erlang:now(),
-    (Mega*1000000+Sec)*1000000+Micro.
+    erlang:system_time(micro_seconds).
 
 auth_credintials(UUID, Data) ->
     case re:split(Data, " ") of

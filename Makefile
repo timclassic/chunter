@@ -35,8 +35,8 @@ clean:
 	make -C rel/pkg clean
 
 test: all
-	$(REBAR) skip_deps=true xref
-	$(REBAR) skip_deps=true eunit
+	$(REBAR) xref
+	$(REBAR) eunit
 
 rel: all
 	-rm -r ./rel/chunter/share
@@ -46,7 +46,7 @@ rel: all
 ### Docs
 ###
 docs:
-	$(REBAR) skip_deps=true doc
+	$(REBAR) doc
 
 ##
 ## Developer targets

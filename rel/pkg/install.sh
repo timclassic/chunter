@@ -72,7 +72,7 @@ if [ "$FORCE" = false ] ; then
 fi
 
 # We've to initialize imgadm or it will die horribly .... *sigh*
-[ -d /var/imgadm ] || imgadm update
+imgadm update
 [ -d /var/imgadm/images ] || mkdir -p /var/imgadm/images
 
 (cd "$DST"; uudecode -p "$DIR/$BASE"| tar xf -)
@@ -108,11 +108,11 @@ then
     else
         sed "s/^ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
     fi
-else
-    echo "Merging old file with new template, the original can be found in ${CONFFILE}.old."
-    $DST/chunter/share/update_config.sh ${CONFFILE}.example ${CONFFILE} > ${CONFFILE}.new &&
-        mv ${CONFFILE} ${CONFFILE}.old &&
-        mv ${CONFFILE}.new ${CONFFILE}
+#else
+#    echo "Merging old file with new template, the original can be found in ${CONFFILE}.old."
+#    $DST/chunter/share/update_config.sh ${CONFFILE}.example ${CONFFILE} > ${CONFFILE}.new &&
+#        mv ${CONFFILE} ${CONFFILE}.old &&
+#        mv ${CONFFILE}.new ${CONFFILE}
 fi
 
 mkdir -p "$DST/custom/smf"

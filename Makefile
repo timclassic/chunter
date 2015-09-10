@@ -85,3 +85,9 @@ cleanplt:
 	@echo
 	sleep 5
 	rm $(COMBO_PLT)
+
+tree:
+	rebar3 tree | grep -v '=' | sed 's/ (.*//' > tree
+
+tree-diff: tree
+	git diff test -- tree

@@ -1,6 +1,6 @@
 REBAR = $(shell pwd)/rebar3
 
-.PHONY: rel package quick-test
+.PHONY: rel package quick-test tree
 
 quick-test: cp-hooks
 	-$(REBAR) compile 

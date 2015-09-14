@@ -1,12 +1,12 @@
 REBAR = $(shell pwd)/rebar3
 
-.PHONY: rel package quick-test tree
+.PHONY: deps rel package quick-test tree
 
 quick-test: cp-hooks
 	-$(REBAR) compile 
 	$(REBAR) eunit
 
-all: cp-hooks compile
+all: cp-hooks deps compile
 
 cp-hooks:
 	cp hooks/* .git/hooks
@@ -29,6 +29,9 @@ package: rel
 
 compile: apps/chunter/priv/runpty apps/chunter/priv/zonedoor version_header
 	$(REBAR) compile
+
+deps:
+	$(REBAR) update
 
 clean:
 	$(REBAR) clean

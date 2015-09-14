@@ -449,21 +449,21 @@ update_services(UUID, Changed) ->
 
 mem() ->
     VMS = chunter_zone:list(),
-    ProvMemA = round(lists:foldl(
-                      fun (VM, Mem) ->
-                              M = case jsxd:get(<<"max_physical_memory">>, VM) of
-                                      {ok, Mx} ->
-                                          Mx;
-                                      _ ->
-                                          case jsxd:get([<<"mcap">>, <<"physcap">>], VM) of
-                                              {ok, MCap} ->
-                                                  binary_to_integer(MCap);
-                                              _ ->
-                                                  0
-                                          end
-                                  end,
-                              Mem + M
-                      end, 0, VMS) / (1024*1024)),
+    ProvMemA = lists:foldl(
+                 fun (VM, Mem) ->
+                         M = case jsxd:get(<<"max_physical_memory">>, VM) of
+                                 {ok, Mx} ->
+                                     Mx;
+                                 _ ->
+                                     case jsxd:get([<<"mcap">>, <<"physcap">>], VM) of
+                                         {ok, MCap} ->
+                                             binary_to_integer(MCap);
+                                         _ ->
+                                             0
+                                     end
+                             end,
+                         Mem + M
+                 end, 0, VMS),
     ProvMem = round(ProvMemA / (1024*1024)),
     {TotalMem, _} =
         string:to_integer(

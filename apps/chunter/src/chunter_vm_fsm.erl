@@ -165,7 +165,6 @@ door_event(Pid, Ref, down) ->
 door_event(Pid, Ref, Data) ->
     gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
 
-
 service_action(UUID, Action, Service)
   when Action =:= enable;
        Action =:= refresh;

@@ -83,8 +83,6 @@ generate_sniffle(In, _Type) ->
                           zone ->
                               jsxd:set(<<"type">>, <<"zone">>, Obj);
                           ipkg ->
-                              jsxd:set(<<"type">>, <<"ipkg">>, Obj);
-                          lipkg ->
                               jsxd:set(<<"type">>, <<"ipkg">>, Obj)
                       end;
                   (<<"max_physical_memory">>, V, Obj) ->

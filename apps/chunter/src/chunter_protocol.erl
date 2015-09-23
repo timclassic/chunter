@@ -114,10 +114,9 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                                      D
                                              end
                                      end),
-            Now = now(),
             Transport:send(Socket, term_to_binary(Res1)),
             lager:info("<~p> Dtrace ~p  took ~pus + ~pus + ~pus.",
-                       [Ref, Act, Time, Time1, timer:now_diff(now(), Now)])
+                       [Ref, Act, Time, Time1])
     end,
     {noreply, State};
 
@@ -295,16 +294,19 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 llquantize(Data) ->
-    lists:foldr(fun ({_, Path, Vals}, Obj) ->
-                        BPath = lists:map(fun(L) when is_list(L) ->
-                                                  list_to_binary(L);
-                                             (B) when is_binary(B) ->
-                                                  B;
-                                             (N) when is_number(N) ->
-                                                  list_to_binary(integer_to_list(N))
-                                          end, Path),
-                        lists:foldr(fun({{Start, End}, Value}, Obj1) ->
-                                            B = list_to_binary(io_lib:format("~p-~p", [Start, End])),
-                                            jsxd:set(BPath ++ [B], Value, Obj1)
-                                    end, Obj, Vals)
-                end, [], Data).
+    lists:foldr(fun llquantize_/2, [], Data).
+
+llquantize_({_, Path, Vals}, Obj) ->
+    BPath = lists:map(fun ensure_bin/1, Path),
+    lists:foldr(fun({{Start, End}, Value}, Obj1) ->
+                        B = list_to_binary(io_lib:format("~p-~p", [Start, End])),
+                        jsxd:set(BPath ++ [B], Value, Obj1)
+                end, Obj, Vals).
+
+
+ensure_bin(L) when is_list(L) ->
+    list_to_binary(L);
+ensure_bin(B) when is_binary(B) ->
+    B;
+ensure_bin(N) when is_number(N) ->
+    list_to_binary(integer_to_list(N)).

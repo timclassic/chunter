@@ -48,8 +48,6 @@ zoneadmf(UUID, SubCmd) ->
     lager:debug("[zoneadm] ~s", [R]),
     R.
 
-zonecfg(UUID, delete) ->
-    zonecfgf(UUID, <<"delete">>);
 zonecfg(UUID, SubCmd) when is_atom(SubCmd) ->
     zonecfg(UUID, atom_to_list(SubCmd));
 zonecfg(UUID, SubCmd) when is_list(SubCmd) ->
@@ -63,15 +61,13 @@ zonecfg(UUID, SubCmd) ->
     lager:debug("[zonecfg] ~s", [R]),
     R.
 
-zonecfgf(UUID, SubCmd) ->
-    Cmd = <<"/usr/sbin/zonecfg -z ", UUID/binary, " ", SubCmd/binary, " -F">>,
-    lager:debug([{fifi_component, chunter}],
-                "zonecfg:cmd - ~s.", [Cmd]),
-    R = os:cmd(binary_to_list(Cmd)),
-    lager:debug("[zonecfg] ~s", [R]),
-    R.
-
-
+%% zonecfgf(UUID, SubCmd) ->
+%%     Cmd = <<"/usr/sbin/zonecfg -z ", UUID/binary, " ", SubCmd/binary, " -F">>,
+%%     lager:debug([{fifi_component, chunter}],
+%%                 "zonecfg:cmd - ~s.", [Cmd]),
+%%     R = os:cmd(binary_to_list(Cmd)),
+%%     lager:debug("[zonecfg] ~s", [R]),
+%%     R.
 
 
 %%--------------------------------------------------------------------
@@ -117,7 +113,7 @@ start(UUID, Image) ->
             zoneadm(UUID, boot)
     end.
 
--spec delete(UUID::fifo:uuid()) -> ok.
+-spec delete(UUID::fifo:uuid()) -> string().
 
 delete(UUID) ->
     R1 = case chunter_utils:system() of
@@ -140,7 +136,8 @@ delete(UUID) ->
                  {ok, Nics} = jsxd:get(<<"nics">>, VM),
                  lists:map(fun(N) ->
                                    {ok, IFace} = jsxd:get(<<"interface">>, N),
-                                   chunter_nic_srv:delete(IFace)
+                                   chunter_nic_srv:delete(IFace),
+                                   $. %% This is so we have a nice list of dots
                            end, Nics)
          end,
     chunter_server:update_mem(),
@@ -148,6 +145,8 @@ delete(UUID) ->
 
 -spec info(UUID::fifo:uuid()) -> fifo:config_list().
 
+%% JSX is spected badly for the jsx:to_term so we ignore this function!
+-dialyzer({nowarn_function, info/1}).
 info(UUID) ->
     case chunter_utils:system() of
         smartos ->

@@ -17,6 +17,9 @@
 %%% fwadm API
 %%%===================================================================
 
+-spec add(fifo:org_id(), fifo:vm_id(), fifo:smartos_fw_rule()) ->
+                 {error, Reason::term()} |
+                 {ok, UUID :: fifo:uuid()}.
 add(Owner, VM, Rule) ->
     RuleB = list_to_binary(build(Rule)),
     Desc = base64:encode(term_to_binary({VM, Rule})),
@@ -36,6 +39,9 @@ add(Owner, VM, Rule) ->
 delete(UUID) ->
     extract_uuid(fwadm(["delete", UUID])).
 
+-spec list() ->
+                  {ok, [{binary(), binary() | fifo:smartos_fw_rule()}]}|
+                  {error, Reason::term()}.
 list() ->
     case fwadm("list", [json]) of
         {ok, JSON} ->
@@ -44,6 +50,9 @@ list() ->
             E
     end.
 
+-spec list(UUID :: fifo:vm_id()) ->
+                  {ok, [{binary(), binary() | fifo:smartos_fw_rule()}]}|
+                  {error, Reason::term()}.
 list(VM) ->
     case list() of
         {ok, L} ->
@@ -52,6 +61,9 @@ list(VM) ->
             E
     end.
 
+-spec list_fifo() ->
+                       {ok, [{binary(), binary() | fifo:smartos_fw_rule()}]}|
+                       {error, Reason::term()}.
 list_fifo() ->
     case fwadm:list() of
         {ok, L} ->
@@ -60,6 +72,9 @@ list_fifo() ->
             E
     end.
 
+-spec list_fifo(UUID :: fifo:vm_id()) ->
+                       {ok, [{binary(), binary() | fifo:smartos_fw_rule()}]}|
+                       {error, Reason::term()}.
 list_fifo(VM) ->
     case list_fifo() of
         {ok, L} ->
@@ -78,6 +93,9 @@ stop(VM) ->
 %%% fifo conversion
 %%%===================================================================
 
+-spec convert(fifo:vm_id(), fifi:firewall_rule()) ->
+                     [fifo:smartos_fw_rule()].
+
 %% TODO: We should group that up to 20 later on.
 convert(VM, {Action, inbound, Src, {Proto, Filter}}) ->
     [{Action, [S], [{vm, VM}], Proto, Filter} || S <- convert_target(Src)];
@@ -87,11 +105,11 @@ convert(VM, {Action, outbound, Dst, {Proto, Filter}}) ->
 
 convert(VM, {Action, Dst, inbound, Src, {Proto, Filter}}) ->
     [{Action, [S], [D], Proto, Filter} ||
-        S <- convert_target(Src), D <- cervert_vm(VM, Dst)];
+        S <- convert_target(Src), D <- convert_vm(VM, Dst)];
 
 convert(VM, {Action, Src, outbound, Dst, {Proto, Filter}}) ->
     [{Action, [S], [D], Proto, Filter} ||
-        S <- cervert_vm(VM, Src), D <- convert_target(Dst)].
+        S <- convert_vm(VM, Src), D <- convert_target(Dst)].
 
 build({Action, Src, Dst, icmp, Tags}) ->
     [build1(Action, Src, Dst), "icmp ", build_filter(Tags)];
@@ -139,18 +157,24 @@ is_fifo(JSX) ->
             false
     end.
 
+
 convert_to_fifo(R) ->
     JSXD = jsxd:from_list(R),
     case jsxd:get(<<"description">>, JSXD) of
         {ok, <<"fifo:", Base64/binary>>} ->
-            {VM, Rule} = binary_to_term(base64:decode(Base64)),
-            jsxd:thread([{delete, <<"description">>},
-                         {set, <<"vm">>, VM},
-                         {set, <<"rule">>, Rule}],
-                        JSXD);
+            {VM, Rule} = decode_fifo(Base64),
+            JSXD1 = jsxd:thread([{delete, <<"description">>},
+                                 {set, <<"vm">>, VM}],
+                                JSXD),
+            lists:sort([{<<"rule">>, Rule} | JSXD1]);
         _ ->
             JSXD
     end.
+
+-spec decode_fifo(binary()) ->
+                         {fifo:vm_id(), fifo:smartos_fw_rule()}.
+decode_fifo(Base64) ->
+    binary_to_term(base64:decode(Base64)).
 
 
 fwadm(Cmd, Args) ->
@@ -193,7 +217,8 @@ read_result(P, Acc) ->
         {P,{exit_status, 0}} -> {ok, Acc};
         {P,{exit_status, N}} -> {error, N, Acc}
     end.
-
+-spec convert_target(fifo:fw_target()) ->
+                            fifo:smartos_fw_targets().
 convert_target({vm, _UUID}) ->
     %% TODO: get the VM's interfaces
     [any];
@@ -216,13 +241,15 @@ convert_target({subnet, Network, Mask}) ->
 convert_target(all) ->
     [any].
 
-cervert_vm(VM, {nic, _IFance}) ->
+-spec convert_vm(UUID::fifo:vm_id(), fifo:fw_iface()) ->
+                        [fifo:smartos_fw_targets()].
+convert_vm(VM, {nic, _IFance}) ->
     %% {ip, ...};
     [{vm, VM}];
-cervert_vm(VM, {network, _UUID}) ->
+convert_vm(VM, {network, _UUID}) ->
     %% {subnset, ...};
     [{vm, VM}];
-cervert_vm(VM, all) ->
+convert_vm(VM, all) ->
     [{vm, VM}].
 
 build1(allow, Src, Dst) ->

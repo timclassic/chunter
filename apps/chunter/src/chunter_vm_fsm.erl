@@ -165,7 +165,6 @@ door_event(Pid, Ref, down) ->
 door_event(Pid, Ref, Data) ->
     gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
 
-
 service_action(UUID, Action, Service)
   when Action =:= enable;
        Action =:= refresh;
@@ -680,11 +679,12 @@ handle_event(update_fw, StateName, State = #state{uuid = UUID, system = smartos}
     %% TODO: get the fw rules and do something with them
     case {ls_vm:get(UUID), fwadm:list_fifo(UUID)} of
         {{ok, VM}, {ok, OldRules}} ->
-            NewRules = ft_vm:fw_rules(VM),
             Owner = ft_vm:owner(VM),
+            NewRules = ft_vm:fw_rules(VM),
             NewRules1 = [fwadm:convert(UUID, R) || R <- NewRules],
             NewRules2 = lists:flatten(NewRules1),
-            {Add, Delete} = split_rules(OldRules, NewRules2),
+            OldRules1 = [map_rule(R) || R <- OldRules],
+            {Add, Delete} = split_rules(OldRules1, NewRules2),
             lager:info("[vm:~s(~s)] Updating FW rules, dding ~p deleting ~p.",
                        [UUID, Owner, Add, Delete]),
             [fwadm:add(Owner, UUID, R) || R <- Add],
@@ -1408,8 +1408,19 @@ wait_for_delete(UUID) ->
             ok
     end.
 
+-spec split_rules([{fifo:uuid(), fifo:smartos_fw_rule()}],
+                  [fifo:smartos_fw_rule()]) ->
+                         {[fifo:smartos_fw_rule()], [fifo:uuid()]}.
 split_rules(OldRules, NewRules) ->
-    split_rules([map_rule(R) || R <- OldRules], NewRules, [], []).
+    split_rules(OldRules, NewRules, [], []).
+
+-spec split_rules(
+        [{fifo:uuid(), fifo:smartos_fw_rule()}],
+        [fifo:smartos_fw_rule()],
+        [fifo:smartos_fw_rule()],
+        [fifo:uuid()]) ->
+                         {[fifo:smartos_fw_rule()], [fifo:uuid()]}.
+
 split_rules([], [], Add, Delete) ->
     {Add, Delete};
 split_rules(OldRules, [], Add, Delete) ->
@@ -1421,12 +1432,15 @@ split_rules([{UUID, Rule} | OldRules], NewRules, Add, Delete) ->
         true ->
             split_rules(OldRules, lists:delete(Rule, NewRules), Add, Delete);
         false ->
-            split_rules(OldRules, NewRules, Add, [UUID |Delete])
+            split_rules(OldRules, NewRules, Add, [UUID | Delete])
     end.
 
+-spec map_rule([{binary(), binary() | fifo:smartos_fw_rule()}]) ->
+                       {binary(), fifo:smartos_fw_rule()}.
 map_rule(JSX) ->
-    {ok, UUID} = jsxd:get(<<"uuid">>, JSX),
-    {ok, Rule} = jsxd:get(<<"rule">>, JSX),
+    %% We need proplists or dialyzer will insist it's a not a rule.
+    UUID = proplists:get_value(<<"uuid">>, JSX),
+    Rule = proplists:get_value(<<"rule">>, JSX),
     {UUID, Rule}.
 
 

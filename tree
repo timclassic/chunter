@@ -7,7 +7,7 @@
 ├─ eplugin─0.1.4
 ├─ erlsom─1.2.1
 ├─ erltrace─0.1.4
-├─ fifo_dt─0.1.53
+├─ fifo_dt─0.1.54
 │  ├─ libsnarlmatch─0.1.6
 │  └─ riak_dt─2.1.0
 ├─ fifo_s3─0.1.12

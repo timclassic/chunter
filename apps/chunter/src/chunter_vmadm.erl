@@ -328,35 +328,34 @@ update(UUID, Data) ->
 %%                                         unknown}.
 %%wait_for_text(Port) ->
 %%    wait_for_text(Port, undefined).
-
 %%wait_for_text(Port, Lock) ->
 %%    wait_for_text(Port, Lock, 60*10).
 
 wait_for_text(Port, Lock, Max) ->
-    wait_for_text(Port, Lock, Max, now()).
+    wait_for_text(Port, Lock, Max, erlang:system_time(seconds)).
 
-wait_for_text(Port, Lock, Max, Timeout) ->
+wait_for_text(Port, Lock, Max, T0) ->
     receive
         {Port, {data, {eol, Data}}} ->
             lager:debug("[vmadm] ~s", [Data]),
             relock(Lock),
-            wait_for_text(Port, Lock, Max, Timeout);
+            wait_for_text(Port, Lock, Max, T0);
         {Port, {data, Data}} ->
             lager:debug("[vmadm] ~s", [Data]),
             relock(Lock),
-            wait_for_text(Port, Lock, Max, Timeout);
+            wait_for_text(Port, Lock, Max, T0);
         {Port,{exit_status, 0}} ->
             ok;
         {Port,{exit_status, S}} ->
             {error, S}
     after
         3000 ->
-            case timer:now_diff(now(), Timeout) of
-                _To when _To  > (Max*1000000) ->
+            case erlang:system_time(seconds) - T0 of
+                _To when _To  > Max ->
                     lager:debug("[vmadm] timeout after ~ps", [Max]);
                 _ ->
                     relock(Lock),
-                    wait_for_text(Port, Lock, Max, Timeout)
+                    wait_for_text(Port, Lock, Max, T0)
             end
     end.
 

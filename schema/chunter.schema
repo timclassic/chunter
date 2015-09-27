@@ -1,5 +1,31 @@
 %% -*- erlang -*-
 
+%% @doc Enables or disables the zone snapshot API
+{mapping, "snapshot_api", "chunter.snapshot_api",
+ [{default, "on"},
+  {datatype, flag}]}.
+
+%% @doc Enables or disables the zone backup API
+{mapping, "backup_api", "chunter.backup_api",
+ [{default, "on"},
+  {datatype, flag}]}.
+
+%% @doc Enables or disables the zone metadata API
+{mapping, "metadata_api", "chunter.metadata_api",
+ [{default, "on"},
+  {datatype, flag}]}.
+
+%% @doc Enables or disables the zone grouping
+%% (stacks and clusters) metadata API
+{mapping, "grouping_api", "chunter.grouping_api",
+ [{default, "on"},
+  {datatype, flag}]}.
+
+%% @doc Enables or disables the zone backup API
+{mapping, "backup_api", "chunter.backup_api",
+ [{default, "on"},
+  {datatype, flag}]}.
+
 %% @doc Memory reserved on the hypervisor.
 {mapping, "reserved_memory", "chunter.reserved_memory",
  [{default, "0MB"},

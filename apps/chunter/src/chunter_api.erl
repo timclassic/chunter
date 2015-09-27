@@ -4,7 +4,47 @@
 
 -define(MAX_MDATA_SIZE, 1024*1024*32).
 
-call(UUID, [{<<"action">>, <<"snapshot-create">>},
+call(UUID, R = [{<<"action">>, <<"snapshot-", _/binary>>} | _]) ->
+    case enabled(snapshot_api) of
+        on ->
+            call_(UUID, R);
+        off ->
+            {error, "disabled"}
+    end;
+
+call(UUID, R = [{<<"action">>, <<"backup-", _/binary>>} | _]) ->
+    case enabled(backup_api) of
+        on ->
+            call_(UUID, R);
+        off ->
+            {error, "disabled"}
+    end;
+
+call(UUID, R = [{<<"action">>, <<"metadata-", _/binary>>} | _]) ->
+    case enabled(metadata_api) of
+        on ->
+            call_(UUID, R);
+        off ->
+            {error, "disabled"}
+    end;
+
+call(UUID, R = [{<<"action">>, <<"cluster-", _/binary>>} | _]) ->
+    case enabled(grouping_api) of
+        on ->
+            call_(UUID, R);
+        off ->
+            {error, "disabled"}
+    end;
+
+call(UUID, R = [{<<"action">>, <<"stack-", _/binary>>} | _]) ->
+    case enabled(grouping_api) of
+        on ->
+            call_(UUID, R);
+        off ->
+            {error, "disabled"}
+    end.
+
+call_(UUID, [{<<"action">>, <<"snapshot-create">>},
             {<<"comment">>, Comment}]) ->
     case ls_vm:snapshot(UUID, Comment) of
         {ok, SUUID} ->
@@ -13,7 +53,7 @@ call(UUID, [{<<"action">>, <<"snapshot-create">>},
             {error, "failed!"}
     end;
 
-call(UUID, [{<<"action">>, <<"snapshot-list">>}]) ->
+call_(UUID, [{<<"action">>, <<"snapshot-list">>}]) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
             {ok, ft_vm:snapshots(V)};
@@ -21,7 +61,7 @@ call(UUID, [{<<"action">>, <<"snapshot-list">>}]) ->
             {error, "failed!"}
     end;
 
-call(UUID, [{<<"action">>, <<"snapshot-get">>},
+call_(UUID, [{<<"action">>, <<"snapshot-get">>},
             {<<"uuid">>, SnapID}]) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
@@ -36,7 +76,7 @@ call(UUID, [{<<"action">>, <<"snapshot-get">>},
             {error, "failed!"}
     end;
 
-call(UUID, [{<<"action">>, <<"metadata-get">>}]) ->
+call_(UUID, [{<<"action">>, <<"metadata-get">>}]) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
             {ok, ft_vm:metadata(V)};
@@ -44,7 +84,7 @@ call(UUID, [{<<"action">>, <<"metadata-get">>}]) ->
             {error, "failed!"}
     end;
 
-call(UUID, [{<<"action">>, <<"metadata-set">>},
+call_(UUID, [{<<"action">>, <<"metadata-set">>},
             {<<"data">>, D}]) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
@@ -62,7 +102,7 @@ call(UUID, [{<<"action">>, <<"metadata-set">>},
             {error, "failed!"}
     end;
 
-call(UUID, [{<<"action">>, <<"cluster-get">>}]) ->
+call_(UUID, [{<<"action">>, <<"cluster-get">>}]) ->
     case grouping(UUID) of
         {ok, _, G} ->
             {ok, ft_grouping:config(G)};
@@ -70,7 +110,7 @@ call(UUID, [{<<"action">>, <<"cluster-get">>}]) ->
             E
     end;
 
-call(UUID, [{<<"action">>, <<"cluster-set">>},
+call_(UUID, [{<<"action">>, <<"cluster-set">>},
             {<<"data">>, D}]) ->
     case grouping(UUID) of
         {ok, GID, G} ->
@@ -88,7 +128,7 @@ call(UUID, [{<<"action">>, <<"cluster-set">>},
             E
     end;
 
-call(UUID, [{<<"action">>, <<"stack-get">>}]) ->
+call_(UUID, [{<<"action">>, <<"stack-get">>}]) ->
     case stack(UUID) of
         {ok, _, S} ->
             {ok, ft_grouping:config(S)};
@@ -96,7 +136,7 @@ call(UUID, [{<<"action">>, <<"stack-get">>}]) ->
             E
     end;
 
-call(UUID, [{<<"action">>, <<"stack-set">>},
+call_(UUID, [{<<"action">>, <<"stack-set">>},
             {<<"data">>, D}]) ->
     case stack(UUID) of
         {ok, SID, S} ->
@@ -114,7 +154,7 @@ call(UUID, [{<<"action">>, <<"stack-set">>},
             E
     end;
 
-call(UUID, [{<<"action">>, <<"backup-list">>}]) ->
+call_(UUID, [{<<"action">>, <<"backup-list">>}]) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
             {ok, ft_vm:backups(V)};
@@ -122,7 +162,7 @@ call(UUID, [{<<"action">>, <<"backup-list">>}]) ->
             {error, "failed!"}
     end;
 
-call(UUID, [{<<"action">>, <<"backup-create">>},
+call_(UUID, [{<<"action">>, <<"backup-create">>},
             {<<"comment">>, Comment},
             {<<"delete">>, Delete}]) ->
     Opts = case Delete of
@@ -138,7 +178,7 @@ call(UUID, [{<<"action">>, <<"backup-create">>},
             {error, "failed!"}
     end;
 
-call(UUID, [{<<"action">>, <<"backup-create">>},
+call_(UUID, [{<<"action">>, <<"backup-create">>},
             {<<"comment">>, Comment},
             {<<"delete">>, Delete},
             {<<"parent">>, Parent}]) ->
@@ -159,7 +199,7 @@ call(UUID, [{<<"action">>, <<"backup-create">>},
             {error, "failed!"}
     end;
 
-call(_, Cmd) ->
+call_(_, Cmd) ->
     lager:warning("[api] Unsupported command: ~p", [Cmd]),
     {error, "unsupported"}.
 
@@ -213,3 +253,6 @@ stack(UUID) ->
         _ ->
             {error, "stack not found"}
     end.
+
+enabled(Action) ->
+    application:get_env(chunter, Action, true).

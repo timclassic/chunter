@@ -1,6 +1,3 @@
-                                     "http://github.com/project-fifo/libsnarl.git",
-                                     {ref,
-                                      "7ce1ddecc142991b8f77e1d0b546f777e8224743"}})
 [0m├─ chunter─0.6.2
 ├─ cuttlefish─2.0.0+build.479.reff5f6fdc
 │  ├─ getopt─0.4.3

@@ -277,7 +277,7 @@ handle_cast(connect, #state{name = Host,
             Networks = re:split(os:cmd("cat /usbkey/config  | grep -v '^#' | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
             Networks1 = lists:delete(<<>>, Networks),
             Etherstub = re:split(
-                                     os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
+                          os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
                           ",\\s*|\n"),
             Etherstub1 = lists:delete(<<>>, Etherstub),
             ls_hypervisor:networks(Host, Networks1),

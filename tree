@@ -1,16 +1,3 @@
-                                    "https://github.com/project-fifo/fifo_s3.git",
-                                    {ref,
-                                     "659d81983a29aa6c0e9000f47985bbcad584f62f"}})
-                                    "http://github.com/project-fifo/libhowl.git",
-                                    {ref,
-                                     "0262ac28058737b7719d2cf404d1aa6802fbd5a2"}})
-                                     "http://github.com/project-fifo/libsnarl.git",
-                                     {ref,
-                                      "fb817e86494a82a24bd37a90ceebebbc848d70e8"}})
-                                       "http://github.com/project-fifo/libsniffle.git",
-                                       {ref,
-                                        "ddca766721ea9e988b61c4aab605fabc2f1c1944"}})
-                                            <<"0.1.27">>})
 [0m├─ chunter─0.6.2
 ├─ cuttlefish─2.0.0+build.479.reff5f6fdc
 │  ├─ getopt─0.4.3

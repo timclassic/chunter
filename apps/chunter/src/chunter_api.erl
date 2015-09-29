@@ -255,4 +255,4 @@ stack(UUID) ->
     end.
 
 enabled(Action) ->
-    application:get_env(chunter, Action, true).
+    application:get_env(chunter, Action, on).

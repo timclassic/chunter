@@ -6,41 +6,41 @@
 
 call(UUID, R = [{<<"action">>, <<"snapshot-", _/binary>>} | _]) ->
     case enabled(snapshot_api) of
-        on ->
+        true ->
             call_(UUID, R);
-        off ->
+        false ->
             {error, "disabled"}
     end;
 
 call(UUID, R = [{<<"action">>, <<"backup-", _/binary>>} | _]) ->
     case enabled(backup_api) of
-        on ->
+        true ->
             call_(UUID, R);
-        off ->
+        false ->
             {error, "disabled"}
     end;
 
 call(UUID, R = [{<<"action">>, <<"metadata-", _/binary>>} | _]) ->
     case enabled(metadata_api) of
-        on ->
+        true ->
             call_(UUID, R);
-        off ->
+        false ->
             {error, "disabled"}
     end;
 
 call(UUID, R = [{<<"action">>, <<"cluster-", _/binary>>} | _]) ->
     case enabled(grouping_api) of
-        on ->
+        true ->
             call_(UUID, R);
-        off ->
+        false ->
             {error, "disabled"}
     end;
 
 call(UUID, R = [{<<"action">>, <<"stack-", _/binary>>} | _]) ->
     case enabled(grouping_api) of
-        on ->
+        true ->
             call_(UUID, R);
-        off ->
+        false ->
             {error, "disabled"}
     end.
 
@@ -255,4 +255,4 @@ stack(UUID) ->
     end.
 
 enabled(Action) ->
-    application:get_env(chunter, Action, on).
+    application:get_env(chunter, Action, true).

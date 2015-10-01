@@ -375,8 +375,7 @@ initialized({restore, SnapID, Options},
                           {<<"uuid">>, uuid:uuid4s()},
                           {<<"data">>,
                            [{<<"uuid">>, VM}]}]),
-
-            {next_state, restoring_backup, State1, 0};
+            restoring_backup(timeout, State1);
         E ->
             {next_state, E, initialized, State}
     end;

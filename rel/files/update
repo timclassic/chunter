@@ -55,7 +55,7 @@ case $BRANCH in
         exit 2;
 esac
 
-BASE=http://release.project-fifo.net/chunter/${BRANCH}
+BASE=http://release.project-fifo.net/gz/${BRANCH}
 
 CUR_VER=$(sed -e 's/\n//' ${ETC}/chunter.version)
 CUR_BASE=$(echo "${CUR_VER}"  | sed -e 's/p.*$//')

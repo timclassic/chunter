@@ -684,7 +684,7 @@ handle_event(update_fw, StateName, State = #state{uuid = UUID, system = smartos}
             NewRules2 = lists:flatten(NewRules1),
             OldRules1 = [map_rule(R) || R <- OldRules],
             {Add, Delete} = split_rules(OldRules1, NewRules2),
-            lager:info("[vm:~s(~s)] Updating FW rules, dding ~p deleting ~p.",
+            lager:info("[vm:~s(~s)] Updating FW rules, adding ~p deleting ~p.",
                        [UUID, Owner, Add, Delete]),
             [fwadm:add(Owner, UUID, R) || R <- Add],
             [fwadm:delete(R) || R <- Delete],

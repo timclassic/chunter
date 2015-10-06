@@ -30,10 +30,10 @@
 %% Timeout for which a lock can be held before it needs to release.
 -ifndef(TEST).
 %% Default is 1m.
--define(LOCK_TIMEOUT, 60*1000*1000).
+-define(LOCK_TIMEOUT, 60*1000).
 -else.
 %% In tests we want this to be much shorter.
--define(LOCK_TIMEOUT, 500*1000).
+-define(LOCK_TIMEOUT, 500).
 -endif.
 
 
@@ -97,8 +97,8 @@ handle_call({release, UUID}, _From, #state{lock = undefined} = State) ->
     {reply, failed, State};
 
 handle_call({release, UUID}, _From, #state{lock = {UUID, Old}} = State) ->
-    D = timer:now_diff(now(), Old),
-    lager:info("[lock] Lock ~s released after ~ps", [UUID, D/(1000*1000)]),
+    D = erlang:system_time(milli_seconds) - Old,
+    lager:info("[lock] Lock ~s released after ~ps", [UUID, D/1000]),
     {reply, ok, State#state{lock=undefined}};
 
 handle_call({release, NewUUID}, _From, #state{lock = {OldUUID, _}} = State) ->
@@ -108,24 +108,24 @@ handle_call({release, NewUUID}, _From, #state{lock = {OldUUID, _}} = State) ->
 
 handle_call({lock, UUID}, _From, #state{lock = undefined} = State) ->
     lager:info("[lock] Lock ~s claimed", [UUID]),
-    {reply, ok, State#state{lock = {UUID, now()}}};
+    {reply, ok, State#state{lock = {UUID, erlang:system_time(milli_seconds)}}};
 
 handle_call({lock, UUID}, _From, #state{lock = {UUID, Old}} = State) ->
-    D = timer:now_diff(now(), Old),
-    lager:info("[lock] Lock ~s renewed after ~ps", [UUID, D/(1000*1000)]),
-    {reply, ok, State#state{lock = {UUID, now()}}};
+    D = erlang:system_time(milli_seconds) - Old,
+    lager:info("[lock] Lock ~s renewed after ~ps", [UUID, D/1000]),
+    {reply, ok, State#state{lock = {UUID, erlang:system_time(milli_seconds)}}};
 
 handle_call({lock, NewUUID}, _From, #state{lock = {OldUUID, Old}} = State) ->
-    case timer:now_diff(now(), Old) of
+    case erlang:system_time(milli_seconds) - Old of
         D when D > ?LOCK_TIMEOUT ->
             io:format("~p > ~p ~n.", [D, ?LOCK_TIMEOUT]),
             lager:warning("[lock] Lock ~s timed out after ~ps and replaced by "
-                          "~s.", [OldUUID, D/(1000*1000), NewUUID]),
-            {reply, ok, State#state{lock = {NewUUID, now()}}};
+                          "~s.", [OldUUID, D/1000, NewUUID]),
+            {reply, ok, State#state{lock = {NewUUID, erlang:system_time(milli_seconds)}}};
         D ->
             lager:info("[lock] Lock ~s rejected old lock ~s still in effect "
                        "for another ~ps.",
-                       [NewUUID, OldUUID, (?LOCK_TIMEOUT - D)/(1000*1000)]),
+                       [NewUUID, OldUUID, (?LOCK_TIMEOUT - D)/1000]),
             {reply, failed, State}
     end.
 

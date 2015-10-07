@@ -1002,11 +1002,8 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-terminate(Reason, StateName,
+terminate(normal, _StateName,
           State = #state{uuid = UUID, auth_ref=AuthRef, api_ref=APIRef}) ->
-    lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
-                  [UUID, StateName, Reason]),
-    lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
     case State#state.console of
         undefined ->
             lager:debug("[terminate:~s] console not running.", [UUID]),
@@ -1016,7 +1013,14 @@ terminate(Reason, StateName,
     end,
     ezdoor_server:remove(AuthRef),
     ezdoor_server:remove(APIRef),
-    ok.
+    ok;
+terminate(Reason, StateName,
+          State = #state{uuid = UUID}) ->
+
+    lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
+                  [UUID, StateName, Reason]),
+    lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
+    terminate(normal, StateName, State).
 
 %%--------------------------------------------------------------------
 %% @private

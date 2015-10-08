@@ -329,8 +329,6 @@ handle_info(update_services, State=#state{
                || {Srv, _, St} <- Changed]),
             {noreply, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
-            lager:debug("[GZ] Updating ~p Services.",
-                        [length(Changed)]),
             %% Update changes which are not removes
             ls_hypervisor:set_service(
                Host,

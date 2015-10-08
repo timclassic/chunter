@@ -814,23 +814,23 @@ handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
 
 handle_sync_event({service, enable, Service}, _From, StateName, State) ->
     {reply, smurf:enable(Service, [{zone, State#state.uuid}]),
-     StateName, State, 0};
+     StateName, State};
 
 handle_sync_event({service, refresh, Service}, _From, StateName, State) ->
     {reply, smurf:refresh(Service, [{zone, State#state.uuid}]),
-     StateName, State, 0};
+     StateName, State};
 
 handle_sync_event({service, restart, Service}, _From, StateName, State) ->
     {reply, smurf:restart(Service, [{zone, State#state.uuid}]),
-     StateName, State, 0};
+     StateName, State};
 
 handle_sync_event({service, disable, Service}, _From, StateName, State) ->
     {reply, smurf:disable(Service, [{zone, State#state.uuid}]),
-     StateName, State, 0};
+     StateName, State};
 
 handle_sync_event({service, clear, Service}, _From, StateName, State) ->
     {reply, smurf:clear(Service, [{zone, State#state.uuid}]),
-     StateName, State, 0};
+     StateName, State};
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID, Options}},
@@ -1016,7 +1016,6 @@ terminate(normal, _StateName,
     ok;
 terminate(Reason, StateName,
           State = #state{uuid = UUID}) ->
-
     lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
                   [UUID, StateName, Reason]),
     lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
@@ -1222,7 +1221,7 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
     end.
 
 snapshot_sizes(VM) ->
-    lager:info("[~s] Updating Snapshots.", [VM]),
+    lager:debug("[~s] Updating Snapshots.", [VM]),
     case {libsniffle:servers(), ls_vm:get(VM)} of
         {[], _} ->
             lager:warning("[~s] No Servers to update snapshots.", [VM]),

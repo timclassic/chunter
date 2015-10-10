@@ -1,6 +1,10 @@
-REBAR = $(shell pwd)/rebar
+REBAR = $(shell pwd)/rebar3
 
-.PHONY: deps rel package quick-test
+.PHONY: deps rel package quick-test tree
+
+quick-test: cp-hooks
+	-$(REBAR) compile 
+	$(REBAR) eunit
 
 all: cp-hooks deps compile
 
@@ -10,10 +14,8 @@ cp-hooks:
 apps/chunter/priv/zonedoor: utils/zonedoor.c
 	gcc -lzdoor utils/zonedoor.c -o apps/chunter/priv/zonedoor
 
-fifo: utils/fifo.c
-	gcc utils/fifo.c -o fifo
-
-zonedoor: apps/chunter/priv/zonedoor fifo
+apps/chunter/priv/runpty: utils/runpty.c
+	gcc utils/runpty.c -o apps/chunter/priv/runpty
 
 version:
 	git describe > chunter.version
@@ -25,35 +27,29 @@ version_header: version
 package: rel
 	make -C rel/pkg package
 
-compile: zonedoor version_header
+compile: apps/chunter/priv/runpty apps/chunter/priv/zonedoor version_header
 	$(REBAR) compile
 
 deps:
-	$(REBAR) get-deps
+	$(REBAR) update
 
 clean:
 	$(REBAR) clean
 	make -C rel/pkg clean
 
-distclean: clean
-	$(REBAR) delete-deps
-
 test: all
-	$(REBAR) skip_deps=true xref
-	$(REBAR) skip_deps=true eunit
+	$(REBAR) xref
+	$(REBAR) eunit
 
-quick-test: cp-hooks
-	$(REBAR) skip_deps=true eunit
-
-rel: compile
+rel: all
 	-rm -r ./rel/chunter/share
-	$(REBAR) generate
+	$(REBAR) as prod release
 
 ###
 ### Docs
 ###
 docs:
-	$(REBAR) skip_deps=true doc
+	$(REBAR) doc
 
 ##
 ## Developer targets
@@ -69,22 +65,21 @@ APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
 	xmerl webtool snmp public_key mnesia eunit syntax_tools compiler
 COMBO_PLT = $(HOME)/.chunter_combo_dialyzer_plt
 
-check_plt: deps compile
+check_plt: compile
 	dialyzer --check_plt --plt $(COMBO_PLT) --apps $(APPS) \
 		deps/*/ebin apps/*/ebin
 
-build_plt: deps compile
+build_plt: compile
 	dialyzer --build_plt --output_plt $(COMBO_PLT) --apps $(APPS) \
 		deps/*/ebin apps/*/ebin
 
-dialyzer: deps compile
+dialyzer: compile
 	@echo
 	@echo Use "'make check_plt'" to check PLT prior to using this target.
 	@echo Use "'make build_plt'" to build PLT prior to using this target.
 	@echo
 	@sleep 1
 	dialyzer -Wno_return --plt $(COMBO_PLT) deps/*/ebin apps/*/ebin | grep -v -f dialyzer.mittigate
-
 
 cleanplt:
 	@echo
@@ -93,3 +88,9 @@ cleanplt:
 	@echo
 	sleep 5
 	rm $(COMBO_PLT)
+
+tree:
+	rebar3 tree | grep -v '=' | sed 's/ (.*//' > tree
+
+tree-diff: tree
+	git diff test -- tree

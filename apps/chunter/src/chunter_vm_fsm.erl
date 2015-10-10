@@ -34,6 +34,7 @@
 
 -export([create/4,
          load/1,
+         update_fw/1,
          delete/1,
          transition/2,
          update/3,
@@ -77,10 +78,10 @@
                 uuid,
                 console,
                 orig_state,
+                system = smartos,
                 args,
                 services = [],
                 listeners = [],
-                nsq = false,
                 public_state,
                 auth_ref,
                 api_ref}).
@@ -116,6 +117,10 @@ load(UUID) ->
     end,
     register(UUID).
 
+update_fw(UUID) ->
+    gen_fsm:send_all_state_event({global, {vm, UUID}}, update_fw).
+
+
 -spec transition(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
 
 transition(UUID, State) ->
@@ -137,7 +142,6 @@ force_state(UUID, State) ->
         _ ->
             gen_fsm:send_all_state_event({global, {vm, UUID}}, {force_state, State})
     end.
-
 
 -spec register(UUID::fifo:uuid()) -> ok.
 
@@ -161,9 +165,10 @@ door_event(Pid, Ref, down) ->
 door_event(Pid, Ref, Data) ->
     gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
 
-
 service_action(UUID, Action, Service)
   when Action =:= enable;
+       Action =:= refresh;
+       Action =:= restart;
        Action =:= disable;
        Action =:= clear ->
     gen_fsm:sync_send_all_state_event({global, {vm, UUID}},
@@ -227,24 +232,19 @@ start_link(UUID) ->
 %%--------------------------------------------------------------------
 init([UUID]) ->
     process_flag(trap_exit, true),
-    NSQ = case application:get_env(nsq_producer) of
-              {ok, _} ->
-                  true;
-              _ ->
-                  false
-          end,
-    {ok, preloading, #state{uuid = UUID, nsq = NSQ}, 0}.
+    System = chunter_utils:system(),
+    {ok, preloading, #state{uuid = UUID, system = System}, 0}.
 
 
 preloading(_, State = #state{uuid = UUID}) ->
     {Hypervisor, _, _} = chunter_server:host_info(),
-
     SnapshotIVal = application:get_env(chunter, snapshot_update_interval, 900000),
     ServiceIVal = application:get_env(chunter, update_services_interval, 10000),
     timer:send_interval(SnapshotIVal, update_snapshots), % This is every 15 minutes
     timer:send_interval(ServiceIVal, update_services),  % This is every 10 seconds
     %% timer:send_interval(1000, {init, zonedoor}),  % Check Zonedoor status every second don't need this any longer?
     snapshot_sizes(UUID),
+    update_fw(UUID),
     register(UUID),
     {next_state, initialized, State#state{hypervisor = Hypervisor}}.
 
@@ -263,6 +263,7 @@ preloading(_, State = #state{uuid = UUID}) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
 
 -spec initialized(Action::load |
                           {create,  PackageSpec::fifo:package(),
@@ -283,51 +284,58 @@ initialized({create, Package, Dataset, VMSpec},
     VMData1 = eplugin:fold('vm:create_json', VMData),
     lager:debug("Creating with spec: ~p", [VMData1]),
     eplugin:call('vm:create', UUID, VMData1),
-    SniffleData  = chunter_spec:to_sniffle(VMData1),
-    {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
-    chunter_server:reserve_mem(Ram),
-    SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
-    change_state(UUID, <<"installing_dataset">>),
-    libhowl:send(UUID, [{<<"event">>, <<"update">>},
-                        {<<"data">>,
-                         [{<<"hypervisor">>, Hypervisor},
-                          {<<"config">>, SniffleData1},
-                          {<<"package">>, jsxd:get(<<"uuid">>, <<>>, PackageSpec)}]}]),
-    Type = case jsxd:get(<<"type">>, SniffleData1) of
-               {ok, <<"kvm">>} -> kvm;
-               _ -> zone
-           end,
-    ls_vm:set_config(UUID, SniffleData1),
-    lager:debug("[create:~s] Done generating config, handing to img install.",
-                [UUID]),
-    case chunter_dataset_srv:install(DatasetUUID, UUID) of
-        ok ->
-            lager:debug("[create:~s] Done installing image going to create now.",
+    chunter_server:reserve_mem(ft_package:ram(Package)),
+    case ft_dataset:zone_type(Dataset) of
+        ipkg ->
+            create_ipkg(Dataset, Package, VMSpec, State);
+        lipkg ->
+            create_ipkg(Dataset, Package, VMSpec, State);
+        _ ->
+            SniffleData  = chunter_spec:to_sniffle(VMData1),
+            {ok, Ram} = jsxd:get(<<"ram">>, PackageSpec),
+            SniffleData1 = jsxd:set(<<"ram">>, Ram, SniffleData),
+            change_state(UUID, <<"installing_dataset">>),
+            libhowl:send(UUID, [{<<"event">>, <<"update">>},
+                                {<<"data">>,
+                                 [{<<"hypervisor">>, Hypervisor},
+                                  {<<"config">>, SniffleData1},
+                                  {<<"package">>, jsxd:get(<<"uuid">>, <<>>, PackageSpec)}]}]),
+            Type = case jsxd:get(<<"type">>, SniffleData1) of
+                       {ok, <<"kvm">>} -> kvm;
+                       _ -> zone
+                   end,
+            ls_vm:set_config(UUID, SniffleData1),
+            lager:debug("[create:~s] Done generating config, handing to img install.",
                         [UUID]),
-            case chunter_vmadm:create(VMData1) of
+            case chunter_dataset_srv:install(DatasetUUID, UUID) of
                 ok ->
-                    lager:debug("[create:~s] Done creating continuing on.", [UUID]),
-                    case jsxd:get(<<"owner">>, VMSpec) of
-                        {ok, Org} when Org =/= <<>> ->
-                            ls_org:resource_action(Org, UUID, timestamp(),
-                                                   confirm_create, []);
-                        _ ->
-                            ok
-                    end,
-                    {next_state, creating,
-                     State#state{type = Type,
-                                 public_state = change_state(UUID, <<"creating">>)}};
-                {error, E} ->
-                    lager:error("[create:~s] Failed to create with error: ~p",
+                    lager:debug("[create:~s] Done installing image going to create now.",
+                                [UUID]),
+                    case chunter_vmadm:create(VMData1) of
+                        ok ->
+                            lager:debug("[create:~s] Done creating continuing on.", [UUID]),
+                            case jsxd:get(<<"owner">>, VMSpec) of
+                                {ok, Org} when Org =/= <<>> ->
+                                    ls_acc:update(Org, UUID, timestamp(),
+                                                  [{<<"event">>, <<"confirm_create">>}]);
+                                _ ->
+                                    ok
+                            end,
+                            {next_state, creating,
+                             State#state{type = Type,
+                                         public_state = change_state(UUID, <<"creating">>)}};
+                        {error, E} ->
+                            lager:error("[create:~s] Failed to create with error: ~p",
+                                        [UUID, E]),
+                            change_state(UUID, <<"failed">>),
+                            {stop, normal, State}
+                    end;
+                E ->
+                    lager:error("[create:~s] Dataset import failed with: ~p",
                                 [UUID, E]),
                     change_state(UUID, <<"failed">>),
                     {stop, normal, State}
-            end;
-        E ->
-			lager:error("[create:~s] Dataset import failed with: ~p",
-						[UUID, E]),
-			change_state(UUID, <<"failed">>),
-            {stop, normal, State}
+            end
     end;
 
 initialized({restore, SnapID, Options},
@@ -367,8 +375,7 @@ initialized({restore, SnapID, Options},
                           {<<"uuid">>, uuid:uuid4s()},
                           {<<"data">>,
                            [{<<"uuid">>, VM}]}]),
-
-            {next_state, restoring_backup, State1, 0};
+            restoring_backup(timeout, State1);
         E ->
             {next_state, E, initialized, State}
     end;
@@ -572,7 +579,7 @@ handle_event({force_state, NextState}, StateName, State) ->
         StateName ->
             {next_state, StateName, State#state{public_state = change_state(State#state.uuid, NextState, false)}};
         running = N ->
-            {next_state, running,State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= N)}};
+            {next_state, running, State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= N)}};
         Other ->
             {next_state, Other, State#state{public_state = change_state(State#state.uuid, NextState, StateName =:= Other)}}
     end;
@@ -599,6 +606,7 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             ls_vm:set_config(UUID, SniffleData),
             State1 = State#state{type = Type},
             change_state(State1#state.uuid, atom_to_binary(StateName), false),
+            update_fw(UUID),
             {next_state, StateName, State1#state{services = []}}
     end;
 
@@ -650,6 +658,7 @@ handle_event({update, Package, Config}, StateName,
 handle_event(remove, _StateName, State) ->
     lager:debug("[~s] Calling remove.", [State#state.uuid]),
     ls_vm:unregister(State#state.uuid),
+    %% TODO: Delete all FW rules for this vm?
     {stop, normal, State};
 
 handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
@@ -664,6 +673,37 @@ handle_event(delete, _StateName, State = #state{uuid = UUID}) ->
     end,
     wait_for_delete(UUID),
     {stop, normal, State};
+
+handle_event(update_fw, StateName, State = #state{uuid = UUID, system = smartos}) ->
+    %% TODO: get the fw rules and do something with them
+    case {ls_vm:get(UUID), fwadm:list_fifo(UUID)} of
+        {{ok, VM}, {ok, OldRules}} ->
+            Owner = ft_vm:owner(VM),
+            NewRules = ft_vm:fw_rules(VM),
+            NewRules1 = [fwadm:convert(UUID, R) || R <- NewRules],
+            NewRules2 = lists:flatten(NewRules1),
+            OldRules1 = [map_rule(R) || R <- OldRules],
+            {Add, Delete} = split_rules(OldRules1, NewRules2),
+            lager:info("[vm:~s(~s)] Updating FW rules, adding ~p deleting ~p.",
+                       [UUID, Owner, Add, Delete]),
+            [fwadm:add(Owner, UUID, R) || R <- Add],
+            [fwadm:delete(R) || R <- Delete],
+            case fwadm:list(UUID) of
+                {ok, []} ->
+                    fwadm:stop(UUID);
+                {ok, _} ->
+                    fwadm:start(UUID);
+                _ ->
+                    ok
+            end;
+        _ ->
+            ok
+    end,
+    {next_state, StateName, State};
+
+%% TODO: Only SmartOS supports FW rules
+handle_event(update_fw, StateName, State) ->
+    {next_state, StateName, State};
 
 handle_event({console, send, Data}, StateName, State = #state{console = C}) when is_port(C) ->
     port_command(C, Data),
@@ -712,7 +752,7 @@ handle_event(_Event, StateName, State) ->
 
 
 handle_sync_event({door, Ref, Data}, _From, StateName,
-             State = #state{auth_ref=Ref, uuid=UUID}) ->
+                  State = #state{auth_ref=Ref, uuid=UUID}) ->
     R = case auth_credintials(UUID, Data) of
             true ->
                 <<"1">>;
@@ -722,7 +762,7 @@ handle_sync_event({door, Ref, Data}, _From, StateName,
     {reply, {ok, R}, StateName, State};
 
 handle_sync_event({door, Ref, Data}, _From, StateName,
-             State = #state{api_ref=Ref, uuid=UUID}) ->
+                  State = #state{api_ref=Ref, uuid=UUID}) ->
     lager:info("[zone:~s] API: ~s", [UUID, Data]),
     try jsx:decode(Data) of
         JSON ->
@@ -773,13 +813,24 @@ handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
     {reply, ok, deleting_snapshot, State1, 0};
 
 handle_sync_event({service, enable, Service}, _From, StateName, State) ->
-    {reply, smurf:enable(Service, [{zone, State#state.uuid}]), StateName, State, 0};
+    {reply, smurf:enable(Service, [{zone, State#state.uuid}]),
+     StateName, State};
+
+handle_sync_event({service, refresh, Service}, _From, StateName, State) ->
+    {reply, smurf:refresh(Service, [{zone, State#state.uuid}]),
+     StateName, State};
+
+handle_sync_event({service, restart, Service}, _From, StateName, State) ->
+    {reply, smurf:restart(Service, [{zone, State#state.uuid}]),
+     StateName, State};
 
 handle_sync_event({service, disable, Service}, _From, StateName, State) ->
-    {reply, smurf:disable(Service, [{zone, State#state.uuid}]), StateName, State, 0};
+    {reply, smurf:disable(Service, [{zone, State#state.uuid}]),
+     StateName, State};
 
 handle_sync_event({service, clear, Service}, _From, StateName, State) ->
-    {reply, smurf:clear(Service, [{zone, State#state.uuid}]), StateName, State, 0};
+    {reply, smurf:clear(Service, [{zone, State#state.uuid}]),
+     StateName, State};
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID, Options}},
@@ -871,7 +922,6 @@ handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
 
 handle_info(update_services, running, State=#state{
                                                uuid=UUID,
-                                               nsq=NSQ,
                                                services = OldServices,
                                                type = zone
                                               }) ->
@@ -895,7 +945,7 @@ handle_info(update_services, running, State=#state{
             ls_vm:set_service(UUID,
                               [{Srv, delete}
                                || {Srv, _, <<"removed">>} <- Changed]),
-            update_services(UUID, Changed, NSQ),
+            update_services(UUID, Changed),
             {next_state, running, State#state{services = ServiceSet}};
         _ ->
             {next_state, running, State}
@@ -952,11 +1002,8 @@ handle_info(Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-terminate(Reason, StateName,
+terminate(normal, _StateName,
           State = #state{uuid = UUID, auth_ref=AuthRef, api_ref=APIRef}) ->
-    lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
-                  [UUID, StateName, Reason]),
-    lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
     case State#state.console of
         undefined ->
             lager:debug("[terminate:~s] console not running.", [UUID]),
@@ -966,7 +1013,13 @@ terminate(Reason, StateName,
     end,
     ezdoor_server:remove(AuthRef),
     ezdoor_server:remove(APIRef),
-    ok.
+    ok;
+terminate(Reason, StateName,
+          State = #state{uuid = UUID}) ->
+    lager:warning("[terminate:~s] Terminating from ~p with reason ~p.",
+                  [UUID, StateName, Reason]),
+    lager:warning("[terminate:~s] The state: ~p .", [UUID, State]),
+    terminate(normal, StateName, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -985,16 +1038,20 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 
 incinerate(Port) ->
-    {os_pid, OsPid} = erlang:port_info(Port, os_pid),
-    port_close(Port),
-    lager:warning("Killing ~p with -9", [OsPid]),
-    os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid])).
+    case erlang:port_info(Port, os_pid) of
+        {os_pid, OsPid} ->
+            port_close(Port),
+            lager:warning("Killing ~p with -9", [OsPid]),
+            os:cmd(io_lib:format("/usr/bin/kill -9 ~p", [OsPid]));
+        _ ->
+            ok
+    end.
 
 init_console(State) ->
     case State#state.console of
         undefined ->
-            [{_, Name, _, _, _, _}] = zoneadm(State#state.uuid),
-            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -C " ++ binary_to_list(Name),
+            [{_, Name, _, _, _, _}] = chunter_zone:get_raw(State#state.uuid),
+            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin " ++ binary_to_list(Name),
             ConsolePort = open_port({spawn, Console}, [binary]),
             State#state{console = ConsolePort};
         _ ->
@@ -1164,7 +1221,7 @@ snapshot_action(VM, UUID, Fun, CompleteFun, Opts) ->
     end.
 
 snapshot_sizes(VM) ->
-    lager:info("[~s] Updating Snapshots.", [VM]),
+    lager:debug("[~s] Updating Snapshots.", [VM]),
     case {libsniffle:servers(), ls_vm:get(VM)} of
         {[], _} ->
             lager:warning("[~s] No Servers to update snapshots.", [VM]),
@@ -1200,7 +1257,7 @@ snapshot_sizes(VM) ->
             FlatSnaps = [Name || {Name, _Size} <- Snaps],
             SnapsGone = lists:filter(fun (Name) ->
                                              not lists:member(Name, FlatSnaps)
-                                      end, KnownS),
+                                     end, KnownS),
             Ss1 = [{[Name, <<"size">>], Size}
                    || {Name, Size} <- Snaps1],
             Ss2 = [{[Name], delete} || Name <- SnapsGone],
@@ -1229,34 +1286,10 @@ do_destroy(<<_:1/binary, P/binary>>, _VM, _SnapID, _) ->
 %%% Utility
 %%%===================================================================
 
--spec zoneadm(ZUUID::fifo:uuid()) -> [{ID::binary(),
-                                       Name::binary(),
-                                       VMState::binary(),
-                                       Path::binary(),
-                                       UUID::binary(),
-                                       Type::binary()}].
-
-zoneadm(ZUUID) ->
-    Zones = [ re:split(Line, ":")
-              || Line <- re:split(os:cmd("/usr/sbin/zoneadm -u" ++
-                                             binary_to_list(ZUUID) ++
-                                             " list -p"), "\n")],
-    [{ID, Name, VMState, Path, UUID, Type} ||
-        [ID, Name, VMState, Path, UUID, Type, _IP, _SomeNumber] <- Zones].
-
 -spec load_vm(ZUUID::fifo:uuid()) -> fifo:vm_config() | {error, not_found}.
 
-load_vm(ZUUID) ->
-    case [chunter_zoneparser:load([{<<"name">>,Name},
-                                   {<<"state">>, VMState},
-                                   {<<"zonepath">>, Path},
-                                   {<<"type">>, Type}]) ||
-             {_ID, Name, VMState, Path, _UUID, Type} <- zoneadm(ZUUID)] of
-        [VM | _] ->
-            VM;
-        [] ->
-            {error, not_found}
-    end.
+load_vm(UUID) ->
+    chunter_zone:get(UUID).
 
 -spec change_state(UUID::binary(), State::fifo:vm_state()) -> fifo:vm_state().
 
@@ -1274,8 +1307,9 @@ change_state(UUID, State, true) ->
     %%          end,
     %% This will stay out untill someone provides a propper solution
     State1 = State,
-    ls_vm:log(UUID, <<"Transitioning ", State1/binary>>),
     ls_vm:state(UUID, State1),
+    ls_vm:log(UUID, <<"Transitioning ", State1/binary>>),
+    ls_vm:get(UUID),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1;
 
@@ -1289,6 +1323,7 @@ change_state(UUID, State, false) ->
     %% This will stay out untill someone provides a propper solution
     State1 = State,
     ls_vm:state(UUID, State1),
+    ls_vm:get(UUID),
     libhowl:send(UUID, [{<<"event">>, <<"state">>}, {<<"data">>, State1}]),
     State1.
 
@@ -1310,17 +1345,10 @@ backup_update(VM, SnapID, K, V) ->
                    [{<<"action">>, <<"update">>},
                     {<<"data">>, [{K, V}]},
                     {<<"uuid">>, SnapID}]}]).
-update_services(_, [], _) ->
+update_services(_, []) ->
     ok;
 
-update_services(UUID, Changed, true) ->
-    Changed1 = [{Srv, [{<<"old">>, Old},
-                       {<<"new">>, New}]} || {Srv, Old, New} <- Changed],
-    JSON = jsx:encode([{vm, UUID}, {data, Changed1}]),
-    ensq:send(services, JSON),
-    update_services(UUID, Changed, false);
-
-update_services(UUID, Changed, false) ->
+update_services(UUID, Changed) ->
     case [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New] of
         [] ->
             ok;
@@ -1341,8 +1369,7 @@ wait_image(_, _) ->
     ok.
 
 timestamp() ->
-    {Mega,Sec,Micro} = erlang:now(),
-    (Mega*1000000+Sec)*1000000+Micro.
+    erlang:system_time(micro_seconds).
 
 auth_credintials(UUID, Data) ->
     case re:split(Data, " ") of
@@ -1372,11 +1399,146 @@ wait_for_delete(UUID) when is_binary(UUID) ->
     wait_for_delete(binary_to_list(UUID));
 
 wait_for_delete(UUID) ->
-    UUIDn = UUID ++ "\n",
-    case os:cmd(["/usr/sbin/zoneadm -z ", UUID, " list"]) of
-        UUIDn ->
+    Cmd = "/usr/sbin/zoneadm",
+    Port = open_port({spawn_executable, Cmd},
+                     [{args, ["-z", UUID, "list"]}, use_stdio, binary,
+                      stderr_to_stdout, exit_status]),
+    receive
+        {Port, {exit_status, 0}} ->
+            wait_for_delete(UUID);
+        {Port, {exit_status, 1}} ->
+            ok
+    end.
+
+-spec split_rules([{fifo:uuid(), fifo:smartos_fw_rule()}],
+                  [fifo:smartos_fw_rule()]) ->
+                         {[fifo:smartos_fw_rule()], [fifo:uuid()]}.
+split_rules(OldRules, NewRules) ->
+    split_rules(OldRules, NewRules, [], []).
+
+-spec split_rules(
+        [{fifo:uuid(), fifo:smartos_fw_rule()}],
+        [fifo:smartos_fw_rule()],
+        [fifo:smartos_fw_rule()],
+        [fifo:uuid()]) ->
+                         {[fifo:smartos_fw_rule()], [fifo:uuid()]}.
+
+split_rules([], [], Add, Delete) ->
+    {Add, Delete};
+split_rules(OldRules, [], Add, Delete) ->
+    {Add, [UUID || {UUID, _} <- OldRules] ++ Delete};
+split_rules([], New, Add, Delete) ->
+    {New ++ Add, Delete};
+split_rules([{UUID, Rule} | OldRules], NewRules, Add, Delete) ->
+    case lists:member(Rule, NewRules) of
+        true ->
+            split_rules(OldRules, lists:delete(Rule, NewRules), Add, Delete);
+        false ->
+            split_rules(OldRules, NewRules, Add, [UUID | Delete])
+    end.
+
+-spec map_rule([{binary(), binary() | fifo:smartos_fw_rule()}]) ->
+                       {binary(), fifo:smartos_fw_rule()}.
+map_rule(JSX) ->
+    %% We need proplists or dialyzer will insist it's a not a rule.
+    UUID = proplists:get_value(<<"uuid">>, JSX),
+    Rule = proplists:get_value(<<"rule">>, JSX),
+    {UUID, Rule}.
+
+
+create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
+    lager:info("The very first create request to a omnios hypervisor: ~s.",
+               [UUID]),
+    VMSpect1 = jsxd:set(<<"uuid">>, UUID, VMSpec),
+    {NICS, Conf} = chunter_spec:to_zonecfg(Package, Dataset, VMSpect1),
+    UUIDs = binary_to_list(UUID),
+    File = ["/tmp/", UUIDs, ".conf"],
+    file:write_file(File, chunter_zone:zonecfg(Conf)),
+    R1 = os:cmd(["/usr/sbin/zonecfg -z ", UUIDs, " -f ", File]),
+    lager:info("[zonecfg:~s] ~p", [UUID, R1]),
+    R2 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " install"]),
+    lager:info("[zonecfg:~s] ~p", [UUID, R2]),
+    R3 = os:cmd(["/usr/sbin/zoneadm -z ", UUIDs, " boot"]),
+    lager:info("[zonecfg:~s] ~p", [UUID, R3]),
+    lager:info("[setup:~s] Starting zone setup.", [UUID]),
+    lager:info("[setup:~s] Waiting for zone to boot for the first time.", [UUID]),
+    S = <<"svc:/milestone/multi-user-server:default">>,
+    ok = wait_for_started(UUID, S),
+    %% Do the basic setup we can do on the first boot.
+    lager:info("[setup:~s] nsswitch conf.", [UUID]),
+    zlogin(UUID, "cp -f /etc/nsswitch.dns /etc/nsswitch.conf"),
+    lager:info("[setup:~s] dns.", [UUID]),
+    zlogin(UUID, "echo > /etc/resolv.conf"),
+    case jsxd:get(<<"resolvers">>, VMSpec) of
+        {ok, ResolversL} ->
+            ResolversBin = re:split(ResolversL, ","),
+            Resolvers = [binary_to_list(Rslvr) || Rslvr <- ResolversBin],
+            [zlogin(UUID, ["echo 'nameserver ", Rslvr, "' >> /etc/resolv.conf"])
+             || Rslvr <- Resolvers];
+        _ ->
+            ok
+    end,
+    DomainBin = jsxd:get(<<"dns_domain">>, <<"local">>, VMSpec),
+    Domain = binary_to_list(DomainBin),
+    zlogin(UUID, ["echo \"domain ", Domain, "\" >> /etc/resolv.conf"]),
+    zlogin(UUID, ["echo \"search ", Domain, "\" >> /etc/resolv.conf"]),
+
+    case jsxd:get(<<"hostname">>, VMSpec) of
+        {ok, Hostname} ->
+            lager:info("[setup:~s] hostname.", [UUID]),
+            zlogin(UUID, ["hostname ", binary_to_list(Hostname)]);
+        _ ->
+            ok
+    end,
+    %% TODO: this is entirely stupid but for some reason we can't do the
+    %% network setup on the first zone boot so for some reason, we'll need
+    %% to reboot the zone before we can go on - bug reported, lets hope someone
+    %% smarter then me knows why this would hapen.
+    lager:info("[setup:~s] Now reboot it.", [UUID]),
+    chunter_vmadm:reboot(UUID),
+    lager:info("[setup:~s] Giveit a few seconds.", [UUID]),
+    timer:sleep(5000),
+    lager:info("[setup:~s] And wait for the system to come up agian.", [UUID]),
+    ok = wait_for_started(UUID, S),
+    lager:info("[setup:~s] Initializing networks.", [UUID]),
+    lists:map(fun({NicBin, Spec}) ->
+                      Nic = binary_to_list(NicBin),
+                      {ok, IPBin} = jsxd:get(<<"ip">>, Spec),
+                      IP = binary_to_list(IPBin),
+                      {ok, Netmask} = jsxd:get(<<"netmask">>, Spec),
+                      CIDR = ft_iprange:mask_to_cidr(Netmask),
+                      CIDRS = integer_to_list(CIDR),
+                      zlogin(UUID, ["ipadm create-if ", Nic]),
+                      zlogin(UUID, ["ipadm create-addr -T static",
+                                    " -a ", IP, "/", CIDRS,
+                                    " ", Nic, "/v4"]),
+                      case jsxd:get(<<"primary">>, Spec) of
+                          {ok, true} ->
+                              {ok, GWBin} = jsxd:get(<<"gateway">>, Spec),
+                              GW = binary_to_list(GWBin),
+                              zlogin(UUID, ["route -p add default ", GW]);
+                          _ ->
+                              ok
+                      end
+              end, NICS),
+    lager:info("[setup:~s] Zone setup completed.", [UUID]),
+    {next_state, creating,
+     State#state{type = zone,
+                 public_state = change_state(UUID, <<"running">>)}}.
+
+wait_for_started(UUID, S) ->
+    timer:sleep(1000),
+    case smurf:status(UUID, S) of
+        {ok,{S,<<"online">>, _}} ->
             ok;
         _ ->
-            timer:sleep(1000),
-            wait_for_delete(UUID)
+            wait_for_started(UUID, S)
     end.
+
+zlogin(UUID, Cmd) ->
+    UUIDs = binary_to_list(UUID),
+    FullCmd = ["/usr/sbin/zlogin ", UUIDs, " '", Cmd, "'"],
+    lager:info("[zlogin:~s] ~s", [UUID, FullCmd]),
+    Rx = os:cmd(FullCmd),
+    lager:info("[zlogin:~s]-> ~s", [UUID, Rx]),
+    Rx.

@@ -145,81 +145,39 @@ install_image(DatasetUUID, VM) ->
             lager:debug("found.", []),
             ok;
         _ ->
-            case ls_img:list(DatasetUUID) of
-                {ok, Parts} ->
-                    [Idx | Parts1] = lists:sort(Parts),
-                    {Cmd, B} = case ls_img:get(DatasetUUID, Idx) of
-                                   {ok, <<31:8, 139:8, _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.gzip.sh", AB};
-                                   {ok, <<"BZh", _/binary>> = AB} ->
-                                       {code:priv_dir(chunter) ++ "/zfs_receive.bzip2.sh", AB}
-                               end,
-                    lager:debug("not found going to run: ~s ~s.", [Cmd, DatasetUUID]),
-                    Port = open_port({spawn_executable, Cmd},
-                                     [{args, [DatasetUUID]}, use_stdio, binary,
-                                      stderr_to_stdout, exit_status]),
-                    port_command(Port, B),
-                    lager:debug("We have the following parts: ~p.", [Parts1]),
-                    write_image(Port, DatasetUUID, Parts1, VM, 0);
-                {ok, AKey, SKey, S3Host, S3Port, Bucket, Target} ->
-                    Chunk = case application:get_env(chunter, download_chunk) of
-                                undefined ->
-                                    5242880;
-                                {ok, S} ->
-                                    S
-                            end,
-                    {ok, Download} = fifo_s3_download:new(AKey, SKey, S3Host, S3Port, Bucket,
-                                                          Target, [{chunk_size, Chunk}]),
-                    {Cmd, B} = case fifo_s3_download:get(Download) of
-                                   {ok, <<31:8, 139:8, _/binary>> = AB} ->
-                                       {"/zfs_receive.gzip.sh", AB};
-                                   {ok, <<"BZh", _/binary>> = AB} ->
-                                       {"/zfs_receive.bzip2.sh", AB}
-                               end,
-                    Cmd1 = code:priv_dir(chunter) ++  Cmd,
-                    Ctx1 = crypto:hash_update(crypto:hash_init(sha), B),
-                    {ok, D} = ls_dataset:get(DatasetUUID),
-                    lager:debug("not found going to run: ~s ~s.",
-                                [Cmd1, DatasetUUID]),
-                    Port = open_port({spawn_executable, Cmd1},
-                                     [{args, [DatasetUUID]}, use_stdio, binary,
-                                      stderr_to_stdout, exit_status]),
-                    port_command(Port, B),
-                    case chunter_snap:download_to_port(
-                           Port, Download, VM, ft_dataset:sha1(D), Ctx1, 1) of
-                        {ok, done} ->
-                            finish_image(DatasetUUID);
-                        E ->
-                            E
-                    end;
+            {ok, {S3Host, S3Port, AKey, SKey, Bucket}} = libsniffle:s3(image),
+            Chunk = case application:get_env(chunter, download_chunk) of
+                        undefined ->
+                            5242880;
+                        {ok, S} ->
+                            S
+                    end,
+            {ok, Download} = fifo_s3_download:new(
+                               AKey, SKey, S3Host, S3Port, Bucket,
+                               DatasetUUID, [{chunk_size, Chunk}]),
+            {Cmd, B} = case fifo_s3_download:get(Download) of
+                           {ok, <<31:8, 139:8, _/binary>> = AB} ->
+                               {"/zfs_receive.gzip.sh", AB};
+                           {ok, <<"BZh", _/binary>> = AB} ->
+                               {"/zfs_receive.bzip2.sh", AB}
+                       end,
+            Cmd1 = code:priv_dir(chunter) ++  Cmd,
+            Ctx1 = crypto:hash_update(crypto:hash_init(sha), B),
+            {ok, D} = ls_dataset:get(DatasetUUID),
+            lager:debug("not found going to run: ~s ~s.",
+                        [Cmd1, DatasetUUID]),
+            Port = open_port({spawn_executable, Cmd1},
+                             [{args, [DatasetUUID]}, use_stdio, binary,
+                              stderr_to_stdout, exit_status]),
+            port_command(Port, B),
+            case chunter_snap:download_to_port(
+                   Port, Download, VM, ft_dataset:sha1(D), Ctx1, 1) of
+                {ok, done} ->
+                    finish_image(DatasetUUID);
                 E ->
                     E
             end
     end.
-
-write_image(Port, UUID, [Idx|_], _Lock, ?WRITE_RETRY) ->
-    lager:debug("<IMG> ~p import failed at chunk ~p.", [UUID, Idx]),
-    port_close(Port),
-    {error, retries_exceeded};
-
-write_image(Port, UUID, [Idx|R], Lock, Retry) ->
-    lager:debug("<IMG> ~s[~p]: fetching", [UUID, Idx]),
-    chunter_lock:lock(Lock),
-    case ls_img:get(UUID, Idx) of
-        {ok, B} ->
-            lager:debug("<IMG> ~s[~p]: writing", [UUID, Idx]),
-            port_command(Port, B),
-            write_image(Port, UUID, R, Lock, 0);
-        E ->
-            lager:warning("<IMG> ~p[~p]: retry! -> ~p", [UUID, Idx, E]),
-            timer:sleep(1000),
-            write_image(Port, UUID, [Idx|R], Lock, Retry+1)
-    end;
-
-write_image(Port, UUID, [], _Lock, _) ->
-    lager:debug("<IMG> done, going to wait for zfs to finish now.", []),
-    port_close(Port),
-    finish_image(UUID).
 
 finish_image(UUID) ->
     UUIDL = binary_to_list(UUID),

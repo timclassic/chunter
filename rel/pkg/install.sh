@@ -2,8 +2,11 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=20131003T221245Z\|20140124T065835Z\|20140221T042147Z\|20140404T041131Z\|20140404T041131Z\|20140404T001635Z\|20140501T225642Z\|20141225T170427Z\|20150108T111855Z
-BAD_VERSIONS=20130627T201726Z\|20131031T235904Z\|20140710T224431AZ\|20140724T221203Z
+TESTED_VERSIONS=20131003T221245Z\|20140124T065835Z\|20140221T042147Z\|20140404T041131Z\|20140404T041131Z\|20140404T001635Z\|20140501T225642Z\|20141225T170427Z\|20150108T111855Z\|20150417T032339Z\|20150806T063417Z
+BAD_VERSIONS=20130627T201726Z\|20131031T235904Z\|20140710T224431AZ\|20140724T221203Z\|20150528T153328Z
+
+
+## 20150528T153328Z - kstat bug, keeps growing indefinetly
 
 if [ -z "$DST" ]
 then
@@ -72,10 +75,10 @@ if [ "$FORCE" = false ] ; then
 fi
 
 # We've to initialize imgadm or it will die horribly .... *sigh*
-[ -d /var/imgadm ] || imgadm update
+imgadm update
 [ -d /var/imgadm/images ] || mkdir -p /var/imgadm/images
 
-(cd "$DST"; uudecode -p "$DIR/$BASE"|tar xzf -)
+(cd "$DST"; uudecode -p "$DIR/$BASE"| tar xf -)
 mkdir -p /var/log/chunter
 
 
@@ -109,10 +112,11 @@ then
         sed "s/^ip = 127.0.0.1:4200/ip=$conf_admin_ip:4200/" ${CONFFILE}.example > ${CONFFILE}
     fi
 else
-    echo "Merging old file with new template, the original can be found in ${CONFFILE}.old."
-    $DST/chunter/share/update_config.sh ${CONFFILE}.example ${CONFFILE} > ${CONFFILE}.new &&
-        mv ${CONFFILE} ${CONFFILE}.old &&
-        mv ${CONFFILE}.new ${CONFFILE}
+    echo "Please make sure you update your config according to the update manual!"
+    #/opt/local/fifo-sniffle/share/update_config.sh ${CONFFILE}.example ${CONFFILE} > ${CONFFILE}.new &&
+    #    mv ${CONFFILE} ${CONFFILE}.old &&
+    #    mv ${CONFFILE}.new ${CONFFILE}
+
 fi
 
 mkdir -p "$DST/custom/smf"

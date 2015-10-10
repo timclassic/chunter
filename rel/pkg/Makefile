@@ -1,4 +1,4 @@
-VERSION=0.6.1p17
+VERSION=0.7.0
 COMPONENT=chunter
 SUFFIX:=$(shell echo $(SUFFIX))
 BASENAME:=$(COMPONENT)-$(VERSION)$(SUFFIX)
@@ -9,7 +9,10 @@ clean:
 
 package:
 	cp install.sh $(BASENAME)
-	cd .. && tar -cf pkg/$(BASENAME).tar $(COMPONENT)
+	cp -r ../../_build/prod/rel/$(COMPONENT) $(COMPONENT)
+	tar -cf $(BASENAME).tar $(COMPONENT)
+	rm -rf $(COMPONENT)
 	uuencode $(BASENAME).tar $(BASENAME).tar >> $(BASENAME)
-	-rm $(BASENAME).gz $(BASENAME).tar
+	[ -f $(BASENAME).gz ] && rm $(BASENAME).gz || true
+	rm  $(BASENAME).tar
 	gzip -9 $(BASENAME)

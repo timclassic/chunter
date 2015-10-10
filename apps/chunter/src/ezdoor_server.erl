@@ -85,6 +85,15 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+
+%% TODO: None SmartOS
+handle_call({add, _, _, _}, _, State = #state{port = undefined}) ->
+    {reply, {ok, not_supported}, State};
+
+%% TODO: None SmartOS
+handle_call({remove, _}, _, State = #state{port = undefined}) ->
+    {reply, ok, State};
+
 handle_call({add, Module, ZoneUUID, DoorName}, {From, _},
             State = #state{port = Port, doors = Doors}) ->
     %%lager:info("[ezdoor] Requesting door for ~s/~s", [ZoneUUID, DoorName]),

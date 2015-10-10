@@ -6,10 +6,10 @@ if [ $? != 0 ]
 then
     cat <<EOF
 update [-u] [-b dev|rel]
-  -u              will force a upgrade over versions
-  -b dev|rel      selects a specific branch
-  -v <version>    selects which version to install, only valid for rel branch, implies -u
-  -f              forces the update (no prompt for not supported versions)
+  -u              Forces a upgrade, will jump to a new versions.
+  -b dev|rel      Selects a specific branch.
+  -v <version>    Selects which version to install. Only valid for rel branch, implies -u!
+  -f              Forces the update (no prompt for not supported SmartOS versions)
 EOF
     exit 2
 fi
@@ -55,8 +55,7 @@ case $BRANCH in
         exit 2;
 esac
 
-BASE=http://release.project-fifo.net/chunter/${BRANCH}
-curl -sL ${BASE}/chunter.version > /tmp/chunter.version
+BASE=http://release.project-fifo.net/gz/${BRANCH}
 
 CUR_VER=$(sed -e 's/\n//' ${ETC}/chunter.version)
 CUR_BASE=$(echo "${CUR_VER}"  | sed -e 's/p.*$//')
@@ -71,16 +70,15 @@ then
     TARGET_VER="${CUR_BASE}"
 fi
 
-## If we are on the dev branch we always update to latest.
+## If we are on the dev branch we need to update differenlty
 if [ "${BRANCH}" = "dev" ]
-
 then
     CHUNTER_VER="latest"
     ## We check if a target version is set either manually or implictly if so
     ## we use that version to see if ther is new data
 elif [ "x${TARGET_VER}x" != "xx" ]
 then
-    CHUNTER_VER=$(curl -sL "${BASE}" | sed -e 's/<a href="//' -e 's/\.gz".*//' | grep "^chunter-${TARGET_VER}" | sed -e 's/^chunter-//' | tail -n 1)
+    CHUNTER_VER=$(curl -sL "${BASE}/index" | grep "^chunter-${TARGET_VER}" | sed -e 's/^chunter-//' | tail -n 1)
     if [ "x${CHUNTER_VER}x" = "xx" ]
     then
         echo "No package for version $TARGET_VER found."
@@ -96,22 +94,36 @@ else
     exit 1
 fi
 
+FILE="chunter-${CHUNTER_VER}"
 
 ## Now we see if we need to download a new version
-if [ "${CUR_VER}" = "${CHUNTER_VER}" ]
+if [ "${BRANCH}" = "dev" ]
+then
+    curl -sL ${BASE}/chunter.version > /tmp/chunter.version
+    if diff /tmp/chunter.version ${ETC}/chunter.version > /dev/null
+    then
+        echo "No update available."
+        GET_UPDATE="false";
+    else
+        GET_UPDATE="true";
+    fi
+elif [ "${CUR_VER}" = "${CHUNTER_VER}" ]
 then
     echo "No updates availalbe."
-    exit 0
+    GET_UPDATE="false";
 else
-    FILE="chunter-${CHUNTER_VER}"
+    GET_UPDATE="true";
 fi
 
-(
-    cd /opt;
-    curl -O ${BASE}/${FILE}.gz &&
-        gunzip -f ${FILE}.gz &&
-        sh ${FILE} ${FORCE} &&
-        svcadm restart chunter &&
-        echo "Chunter was updated" ||
-            echo "Chunter update failed, sorry you will have to look into that." && exit 1
-)
+if [ "${GET_UPDATE}" = "true" ]
+then
+    (
+        cd /opt;
+        curl -O ${BASE}/${FILE}.gz &&
+            gunzip -f ${FILE}.gz &&
+            sh ${FILE} ${FORCE} &&
+            svcadm restart chunter &&
+            echo "Chunter was updated" ||
+                echo "Chunter update failed, sorry you will have to look into that." && exit 1
+    )
+fi

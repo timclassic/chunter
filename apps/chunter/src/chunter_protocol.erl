@@ -64,7 +64,6 @@ handle_info({_OK, Socket, BinData}, State = #state{
             {noreply, State#state{state = UUID,
                                   type = console}};
         ping ->
-            lager:debug("Ping."),
             Transport:send(Socket, term_to_binary(pong)),
             ok = Transport:close(Socket),
             {stop, normal, State};
@@ -114,9 +113,9 @@ handle_info({_OK, Socket, BinData},  State = #state{
                                                      D
                                              end
                                      end),
-            Now = now(),
             Transport:send(Socket, term_to_binary(Res1)),
-            lager:info("<~p> Dtrace ~p  took ~pus + ~pus + ~pus.", [Ref, Act, Time, Time1, timer:now_diff(now(), Now)])
+            lager:info("<~p> Dtrace ~p  took ~pus + ~pus + ~pus.",
+                       [Ref, Act, Time, Time1])
     end,
     {noreply, State};
 
@@ -135,6 +134,10 @@ handle_info(_Info, State) ->
 
 -spec handle_message(Message::fifo:chunter_message(), State::term()) ->
                             {stop, term()} | {stop, term(), term()}.
+
+handle_message({fw, update, UUID}, State) when is_binary(UUID) ->
+    chunter_vm_fsm:update_fw(UUID),
+    {stop, State};
 
 handle_message({machines, start, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:start(UUID),
@@ -167,20 +170,12 @@ handle_message({machines, backup, delete, UUID, SnapId}, State)
        is_binary(SnapId) ->
     {stop, chunter_vm_fsm:delete_backup(UUID, SnapId), State};
 
-handle_message({machines, service, enable, UUID, Service}, State)
+handle_message({machines, service, Action, UUID, Service}, State)
   when is_binary(UUID),
-       is_binary(Service) ->
-    {stop, chunter_vm_fsm:service_action(UUID, enable, Service), State};
-
-handle_message({machines, service, disable, UUID, Service}, State)
-  when is_binary(UUID),
-       is_binary(Service) ->
-    {stop, chunter_vm_fsm:service_action(UUID, disable, Service), State};
-
-handle_message({machines, service, clear, UUID, Service}, State)
-  when is_binary(UUID),
-       is_binary(Service) ->
-    {stop, chunter_vm_fsm:service_action(UUID, clear, Service), State};
+       is_binary(Service),
+       (Action =:= enable orelse Action =:= disable orelse Action =:= clear
+        orelse Action =:= refresh orelse Action =:= restart)->
+    {stop, chunter_vm_fsm:service_action(UUID, Action, Service), State};
 
 handle_message({machines, snapshot, UUID, SnapId}, State)
   when is_binary(UUID),
@@ -234,15 +229,6 @@ handle_message({machines, snapshot, store,
           end),
     {stop, ok, State};
 
-handle_message({machines, snapshot, store, UUID, SnapId, Img}, State)
-  when is_binary(Img),
-       is_binary(UUID),
-       is_binary(SnapId) ->
-    spawn(fun() ->
-                  write_snapshot(UUID, SnapId, Img)
-          end),
-    {stop, ok, State};
-
 handle_message({machines, stop, UUID}, State) when is_binary(UUID) ->
     chunter_vmadm:stop(UUID),
     {stop, State};
@@ -279,18 +265,11 @@ handle_message({machines, delete, UUID}, State) when is_binary(UUID) ->
     chunter_vm_fsm:delete(UUID),
     {stop, State};
 
-handle_message({service, enable, Service}, State)
-  when is_binary(Service) ->
-    {stop, chunter_server:service_action(enable, Service), State};
-
-handle_message({service, disable, Service}, State)
-  when is_binary(Service) ->
-    {stop, chunter_server:service_action(disable, Service), State};
-
-handle_message({service, clear, Service}, State)
-  when is_binary(Service) ->
-    {stop, chunter_server:service_action(clear, Service), State};
-
+handle_message({service, Action, Service}, State)
+  when is_binary(Service),
+       (Action =:= enable orelse Action =:= disable orelse Action =:= clear
+        orelse Action =:= refresh orelse Action =:= restart)->
+    {stop, chunter_server:service_action(Action, Service), State};
 
 handle_message(update, State) ->
     lager:info("updating chunter", []),
@@ -314,54 +293,19 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 llquantize(Data) ->
-    lists:foldr(fun ({_, Path, Vals}, Obj) ->
-                        BPath = lists:map(fun(L) when is_list(L) ->
-                                                  list_to_binary(L);
-                                             (B) when is_binary(B) ->
-                                                  B;
-                                             (N) when is_number(N) ->
-                                                  list_to_binary(integer_to_list(N))
-                                          end, Path),
-                        lists:foldr(fun({{Start, End}, Value}, Obj1) ->
-                                            B = list_to_binary(io_lib:format("~p-~p", [Start, End])),
-                                            jsxd:set(BPath ++ [B], Value, Obj1)
-                                    end, Obj, Vals)
-                end, [], Data).
+    lists:foldr(fun llquantize_/2, [], Data).
+
+llquantize_({_, Path, Vals}, Obj) ->
+    BPath = lists:map(fun ensure_bin/1, Path),
+    lists:foldr(fun({{Start, End}, Value}, Obj1) ->
+                        B = list_to_binary(io_lib:format("~p-~p", [Start, End])),
+                        jsxd:set(BPath ++ [B], Value, Obj1)
+                end, Obj, Vals).
 
 
-write_snapshot(UUID, SnapId, Img) ->
-    Cmd = code:priv_dir(chunter) ++ "/zfs_send.gzip.sh",
-    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, UUID, SnapId]),
-    Port = open_port({spawn_executable, Cmd},
-                     [{args, [UUID, SnapId]}, use_stdio, binary,
-                      stderr_to_stdout, exit_status, stream]),
-    ls_dataset:imported(Img, 0),
-    ls_dataset:status(Img, <<"pending">>),
-    write_snapshot(Port, Img, <<>>, 0, undefined).
-
-write_snapshot(Port, Img, <<MB:1048576/binary, Acc/binary>>, Idx, Ref) ->
-    lager:debug("<IMG> ~s[~p]", [Img, Idx]),
-    {ok, Ref1} = ls_img:create(Img, Idx, binary:copy(MB), Ref),
-    write_snapshot(Port, Img, Acc, Idx+1, Ref1);
-
-write_snapshot(Port, Img, Acc, Idx, Ref) ->
-    receive
-        {Port, {data, Data}} ->
-            write_snapshot(Port, Img, <<Acc/binary, Data/binary>>, Idx, Ref);
-        {Port,{exit_status, 0}} ->
-            case Acc of
-                <<>> ->
-                    ok;
-                _ ->
-                    lager:debug("<IMG> ~s[~p]", [Img, Idx]),
-                    ls_img:create(Img, Idx, binary:copy(Acc), Ref)
-            end,
-            lager:info("Writing image ~s finished with ~p parts.", [Img, Idx]),
-            ls_dataset:imported(Img, 1),
-            ls_dataset:status(Img, <<"imported">>),
-            ok;
-        {Port,{exit_status, S}} ->
-            lager:error("Writing image ~s failed after ~p parts with exit "
-                        "status ~p.", [Img, Idx, S]),
-            ok
-    end.
+ensure_bin(L) when is_list(L) ->
+    list_to_binary(L);
+ensure_bin(B) when is_binary(B) ->
+    B;
+ensure_bin(N) when is_number(N) ->
+    list_to_binary(integer_to_list(N)).

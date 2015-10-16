@@ -263,13 +263,15 @@ restore_path(Target, Remote, Local, Path) ->
         false ->
             case jsxd:get(Target, Remote) of
                 {ok, Snap} ->
-                    SHA1 = jsxd:get([<<"files">>, Target, <<"sha1">>], <<>>, Snap),
+                    Files = jsxd:get(<<"files">>, [], Snap),
+                    SHAs = [{ID, jsxd:get(<<"sha1">>, <<>>, V)}
+                            || {ID, V} <- Files],
                     case jsxd:get(<<"parent">>, Snap) of
                         {ok, Parent} ->
                             restore_path(Parent, Remote, Local,
-                                         [{incr,  Target, SHA1} | Path]);
+                                         [{incr,  Target, SHAs} | Path]);
                         _ ->
-                            {ok, [{full, Target, SHA1} | Path]}
+                            {ok, [{full, Target, SHAs} | Path]}
                     end;
                 _ ->
                     {error, nopath}
@@ -319,9 +321,9 @@ restore_path_test() ->
     ResG = restore_path(<<"g">>, Remote, Local),
 
     ?assertEqual([{local, <<"b">>}], ResB),
-    ?assertEqual([{local, <<"c">>}, {incr, <<"a">>, <<>>}], ResA),
-    ?assertEqual([{full, <<"f">>, <<>>}, {incr, <<"e">>, <<>>},
-                  {incr, <<"d">>, <<>>}], ResD),
+    ?assertEqual([{local, <<"c">>}, {incr, <<"a">>, []}], ResA),
+    ?assertEqual([{full, <<"f">>, []}, {incr, <<"e">>, []},
+                  {incr, <<"d">>, []}], ResD),
     ?assertEqual({error, nopath}, ResG),
     ok.
 

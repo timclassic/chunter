@@ -1269,12 +1269,14 @@ snapshot_sizes(VM) ->
 
 do_restore(Path, VM, {local, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {full, SnapId, SHA1}, Opts) ->
+do_restore(Path, VM, {full, SnapId, SHAs}, Opts) ->
+    SHA1 = jsxd:get([Path], <<>>, SHAs),
     do_destroy(Path, VM, SnapId, Opts),
     chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {incr, SnapId, SHA1}, Opts) ->
+do_restore(Path, VM, {incr, SnapId, SHAs}, Opts) ->
+    SHA1 = jsxd:get([Path], <<>>, SHAs),
     chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts).

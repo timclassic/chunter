@@ -204,11 +204,11 @@ download_to_port(Prt, Download, Lock, SHA1, Ctx, I) ->
 describe_restore([{local, U} | R]) ->
     lager:debug("[restore] Using local snapshot ~s", [U]),
     describe_restore(R);
-describe_restore([{full, U, SHA1} | R]) ->
-    lager:debug("[restore] Using full backup ~s(~s)", [U, SHA1]),
+describe_restore([{full, U, SHAs} | R]) ->
+    lager:debug("[restore] Using full backup ~s(~p)", [U, SHAs]),
     describe_restore(R);
-describe_restore([{incr, U, SHA1} | R]) ->
-    lager:debug("[restore] incremental update to ~s(~s)", [U, SHA1]),
+describe_restore([{incr, U, SHAs} | R]) ->
+    lager:debug("[restore] incremental update to ~s(~p)", [U, SHAs]),
     describe_restore(R);
 describe_restore([]) ->
     ok.

@@ -55,7 +55,7 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                              stderr_to_stdout, exit_status, stream])
           end,
     backup_update(VM, SnapID, <<"state">>, <<"uploading">>, Options),
-    backup_update(VM, SnapID, [Target, <<"size">>], 0, Options),
+    backup_update(VM, SnapID, [<<"files">>, Target, <<"size">>], 0, Options),
     Ctx = crypto:hash_init(sha),
     upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, 0, Ctx, Target,
                     Options).
@@ -263,7 +263,7 @@ restore_path(Target, Remote, Local, Path) ->
         false ->
             case jsxd:get(Target, Remote) of
                 {ok, Snap} ->
-                    SHA1 = jsxd:get(<<"sha1">>, <<>>, Snap),
+                    SHA1 = jsxd:get([<<"files">>, Target, <<"sha1">>], <<>>, Snap),
                     case jsxd:get(<<"parent">>, Snap) of
                         {ok, Parent} ->
                             restore_path(Parent, Remote, Local,

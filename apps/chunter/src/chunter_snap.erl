@@ -55,25 +55,22 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
                              stderr_to_stdout, exit_status, stream])
           end,
     backup_update(VM, SnapID, <<"state">>, <<"uploading">>, Options),
-    backup_update(VM, SnapID, <<"size">>, 0, Options),
-    {ok, VMObj} = ls_vm:get(VM),
-    Backups = ft_vm:backups(VMObj),
-    Size = jsxd:get([SnapID, <<"size">>], 0, Backups),
-    Fs = jsxd:get([SnapID, <<"files">>], [], Backups),
-    backup_update(VM, SnapID, <<"files">>, [Target | Fs], Options),
+    backup_update(VM, SnapID, [Target, <<"size">>], 0, Options),
     Ctx = crypto:hash_init(sha),
-    upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Ctx, Options).
+    upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, 0, Ctx, Target,
+                    Options).
 
 
-upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Options) ->
+upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Target,
+                Options) ->
     case AccIn of
         <<MB:Chunk/binary, Acc/binary>> ->
             case fifo_s3_upload:part(Upload, binary:copy(MB)) of
                 ok ->
                     lager:debug("Uploading: ~p MB.", [round(Size/1024/1024)]),
-                    backup_update(UUID, SnapID, <<"size">>, Size, Options),
+                    backup_update(UUID, SnapID, [<<"files">>, Target, <<"size">>], Size, Options),
                     upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk,
-                                    Size, Ctx, Options);
+                                    Size, Ctx, Target, Options);
                 {error, E} ->
                     fifo_s3_upload:abort(Upload),
                     lager:error("Upload error: ~p", [E]),
@@ -87,7 +84,7 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Options) ->
                     Ctx1 = crypto:hash_update(Ctx, Data),
                     upload_to_cloud(UUID, SnapID, Port, Upload,
                                     <<Acc/binary, Data/binary>>, Chunk, Size1,
-                                    Ctx1, Options);
+                                    Ctx1, Target, Options);
                 {Port, {exit_status, 0}} ->
                     R = case Acc of
                             <<>> ->
@@ -110,9 +107,13 @@ upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Options) ->
                                         [round(Size/1024/1024)]),
                             backup_update(UUID, SnapID, <<"size">>, Size,
                                           Options),
+                            backup_update(UUID, SnapID,
+                                          [<<"files">>, Target,<<"size">>],
+                                          Size, Options),
                             Digest = base16:encode(crypto:hash_final(Ctx)),
-                            backup_update(UUID, SnapID, <<"sha1">>, Digest,
-                                          Options),
+                            backup_update(UUID, SnapID,
+                                          [<<"files">>, Target, <<"sha1">>],
+                                          Digest, Options),
                             M = io_lib:format("Uploaded ~s with a total size of"
                                               " done: ~p", [UUID, Size]),
 
@@ -283,11 +284,11 @@ mk_s3_conf(Options) ->
     S3Port = proplists:get_value(s3_port, Options),
     fifo_s3:make_config(AKey, SKey, S3Host, S3Port).
 
-backup_update(VM, SnapID, K, V, Opts) ->
+backup_update(VM, SnapID, K, V, Opts) when is_list(K) ->
     case proplists:get_value(quiet, Opts, false) of
         false ->
             Event = proplists:get_value(event, Opts, <<"backup">>),
-            ls_vm:set_backup(VM, [{[SnapID, K], V}]),
+            ls_vm:set_backup(VM, [{[SnapID | K], V}]),
             libhowl:send(VM,
                          [{<<"event">>, Event},
                           {<<"data">>,
@@ -296,7 +297,11 @@ backup_update(VM, SnapID, K, V, Opts) ->
                             {<<"uuid">>, SnapID}]}]);
         true ->
             ok
-    end.
+    end;
+
+backup_update(VM, SnapID, K, V, Opts) ->
+    backup_update(VM, SnapID, [K], V, Opts).
+
 
 -ifdef(TEST).
 restore_path_test() ->

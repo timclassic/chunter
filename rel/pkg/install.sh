@@ -32,6 +32,7 @@ function graylist {
         fi
     fi
 }
+
 #IFACE=`dladm show-phys -m | grep $admin_nic | awk '{print $1}'`
 #IP=`ifconfig $IFACE | grep inet | awk '{print $2}'`
 
@@ -83,7 +84,7 @@ mkdir -p /var/log/chunter
 
 
 ## Generate all the needed values
-conf_admin_mac="$admin_nic"
+conf_admin_mac=$(echo "$admin_nic" | sed 's/00/0/g')
 case "$conf_admin_mac" in
     aggr*)
         conf_admin_nic="$conf_admin_mac"

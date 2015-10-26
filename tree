@@ -30,7 +30,7 @@
 │     └─ pooler─1.4.0
 ├─ libsnarl─0.3.33
 │  └─ oauth2─0.6.0
-├─ libsniffle─0.3.29
+├─ libsniffle─0.3.30
 ├─ ranch─1.1.0
 ├─ recon─2.2.1
 ├─ smurf─0.1.3

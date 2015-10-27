@@ -1267,14 +1267,19 @@ snapshot_sizes(VM) ->
             ok
     end.
 
+%% _:43 is '/zones/' + uuid
 do_restore(Path, VM, {local, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {full, SnapId, SHA1}, Opts) ->
+do_restore(Path = <<_:43/binary, Dx/binary>>, VM, {full, SnapId, SHAs}, Opts) ->
+    File = <<VM/binary, "/", SnapId/binary, Dx/binary>>,
+    SHA1 = jsxd:get([File], <<>>, SHAs),
     do_destroy(Path, VM, SnapId, Opts),
     chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path, VM, {incr, SnapId, SHA1}, Opts) ->
+do_restore(Path = <<_:43/binary, Dx/binary>>, VM, {incr, SnapId, SHAs}, Opts) ->
+    File = <<VM/binary, "/", SnapId/binary, Dx/binary>>,
+    SHA1 = jsxd:get([File], <<>>, SHAs),
     chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
     do_rollback_snapshot(Path, VM, SnapId, Opts).

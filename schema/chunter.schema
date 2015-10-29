@@ -149,6 +149,12 @@
   {datatype, string}]}.
 
 
+%% @doc Default resolvers when not provided as part of the VM config
+{mapping, "resolvers", "chunter.resolvers",
+ [{default, "8.8.8.8,8.8.4.4"},
+  {commented, "8.8.8.8,8.8.4.4"},
+  {datatype, string}]}.
+
 %% @doc network mappings only apply for OmniOS hosts, they are handled in the
 %% /usbkey/config in SmartOS and this setting iwll be ignored there.
 {mapping, "network_tag.$name", "chunter.network_tags",

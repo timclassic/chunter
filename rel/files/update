@@ -60,6 +60,8 @@ BASE=http://release.project-fifo.net/gz/${BRANCH}
 CUR_VER=$(sed -e 's/\n//' ${ETC}/chunter.version)
 CUR_BASE=$(echo "${CUR_VER}"  | sed -e 's/p.*$//')
 
+curl -sL "${BASE}/index" > /tmp/chunter.version
+
 LATEST_VER=$(sed -e 's/\n//' /tmp/chunter.version)
 
 
@@ -78,7 +80,7 @@ then
     ## we use that version to see if ther is new data
 elif [ "x${TARGET_VER}x" != "xx" ]
 then
-    CHUNTER_VER=$(curl -sL "${BASE}/index" | grep "^chunter-${TARGET_VER}" | sed -e 's/^chunter-//' | tail -n 1)
+    CHUNTER_VER=$(curl -sL "${BASE}/index" | grep "^chunter-${TARGET_VER}" | sed -e 's/^chunter-//' -e 's/.gz$//'  | tail -n 1)
     if [ "x${CHUNTER_VER}x" = "xx" ]
     then
         echo "No package for version $TARGET_VER found."

@@ -80,7 +80,7 @@ then
     ## we use that version to see if ther is new data
 elif [ "x${TARGET_VER}x" != "xx" ]
 then
-    CHUNTER_VER=$(curl -sL "${BASE}/index" | grep "^chunter-${TARGET_VER}" | sed -e 's/^chunter-//' -e 's/.gz$//'  | tail -n 1)
+    CHUNTER_VER=$(curl -sL "${BASE}/index" | grep "^chunter-${TARGET_VER}" | sed -e 's/^chunter-//' -e 's/.gz$//' | tail -n 1)
     if [ "x${CHUNTER_VER}x" = "xx" ]
     then
         echo "No package for version $TARGET_VER found."

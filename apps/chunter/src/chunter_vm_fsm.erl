@@ -376,13 +376,21 @@ initialized({restore, SnapID, Options},
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
             backup_update(VM, SnapID, <<"local">>, true),
-            Type = case jsxd:get(<<"type">>, ft_vm:config(VMObj)) of
-                       {ok, <<"kvm">>} -> kvm;
-                       _ -> zone
+            SniffleData = ft_vm:config(VMObj),
+            {Type, ZoneType} =
+                case {jsxd:get(<<"type">>, SniffleData),
+                      jsxd:get(<<"docker">>, SniffleData)} of
+                    {{ok, <<"kvm">>}, _} ->
+                        {kvm, kvm};
+                    {{ok, <<"lx">>}, {ok, true}} ->
+                        {zone, docker};
+                    {{ok, <<"lx">>}, _} ->
+                        {zone, lx};
+                    _ ->
+                        {zone, zone}
                    end,
-            lager:warning("[TODO] on restore we don't reset the zone type"),
             State1 = State#state{orig_state=loading,
-                                 type = Type,
+                                 type = Type, zone_type = ZoneType,
                                  args={SnapID, Options, Path, Toss}},
             libhowl:send(<<"command">>,
                          [{<<"event">>, <<"vm-restored">>},
@@ -609,13 +617,17 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             snapshot_sizes(UUID),
             timer:send_after(500, get_info),
             SniffleData = chunter_spec:to_sniffle(VMData),
-            Type = case jsxd:get(<<"type">>, SniffleData) of
-                       {ok, <<"kvm">>} -> kvm;
-                       _ -> zone
-                   end,
-            ZoneType = case jsxd:get(<<"zone_type">>, SniffleData) of
-                       {ok, <<"lx">>} -> lz;
-                       _ -> zone
+            {Type, ZoneType} =
+                case {jsxd:get(<<"type">>, SniffleData),
+                      jsxd:get(<<"docker">>, SniffleData)} of
+                    {{ok, <<"kvm">>}, _} ->
+                        {kvm, kvm};
+                    {{ok, <<"lx">>}, {ok, true}} ->
+                        {zone, docker};
+                    {{ok, <<"lx">>}, _} ->
+                        {zone, lx};
+                    _ ->
+                        {zone, zone}
                    end,
             lager:info("[~s] Has type: ~p.", [UUID, Type]),
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
@@ -1553,7 +1565,7 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
               end, NICS),
     lager:info("[setup:~s] Zone setup completed.", [UUID]),
     {next_state, creating,
-     State#state{type = zone,
+     State#state{type = zone, zone_type = ipgk,
                  public_state = change_state(UUID, <<"running">>)}}.
 
 wait_for_started(UUID, S) ->

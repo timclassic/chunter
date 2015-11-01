@@ -1000,10 +1000,12 @@ handle_info(get_info, StateName, State=#state{type=kvm}) ->
 handle_info({init, _}, stopped, State) ->
     {next_state, stopped, State};
 
-handle_info({init, console}, StateName, State=#state{type=zone}) ->
+handle_info({init, console}, StateName, State=#state{type=zone})  ->
     {next_state, StateName, init_console(State)};
 
-handle_info({init, zonedoor}, StateName, State=#state{type=zone}) ->
+%% TODO: Would be really nice to have zone doors for lx
+handle_info({init, zonedoor}, StateName, State=#state{type=zone, zone_type=_T})
+  when _T =/= lx; _T =/= docker ->
     {next_state, StateName, ensure_zonedoor(State)};
 
 handle_info({init, _}, StateName, State) ->

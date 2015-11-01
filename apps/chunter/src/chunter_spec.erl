@@ -484,7 +484,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                                        ], Base12),
                             lists:foldl(fun ({K, V}, Acc) ->
                                                 jsxd:set(<<"docker:", K/binary>>, V, Acc)
-                                        end, jsxd:get([<<"docker">>], [], OwnerData), Base13);
+                                        end, Base13, jsxd:get([<<"docker">>], [], OwnerData));
                         _ ->
                             Base12
                     end

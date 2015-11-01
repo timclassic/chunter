@@ -955,7 +955,7 @@ handle_info(update_services, running, State=#state{
                                                services = OldServices,
                                                type = zone,
                                                zone_type = Type
-                                              }) when Type =/= lx;
+                                              }) when Type =/= lx,
                                                       Type =/= docker ->
     case {chunter_smf:update(UUID, OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->

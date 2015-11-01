@@ -21,9 +21,7 @@ run(Cmd, Args) ->
     Port = open_port({spawn_executable, Cmd},
                      [use_stdio, binary, {line, 2048}, {args, mk_args(Args)},
                       stderr_to_stdout, exit_status]),
-    Reply = wait_for_port(Port),
-    port_close(Port),
-    Reply.
+    wait_for_port(Port).
 
 wait_for_port(Port) ->
     wait_for_port(Port, <<>>).
@@ -43,6 +41,7 @@ wait_for_port(Port, Reply, Timeout) ->
             {error, S, Reply}
     after
         Timeout ->
+            port_close(Port),
             {error, timeout, Reply}
     end.
 

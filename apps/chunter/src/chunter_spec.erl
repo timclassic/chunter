@@ -77,7 +77,7 @@ generate_sniffle(In, _Type) ->
                   (<<"image_uuid">>, V, Obj) ->
                       jsxd:set(<<"dataset">>, V, Obj);
                   (<<"docker">>, true, Obj) ->
-                      jsxd:set(<<"zone_type">>, docker, Obj);
+                      jsxd:set(<<"zone_type">>, <<"docker">>, Obj);
                   (<<"brand">>, Brand, Obj) ->
                       case brand_to_type(Brand) of
                           kvm ->
@@ -86,7 +86,7 @@ generate_sniffle(In, _Type) ->
                               O1 = jsxd:set(<<"type">>, <<"zone">>, Obj),
                               case {Brand, jsxd:get(<<"zone_type">>, O1)} of
                                   {<<"lx">>, undefined} ->
-                                      jsxd:set(<<"zone_type">>, lx, O1);
+                                      jsxd:set(<<"zone_type">>, <<"lx">>, O1);
                                   _ ->
                                       O1
                               end;

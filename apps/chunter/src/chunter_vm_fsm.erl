@@ -275,6 +275,16 @@ preloading(_, State = #state{uuid = UUID}) ->
 initialized(load, State) ->
     {next_state, loading, State};
 
+initialized({create, Package, {docker, DockerID}, VMSpec}, State) ->
+    TID = {erlang:system_time(milli_seconds), node()},
+    D = ft_dataset:new(TID),
+    D1 = ft_dataset:type(TID, zone, D),
+    D2 = ft_dataset:zone_type(TID, docker, D1),
+    D3 = ft_dataset:kernel_version(TID, <<"3.13.0">>, D2),
+    {ok, UUID} = chunter_docker:import(DockerID),
+    D4 = ft_dataset:kernel_version(TID, UUID, D3),
+    initialized({create, Package, D4, VMSpec}, State);
+
 initialized({create, Package, Dataset, VMSpec},
             State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
     PackageSpec = ft_package:to_json(Package),

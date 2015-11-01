@@ -472,6 +472,19 @@ generate_spec(Package, Dataset, OwnerData) ->
                               [{delete, <<"dns_domain">>},
                                {set, <<"kernel_version">>, KVersion},
                                {set, <<"brand">>, <<"lx">>}], Base12);
+                        {ok, <<"docker">>} ->
+                            KVersion = jsxd:get([<<"kernel_version">>], <<"3.13.0">>, Dataset),
+                            Base13 = jsxd:thread(
+                                       [{delete, <<"dns_domain">>},
+                                        {set, <<"kernel_version">>, KVersion},
+                                        {set, <<"brand">>, <<"lx">>},
+                                        {set, <<"docker">>, true},
+                                        {set,  <<"internal_metadata_namespaces">>, [<<"docker">>]},
+                                        {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>}
+                                       ], Base12),
+                            lists:foldl(fun ({K, V}, Acc) ->
+                                                jsdd:set(<<"docker:", K/binary>>, V, Acc)
+                                        end, jsxd:get([<<"docker">>], [], OwnerData), Base13);
                         _ ->
                             Base12
                     end

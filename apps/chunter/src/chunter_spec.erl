@@ -483,7 +483,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                                         {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>}
                                        ], Base12),
                             lists:foldl(fun ({K, V}, Acc) ->
-                                                jsdd:set(<<"docker:", K/binary>>, V, Acc)
+                                                jsxd:set(<<"docker:", K/binary>>, V, Acc)
                                         end, jsxd:get([<<"docker">>], [], OwnerData), Base13);
                         _ ->
                             Base12

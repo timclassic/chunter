@@ -211,6 +211,7 @@ create_zone_data([{<<"dataset">>, Dataset}|R], Disks, Nics, Datasets) ->
 ?REMOVE(<<"debugid">>);
 ?RENAME_B64(<<"alias">>, <<"alias">>);
 ?RENAME_BOOL(<<"autoboot">>, <<"autoboot">>);
+?RENAME_BOOL(<<"docker">>, <<"docker">>);
 ?RENAME(<<"billing-id">>, <<"billing_id">>);
 ?RENAME_INT(<<"cpu-cap">>, <<"cpu_cap">>);
 ?RENAME_BOOL(<<"do-not-inventory">>, <<"do_not_inventory">>);

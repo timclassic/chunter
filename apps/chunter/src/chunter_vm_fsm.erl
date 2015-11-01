@@ -75,6 +75,7 @@
 
 -record(state, {hypervisor,
                 type = unknown,
+                zone_type = unknown,
                 uuid,
                 console,
                 orig_state,
@@ -314,6 +315,7 @@ initialized({create, Package, Dataset, VMSpec},
                        {ok, <<"kvm">>} -> kvm;
                        _ -> zone
                    end,
+            ZoneType = ft_dataset:zone_type(Dataset),
             ls_vm:set_config(UUID, SniffleData1),
             lager:debug("[create:~s] Done generating config, handing to img install.",
                         [UUID]),
@@ -333,6 +335,7 @@ initialized({create, Package, Dataset, VMSpec},
                             end,
                             {next_state, creating,
                              State#state{type = Type,
+                                         zone_type = ZoneType,
                                          public_state = change_state(UUID, <<"creating">>)}};
                         {error, E} ->
                             lager:error("[create:~s] Failed to create with error: ~p",
@@ -377,6 +380,7 @@ initialized({restore, SnapID, Options},
                        {ok, <<"kvm">>} -> kvm;
                        _ -> zone
                    end,
+            lager:warning("[TODO] on restore we don't reset the zone type"),
             State1 = State#state{orig_state=loading,
                                  type = Type,
                                  args={SnapID, Options, Path, Toss}},
@@ -609,12 +613,16 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
                        {ok, <<"kvm">>} -> kvm;
                        _ -> zone
                    end,
+            ZoneType = case jsxd:get(<<"zone_type">>, SniffleData) of
+                       {ok, <<"lx">>} -> lz;
+                       _ -> zone
+                   end,
             lager:info("[~s] Has type: ~p.", [UUID, Type]),
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                 {<<"data">>,
                                  [{<<"config">>, SniffleData}]}]),
             ls_vm:set_config(UUID, SniffleData),
-            State1 = State#state{type = Type},
+            State1 = State#state{type = Type, zone_type = ZoneType},
             change_state(State1#state.uuid, atom_to_binary(StateName), false),
             update_fw(UUID),
             {next_state, StateName, State1#state{services = []}}
@@ -933,8 +941,10 @@ handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
 handle_info(update_services, running, State=#state{
                                                uuid=UUID,
                                                services = OldServices,
-                                               type = zone
-                                              }) ->
+                                               type = zone,
+                                               zone_type = Type
+                                              }) when Type =/= lx;
+                                                      Type =/= docker ->
     case {chunter_smf:update(UUID, OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[~s] Initializing ~p Services.",

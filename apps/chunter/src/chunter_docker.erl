@@ -2,8 +2,10 @@
 
 -export([get_uuid/1]).
 
+-define(IMGADM, "/usr/sbin/imgadm").
+
 get_uuid(Image) ->
-    case chunter_cmd:run_json("imgadm", ["show", Image]) of
+    case chunter_cmd:run_json(?IMGADM, ["show", Image]) of
         {ok, JSON} ->
             jsxd:get([<<"uuid">>], JSON);
         Error ->

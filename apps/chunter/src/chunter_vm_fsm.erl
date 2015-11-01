@@ -379,12 +379,12 @@ initialized({restore, SnapID, Options},
             SniffleData = ft_vm:config(VMObj),
             {Type, ZoneType} =
                 case {jsxd:get(<<"type">>, SniffleData),
-                      jsxd:get(<<"docker">>, SniffleData)} of
+                      jsxd:get(<<"zone_type">>, SniffleData)} of
                     {{ok, <<"kvm">>}, _} ->
                         {kvm, kvm};
-                    {{ok, <<"lx">>}, {ok, true}} ->
+                    {{ok, <<"zone">>}, {ok, <<"docker">>}} ->
                         {zone, docker};
-                    {{ok, <<"lx">>}, _} ->
+                    {{ok, <<"zone">>}, {ok, <<"lx">>}} ->
                         {zone, lx};
                     _ ->
                         {zone, zone}
@@ -619,12 +619,12 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             SniffleData = chunter_spec:to_sniffle(VMData),
             {Type, ZoneType} =
                 case {jsxd:get(<<"type">>, SniffleData),
-                      jsxd:get(<<"docker">>, SniffleData)} of
+                      jsxd:get(<<"zone_type">>, SniffleData)} of
                     {{ok, <<"kvm">>}, _} ->
                         {kvm, kvm};
-                    {{ok, <<"lx">>}, {ok, true}} ->
+                    {{ok, <<"zone">>}, {ok, <<"docker">>}} ->
                         {zone, docker};
-                    {{ok, <<"lx">>}, _} ->
+                    {{ok, <<"zone">>}, {ok, <<"lx">>}} ->
                         {zone, lx};
                     _ ->
                         {zone, zone}

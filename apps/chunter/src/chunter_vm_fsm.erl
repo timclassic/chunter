@@ -282,7 +282,7 @@ initialized({create, Package, {docker, DockerID}, VMSpec}, State) ->
     D2 = ft_dataset:zone_type(TID, docker, D1),
     D3 = ft_dataset:kernel_version(TID, <<"3.13.0">>, D2),
     {ok, UUID} = chunter_docker:import(DockerID),
-    D4 = ft_dataset:kernel_version(TID, UUID, D3),
+    D4 = ft_dataset:uuid(TID, UUID, D3),
     initialized({create, Package, D4, VMSpec}, State);
 
 initialized({create, Package, Dataset, VMSpec},
@@ -944,8 +944,11 @@ handle_info(update_services, running, State=#state{
                                || {Srv, _, St} <- Changed]),
             {next_state, running, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
-            lager:debug("[~s] Updating ~p Services.",
-                        [UUID, length(Changed)]),
+            case length(Changed) of
+                0 -> ok;
+                L ->
+                    lager:debug("[~s] Updating ~p Services.", [UUID, L])
+            end,
             %% Update changes which are not removes
             ls_vm:set_service(UUID,
                               [{Srv, SrvState}

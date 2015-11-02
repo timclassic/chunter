@@ -7,7 +7,7 @@
 ├─ eplugin─0.1.4
 ├─ erlsom─1.2.1
 ├─ erltrace─0.1.4
-├─ fifo_dt─0.1.55
+├─ fifo_dt─0.1.56
 │  ├─ libsnarlmatch─0.1.7
 │  └─ riak_dt─2.1.1
 ├─ fifo_lager─0.1.0
@@ -28,7 +28,7 @@
 │  └─ mdns_client_lib─0.1.28
 │     ├─ mdns_client─0.1.7
 │     └─ pooler─1.4.0
-├─ libsnarl─0.3.33
+├─ libsnarl─0.3.34
 │  └─ oauth2─0.6.0
 ├─ libsniffle─0.3.30
 ├─ ranch─1.1.0

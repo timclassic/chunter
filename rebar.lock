@@ -20,7 +20,7 @@
  {<<"erltrace">>,{pkg,<<"erltrace">>,<<"0.1.4">>},0},
  {<<"fifo_dt">>,
   {git,"https://github.com/project-fifo/fifo_dt.git",
-       {ref,"290a93867d221077b04c4d1be772c958fb85396b"}},
+       {ref,"783ae66a01c93a9d5fda6ec8c69b302409970659"}},
   0},
  {<<"fifo_lager">>,
   {git,"https://github.com/project-fifo/fifo_lager.git",

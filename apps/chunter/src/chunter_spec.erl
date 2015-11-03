@@ -487,8 +487,10 @@ generate_spec(Package, Dataset, OwnerData) ->
                                         {set, <<"kernel_version">>, KVersion},
                                         {set, <<"brand">>, <<"lx">>},
                                         {set, <<"docker">>, true},
-                                        {set,  <<"internal_metadata_namespaces">>, [<<"docker">>]},
-                                        {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>}
+                                        {set, <<"internal_metadata_namespaces">>, [<<"docker">>]},
+                                        {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>},
+                                        %% What a hack :/
+                                        {set, [<<"internal_metadata">>, <<"docker:wait_for_attach">>], erlang:system_time(seconds) + 60}
                                        ], Base12),
                             lists:foldl(fun ({K, V}, Acc) ->
                                                 jsxd:set([<<"internal_metadata">>, <<"docker:", K/binary>>], V, Acc)

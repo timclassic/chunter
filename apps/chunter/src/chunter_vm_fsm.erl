@@ -14,6 +14,7 @@
 
 -behaviour(gen_fsm).
 -behaviour(ezdoor_behaviour).
+-define(CACHE_SIZE, 10240).
 
 %% API
 -export([start_link/1, door_event/3]).
@@ -76,6 +77,7 @@
 -record(state, {hypervisor,
                 type = unknown,
                 zone_type = unknown,
+                console_cache = <<>>,
                 uuid,
                 console,
                 orig_state,
@@ -917,10 +919,25 @@ handle_info(update_snapshots, StateName, State = #state{uuid = UUID}) ->
     {next_state, StateName, State};
 
 handle_info({C, {data, Data}}, StateName, State = #state{console = C,
-                                                         listeners = Ls}) ->
+                                                         listeners = Ls,
+                                                         console_cache = Cache}) ->
     Ls1 = [ L || L <- Ls, is_process_alive(L)],
-    [ L ! {data, Data} || L <- Ls1],
-    {next_state, StateName, State#state{listeners = Ls1}};
+    State1 = State#state{listeners = Ls1},
+    Data1 = <<Cache/binary, Data/binary>>,
+    case Ls1 of
+        [] ->
+            case byte_size(Data1) of 
+                X when X > ?CACHE_SIZE ->
+                    TooMuch = X - ?CACHE_SIZE,
+                    <<_:TooMuch/binary, Data2/binary>> = Data1,
+                    {next_state, StateName, State1#state{console_cache = Data2}};
+                _ ->
+                    {next_state, StateName, State1#state{console_cache = Data1}}
+                end;
+        _ ->
+            [ L ! {data, Data} || L <- Ls1],
+            {next_state, StateName, State1#state{console_cache = <<>>}}
+    end;
 
 handle_info({_C,{exit_status, _}}, stopped,
             State = #state{console = _C, type=zone}) ->
@@ -1084,12 +1101,16 @@ incinerate(Port) ->
             ok
     end.
 
-init_console(State = #state{zone_type = docker}) ->
+init_console(State = #state{uuid = UUID, zone_type = docker}) ->
     case State#state.console of
         undefined ->
             [{_, Name, _, _, _, _}] = chunter_zone:get_raw(State#state.uuid),
             Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -I " ++ binary_to_list(Name),
+            %% This is a bit of a hack
+            %% https://github.com/joyent/sdc-cn-agent/blob/4efd72f2dda2a6daceb51a0cb84d0b06d0bc011d/lib/update-wait-flag.js
+            %% explains why we need it
             ConsolePort = open_port({spawn, Console}, [binary]),
+            chunter_vmadm:update(UUID, [{<<"remove_internal_metadata">>, [<<"docker:wait_for_attach">>]}]),
             State#state{console = ConsolePort};
         _ ->
             State

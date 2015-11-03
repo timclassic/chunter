@@ -1084,6 +1084,16 @@ incinerate(Port) ->
             ok
     end.
 
+init_console(State = #state{zone_type = docker}) ->
+    case State#state.console of
+        undefined ->
+            [{_, Name, _, _, _, _}] = chunter_zone:get_raw(State#state.uuid),
+            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -I " ++ binary_to_list(Name),
+            ConsolePort = open_port({spawn, Console}, [binary]),
+            State#state{console = ConsolePort};
+        _ ->
+            State
+    end;
 init_console(State) ->
     case State#state.console of
         undefined ->
@@ -1094,6 +1104,7 @@ init_console(State) ->
         _ ->
             State
     end.
+
 
 ensure_zonedoor(State) ->
     State1 = case ezdoor_server:add(?MODULE, State#state.uuid, ?AUTH_DOOR) of

@@ -35,6 +35,7 @@
 
 -export([create/4,
          load/1,
+         start/1,
          update_fw/1,
          delete/1,
          transition/2,
@@ -150,6 +151,9 @@ force_state(UUID, State) ->
 
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
+
+start(UUID) ->
+    gen_fsm:send_event({global, {vm, UUID}}, start).
 
 restore_backup(UUID, SnapID, Options) ->
     case global:whereis_name({vm, UUID}) of

@@ -1129,8 +1129,16 @@ init_console(State = #state{uuid = UUID, zone_type = docker}) ->
             %% explains why we need it
             ConsolePort = open_port({spawn, Console},
                                     [use_stdio, binary, stderr_to_stdout]),
-            chunter_vmadm:update(UUID, [{<<"remove_internal_metadata">>, [<<"docker:wait_for_attach">>]}]),
-            State#state{console = ConsolePort};
+            %% We make sure that the console actually survuves for 200 ms to
+            %% prevent the attach to 'succeed' but not succeed
+            receive
+                {'EXIT', ConsolePort, PosixCode} ->
+                    State
+            after
+                200 ->
+                    chunter_vmadm:update(UUID, [{<<"remove_internal_metadata">>, [<<"docker:wait_for_attach">>]}]),
+                    State#state{console = ConsolePort}
+            end;
         _ ->
             State
     end;

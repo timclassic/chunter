@@ -433,6 +433,13 @@ loading({transition, NextState}, State) ->
 stopped({transition, NextState = <<"booting">>}, State) ->
     {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
 
+stopped(start, State = #state{uuid = UUID, zone_type = docker}) ->
+    T = erlang:system_time(milli_seconds) + 60000,
+    chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
+                                 [{<<"docker:wait_for_attach">>, T}]}]),
+    chunter_vmadm:start(UUID),
+    {next_state, stopped, State};
+
 stopped(start, State) ->
     chunter_vmadm:start(State#state.uuid),
     {next_state, stopped, State};

@@ -1023,11 +1023,15 @@ handle_info(get_info, stopped, State) ->
     timer:send_after(1000, get_info),
     {next_state, stopped, State};
 
-handle_info(get_info, StateName, State=#state{type=zone}) ->
+handle_info(get_info, running, State=#state{type=zone}) ->
     State1 = init_console(State),
     State2 = ensure_zonedoor(State1),
     timer:send_after(1000, get_info),
-    {next_state, StateName, State2};
+    {next_state, running, State2};
+
+handle_info(get_info, StateName, State=#state{type=zone}) ->
+    timer:send_after(1000, get_info),
+    {next_state, StateName, State};
 
 handle_info(get_info, StateName, State=#state{type=kvm}) ->
     case chunter_vmadm:info(State#state.uuid) of

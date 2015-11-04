@@ -286,7 +286,7 @@ initialized({create, Package, {docker, DockerID}, VMSpec}, State) ->
     D3 = ft_dataset:kernel_version(TID, <<"3.13.0">>, D2),
     {ok, UUID} = chunter_docker:import(DockerID),
     D4 = ft_dataset:uuid(TID, UUID, D3),
-    initialized({create, Package, D4, VMSpec}, State);
+    initialized({create, Package, D4, VMSpec}, State#state{zone_type = docker});
 
 initialized({create, Package, Dataset, VMSpec},
             State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
@@ -325,27 +325,29 @@ initialized({create, Package, Dataset, VMSpec},
                 ok ->
                     lager:debug("[create:~s] Done installing image going to create now.",
                                 [UUID]),
-                    case chunter_vmadm:create(VMData1) of
-                        ok ->
-                            lager:debug("[create:~s] Done creating continuing on.", [UUID]),
-                            case jsxd:get(<<"owner">>, VMSpec) of
-                                {ok, Org} when Org =/= <<>> ->
-                                    ls_acc:update(Org, UUID, timestamp(),
-                                                  [{<<"event">>, <<"confirm_create">>}]);
-                                _ ->
-                                    ok
-                            end,
-                            {next_state, creating,
-                             State#state{type = Type,
-                                         zone_type = ZoneType,
-                                         public_state = change_state(UUID, <<"creating">>)}};
-                        {error, E} ->
-                            lager:error("[create:~s] Failed to create with error: ~p",
-                                        [UUID, E]),
-                            change_state(UUID, <<"failed">>),
-                            {stop, normal, State}
-                    end;
-                E ->
+                    spawn(fun() ->
+                                  case chunter_vmadm:create(VMData1) of
+                                      ok ->
+                                          lager:debug("[create:~s] Done creating continuing on.", [UUID]),
+                                          case jsxd:get(<<"owner">>, VMSpec) of
+                                              {ok, Org} when Org =/= <<>> ->
+                                                  ls_acc:update(Org, UUID, timestamp(),
+                                                                [{<<"event">>, <<"confirm_create">>}]);
+                                              _ ->
+                                                  ok
+                                          end;
+                                      {error, E} ->
+                                          lager:error("[create:~s] Failed to create with error: ~p",
+                                                      [UUID, E]),
+                                          change_state(UUID, <<"failed">>),
+                                          delete(UUID)
+                                  end
+                          end),
+                    {next_state, creating,
+                      State#state{type = Type,
+                                  zone_type = ZoneType,
+                                  public_state = change_state(UUID, <<"creating">>)}};
+               E ->
                     lager:error("[create:~s] Dataset import failed with: ~p",
                                 [UUID, E]),
                     change_state(UUID, <<"failed">>),
@@ -926,7 +928,7 @@ handle_info({C, {data, Data}}, StateName, State = #state{console = C,
     Data1 = <<Cache/binary, Data/binary>>,
     case Ls1 of
         [] ->
-            case byte_size(Data1) of 
+            case byte_size(Data1) of
                 X when X > ?CACHE_SIZE ->
                     TooMuch = X - ?CACHE_SIZE,
                     <<_:TooMuch/binary, Data2/binary>> = Data1,
@@ -1105,16 +1107,19 @@ init_console(State = #state{uuid = UUID, zone_type = docker}) ->
     case State#state.console of
         undefined ->
             [{_, Name, _, _, _, _}] = chunter_zone:get_raw(State#state.uuid),
-            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -I " ++ binary_to_list(Name),
+            %%Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -I " ++ binary_to_list(Name),
+            Console = "/usr/sbin/zlogin -Q -I " ++ binary_to_list(Name),
             %% This is a bit of a hack
             %% https://github.com/joyent/sdc-cn-agent/blob/4efd72f2dda2a6daceb51a0cb84d0b06d0bc011d/lib/update-wait-flag.js
             %% explains why we need it
-            ConsolePort = open_port({spawn, Console}, [binary]),
+            ConsolePort = open_port({spawn, Console},
+                                    [use_stdio, binary, stderr_to_stdout]),
             chunter_vmadm:update(UUID, [{<<"remove_internal_metadata">>, [<<"docker:wait_for_attach">>]}]),
             State#state{console = ConsolePort};
         _ ->
             State
     end;
+
 init_console(State) ->
     case State#state.console of
         undefined ->

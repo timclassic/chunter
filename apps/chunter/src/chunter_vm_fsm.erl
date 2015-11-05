@@ -1132,7 +1132,7 @@ init_console(State = #state{uuid = UUID, zone_type = docker}) ->
             %% We make sure that the console actually survuves for 200 ms to
             %% prevent the attach to 'succeed' but not succeed
             receive
-                {'EXIT', ConsolePort, PosixCode} ->
+                {'EXIT', ConsolePort, _PosixCode} ->
                     State
             after
                 200 ->
@@ -1147,7 +1147,7 @@ init_console(State) ->
     case State#state.console of
         undefined ->
             [{_, Name, _, _, _, _}] = chunter_zone:get_raw(State#state.uuid),
-            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin " ++ binary_to_list(Name),
+            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -Q " ++ binary_to_list(Name),
             ConsolePort = open_port({spawn, Console}, [binary]),
             State#state{console = ConsolePort};
         _ ->

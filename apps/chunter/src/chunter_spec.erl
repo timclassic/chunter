@@ -76,12 +76,20 @@ generate_sniffle(In, _Type) ->
                       jsxd:set(<<"dataset">>, V, Obj);
                   (<<"image_uuid">>, V, Obj) ->
                       jsxd:set(<<"dataset">>, V, Obj);
+                  (<<"docker">>, true, Obj) ->
+                      jsxd:set(<<"zone_type">>, <<"docker">>, Obj);
                   (<<"brand">>, Brand, Obj) ->
                       case brand_to_type(Brand) of
                           kvm ->
                               jsxd:set(<<"type">>, <<"kvm">>, Obj);
                           zone ->
-                              jsxd:set(<<"type">>, <<"zone">>, Obj);
+                              O1 = jsxd:set(<<"type">>, <<"zone">>, Obj),
+                              case {Brand, jsxd:get(<<"zone_type">>, O1)} of
+                                  {<<"lx">>, undefined} ->
+                                      jsxd:set(<<"zone_type">>, <<"lx">>, O1);
+                                  _ ->
+                                      O1
+                              end;
                           ipkg ->
                               jsxd:set(<<"type">>, <<"ipkg">>, Obj)
                       end;
@@ -472,6 +480,22 @@ generate_spec(Package, Dataset, OwnerData) ->
                               [{delete, <<"dns_domain">>},
                                {set, <<"kernel_version">>, KVersion},
                                {set, <<"brand">>, <<"lx">>}], Base12);
+                        {ok, <<"docker">>} ->
+                            KVersion = jsxd:get([<<"kernel_version">>], <<"3.13.0">>, Dataset),
+                            Base13 = jsxd:thread(
+                                       [{delete, <<"dns_domain">>},
+                                        {set, <<"kernel_version">>, KVersion},
+                                        {set, <<"brand">>, <<"lx">>},
+                                        {set, <<"docker">>, true},
+                                        {set, <<"internal_metadata_namespaces">>, [<<"docker">>]},
+                                        {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>},
+                                        %% What a hack :/
+                                        {set, [<<"internal_metadata">>, <<"docker:wait_for_attach">>],
+                                         erlang:system_time(milli_seconds) + 60000}
+                                       ], Base12),
+                            lists:foldl(fun ({K, V}, Acc) ->
+                                                jsxd:set([<<"internal_metadata">>, <<"docker:", K/binary>>], V, Acc)
+                                        end, Base13, jsxd:get([<<"docker">>], [], OwnerData));
                         _ ->
                             Base12
                     end

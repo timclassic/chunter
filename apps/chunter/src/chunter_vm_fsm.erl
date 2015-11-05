@@ -14,6 +14,7 @@
 
 -behaviour(gen_fsm).
 -behaviour(ezdoor_behaviour).
+-define(CACHE_SIZE, 10240).
 
 %% API
 -export([start_link/1, door_event/3]).
@@ -34,6 +35,7 @@
 
 -export([create/4,
          load/1,
+         start/1,
          update_fw/1,
          delete/1,
          transition/2,
@@ -75,6 +77,8 @@
 
 -record(state, {hypervisor,
                 type = unknown,
+                zone_type = unknown,
+                console_cache = <<>>,
                 uuid,
                 console,
                 orig_state,
@@ -147,6 +151,9 @@ force_state(UUID, State) ->
 
 register(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, register).
+
+start(UUID) ->
+    gen_fsm:send_event({global, {vm, UUID}}, start).
 
 restore_backup(UUID, SnapID, Options) ->
     case global:whereis_name({vm, UUID}) of
@@ -275,6 +282,16 @@ preloading(_, State = #state{uuid = UUID}) ->
 initialized(load, State) ->
     {next_state, loading, State};
 
+initialized({create, Package, {docker, DockerID}, VMSpec}, State) ->
+    TID = {erlang:system_time(milli_seconds), node()},
+    D = ft_dataset:new(TID),
+    D1 = ft_dataset:type(TID, zone, D),
+    D2 = ft_dataset:zone_type(TID, docker, D1),
+    D3 = ft_dataset:kernel_version(TID, <<"3.13.0">>, D2),
+    {ok, UUID} = chunter_docker:import(DockerID),
+    D4 = ft_dataset:uuid(TID, UUID, D3),
+    initialized({create, Package, D4, VMSpec}, State#state{zone_type = docker});
+
 initialized({create, Package, Dataset, VMSpec},
             State=#state{hypervisor = Hypervisor, uuid=UUID}) ->
     PackageSpec = ft_package:to_json(Package),
@@ -304,6 +321,7 @@ initialized({create, Package, Dataset, VMSpec},
                        {ok, <<"kvm">>} -> kvm;
                        _ -> zone
                    end,
+            ZoneType = ft_dataset:zone_type(Dataset),
             ls_vm:set_config(UUID, SniffleData1),
             lager:debug("[create:~s] Done generating config, handing to img install.",
                         [UUID]),
@@ -311,26 +329,29 @@ initialized({create, Package, Dataset, VMSpec},
                 ok ->
                     lager:debug("[create:~s] Done installing image going to create now.",
                                 [UUID]),
-                    case chunter_vmadm:create(VMData1) of
-                        ok ->
-                            lager:debug("[create:~s] Done creating continuing on.", [UUID]),
-                            case jsxd:get(<<"owner">>, VMSpec) of
-                                {ok, Org} when Org =/= <<>> ->
-                                    ls_acc:update(Org, UUID, timestamp(),
-                                                  [{<<"event">>, <<"confirm_create">>}]);
-                                _ ->
-                                    ok
-                            end,
-                            {next_state, creating,
-                             State#state{type = Type,
-                                         public_state = change_state(UUID, <<"creating">>)}};
-                        {error, E} ->
-                            lager:error("[create:~s] Failed to create with error: ~p",
-                                        [UUID, E]),
-                            change_state(UUID, <<"failed">>),
-                            {stop, normal, State}
-                    end;
-                E ->
+                    spawn(fun() ->
+                                  case chunter_vmadm:create(VMData1) of
+                                      ok ->
+                                          lager:debug("[create:~s] Done creating continuing on.", [UUID]),
+                                          case jsxd:get(<<"owner">>, VMSpec) of
+                                              {ok, Org} when Org =/= <<>> ->
+                                                  ls_acc:update(Org, UUID, timestamp(),
+                                                                [{<<"event">>, <<"confirm_create">>}]);
+                                              _ ->
+                                                  ok
+                                          end;
+                                      {error, E} ->
+                                          lager:error("[create:~s] Failed to create with error: ~p",
+                                                      [UUID, E]),
+                                          change_state(UUID, <<"failed">>),
+                                          delete(UUID)
+                                  end
+                          end),
+                    {next_state, creating,
+                      State#state{type = Type,
+                                  zone_type = ZoneType,
+                                  public_state = change_state(UUID, <<"creating">>)}};
+               E ->
                     lager:error("[create:~s] Dataset import failed with: ~p",
                                 [UUID, E]),
                     change_state(UUID, <<"failed">>),
@@ -363,12 +384,21 @@ initialized({restore, SnapID, Options},
                           =:= false],
             Toss = [T || T <- Toss0, T =/= SnapID],
             backup_update(VM, SnapID, <<"local">>, true),
-            Type = case jsxd:get(<<"type">>, ft_vm:config(VMObj)) of
-                       {ok, <<"kvm">>} -> kvm;
-                       _ -> zone
+            SniffleData = ft_vm:config(VMObj),
+            {Type, ZoneType} =
+                case {jsxd:get(<<"type">>, SniffleData),
+                      jsxd:get(<<"zone_type">>, SniffleData)} of
+                    {{ok, <<"kvm">>}, _} ->
+                        {kvm, kvm};
+                    {{ok, <<"zone">>}, {ok, <<"docker">>}} ->
+                        {zone, docker};
+                    {{ok, <<"zone">>}, {ok, <<"lx">>}} ->
+                        {zone, lx};
+                    _ ->
+                        {zone, zone}
                    end,
             State1 = State#state{orig_state=loading,
-                                 type = Type,
+                                 type = Type, zone_type = ZoneType,
                                  args={SnapID, Options, Path, Toss}},
             libhowl:send(<<"command">>,
                          [{<<"event">>, <<"vm-restored">>},
@@ -406,6 +436,13 @@ loading({transition, NextState}, State) ->
 
 stopped({transition, NextState = <<"booting">>}, State) ->
     {next_state, binary_to_atom(NextState), State#state{public_state = change_state(State#state.uuid, NextState)}};
+
+stopped(start, State = #state{uuid = UUID, zone_type = docker}) ->
+    T = erlang:system_time(milli_seconds) + 60000,
+    chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
+                                 [{<<"docker:wait_for_attach">>, T}]}]),
+    chunter_vmadm:start(UUID),
+    {next_state, stopped, State};
 
 stopped(start, State) ->
     chunter_vmadm:start(State#state.uuid),
@@ -595,16 +632,24 @@ handle_event(register, StateName, State = #state{uuid = UUID}) ->
             snapshot_sizes(UUID),
             timer:send_after(500, get_info),
             SniffleData = chunter_spec:to_sniffle(VMData),
-            Type = case jsxd:get(<<"type">>, SniffleData) of
-                       {ok, <<"kvm">>} -> kvm;
-                       _ -> zone
+            {Type, ZoneType} =
+                case {jsxd:get(<<"type">>, SniffleData),
+                      jsxd:get(<<"zone_type">>, SniffleData)} of
+                    {{ok, <<"kvm">>}, _} ->
+                        {kvm, kvm};
+                    {{ok, <<"zone">>}, {ok, <<"docker">>}} ->
+                        {zone, docker};
+                    {{ok, <<"zone">>}, {ok, <<"lx">>}} ->
+                        {zone, lx};
+                    _ ->
+                        {zone, zone}
                    end,
             lager:info("[~s] Has type: ~p.", [UUID, Type]),
             libhowl:send(UUID, [{<<"event">>, <<"update">>},
                                 {<<"data">>,
                                  [{<<"config">>, SniffleData}]}]),
             ls_vm:set_config(UUID, SniffleData),
-            State1 = State#state{type = Type},
+            State1 = State#state{type = Type, zone_type = ZoneType},
             change_state(State1#state.uuid, atom_to_binary(StateName), false),
             update_fw(UUID),
             {next_state, StateName, State1#state{services = []}}
@@ -887,10 +932,25 @@ handle_info(update_snapshots, StateName, State = #state{uuid = UUID}) ->
     {next_state, StateName, State};
 
 handle_info({C, {data, Data}}, StateName, State = #state{console = C,
-                                                         listeners = Ls}) ->
+                                                         listeners = Ls,
+                                                         console_cache = Cache}) ->
     Ls1 = [ L || L <- Ls, is_process_alive(L)],
-    [ L ! {data, Data} || L <- Ls1],
-    {next_state, StateName, State#state{listeners = Ls1}};
+    State1 = State#state{listeners = Ls1},
+    Data1 = <<Cache/binary, Data/binary>>,
+    case Ls1 of
+        [] ->
+            case byte_size(Data1) of
+                X when X > ?CACHE_SIZE ->
+                    TooMuch = X - ?CACHE_SIZE,
+                    <<_:TooMuch/binary, Data2/binary>> = Data1,
+                    {next_state, StateName, State1#state{console_cache = Data2}};
+                _ ->
+                    {next_state, StateName, State1#state{console_cache = Data1}}
+                end;
+        _ ->
+            [ L ! {data, Data} || L <- Ls1],
+            {next_state, StateName, State1#state{console_cache = <<>>}}
+    end;
 
 handle_info({_C,{exit_status, _}}, stopped,
             State = #state{console = _C, type=zone}) ->
@@ -923,8 +983,10 @@ handle_info({'EXIT', _D, _PosixCode}, StateName, State) ->
 handle_info(update_services, running, State=#state{
                                                uuid=UUID,
                                                services = OldServices,
-                                               type = zone
-                                              }) ->
+                                               type = zone,
+                                               zone_type = Type
+                                              }) when Type =/= lx,
+                                                      Type =/= docker ->
     case {chunter_smf:update(UUID, OldServices), OldServices} of
         {{ok, ServiceSet, Changed}, []} ->
             lager:debug("[~s] Initializing ~p Services.",
@@ -934,8 +996,11 @@ handle_info(update_services, running, State=#state{
                                || {Srv, _, St} <- Changed]),
             {next_state, running, State#state{services = ServiceSet}};
         {{ok, ServiceSet, Changed}, _} ->
-            lager:debug("[~s] Updating ~p Services.",
-                        [UUID, length(Changed)]),
+            case length(Changed) of
+                0 -> ok;
+                L ->
+                    lager:debug("[~s] Updating ~p Services.", [UUID, L])
+            end,
             %% Update changes which are not removes
             ls_vm:set_service(UUID,
                               [{Srv, SrvState}
@@ -958,11 +1023,15 @@ handle_info(get_info, stopped, State) ->
     timer:send_after(1000, get_info),
     {next_state, stopped, State};
 
-handle_info(get_info, StateName, State=#state{type=zone}) ->
+handle_info(get_info, running, State=#state{type=zone}) ->
     State1 = init_console(State),
     State2 = ensure_zonedoor(State1),
     timer:send_after(1000, get_info),
-    {next_state, StateName, State2};
+    {next_state, running, State2};
+
+handle_info(get_info, StateName, State=#state{type=zone}) ->
+    timer:send_after(1000, get_info),
+    {next_state, StateName, State};
 
 handle_info(get_info, StateName, State=#state{type=kvm}) ->
     case chunter_vmadm:info(State#state.uuid) of
@@ -977,10 +1046,12 @@ handle_info(get_info, StateName, State=#state{type=kvm}) ->
 handle_info({init, _}, stopped, State) ->
     {next_state, stopped, State};
 
-handle_info({init, console}, StateName, State=#state{type=zone}) ->
+handle_info({init, console}, StateName, State=#state{type=zone})  ->
     {next_state, StateName, init_console(State)};
 
-handle_info({init, zonedoor}, StateName, State=#state{type=zone}) ->
+%% TODO: Would be really nice to have zone doors for lx
+handle_info({init, zonedoor}, StateName, State=#state{type=zone, zone_type=_T})
+  when _T =/= lx; _T =/= docker ->
     {next_state, StateName, ensure_zonedoor(State)};
 
 handle_info({init, _}, StateName, State) ->
@@ -1047,16 +1118,42 @@ incinerate(Port) ->
             ok
     end.
 
+init_console(State = #state{uuid = UUID, zone_type = docker}) ->
+    case State#state.console of
+        undefined ->
+            [{_, Name, _, _, _, _}] = chunter_zone:get_raw(State#state.uuid),
+            %%Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -I " ++ binary_to_list(Name),
+            Console = "/usr/sbin/zlogin -Q -I " ++ binary_to_list(Name),
+            %% This is a bit of a hack
+            %% https://github.com/joyent/sdc-cn-agent/blob/4efd72f2dda2a6daceb51a0cb84d0b06d0bc011d/lib/update-wait-flag.js
+            %% explains why we need it
+            ConsolePort = open_port({spawn, Console},
+                                    [use_stdio, binary, stderr_to_stdout]),
+            %% We make sure that the console actually survuves for 200 ms to
+            %% prevent the attach to 'succeed' but not succeed
+            receive
+                {'EXIT', ConsolePort, _PosixCode} ->
+                    State
+            after
+                200 ->
+                    chunter_vmadm:update(UUID, [{<<"remove_internal_metadata">>, [<<"docker:wait_for_attach">>]}]),
+                    State#state{console = ConsolePort}
+            end;
+        _ ->
+            State
+    end;
+
 init_console(State) ->
     case State#state.console of
         undefined ->
             [{_, Name, _, _, _, _}] = chunter_zone:get_raw(State#state.uuid),
-            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin " ++ binary_to_list(Name),
+            Console = code:priv_dir(chunter) ++ "/runpty /usr/sbin/zlogin -Q " ++ binary_to_list(Name),
             ConsolePort = open_port({spawn, Console}, [binary]),
             State#state{console = ConsolePort};
         _ ->
             State
     end.
+
 
 ensure_zonedoor(State) ->
     State1 = case ezdoor_server:add(?MODULE, State#state.uuid, ?AUTH_DOOR) of
@@ -1528,7 +1625,7 @@ create_ipkg(Dataset, Package, VMSpec, State = #state{ uuid = UUID}) ->
               end, NICS),
     lager:info("[setup:~s] Zone setup completed.", [UUID]),
     {next_state, creating,
-     State#state{type = zone,
+     State#state{type = zone, zone_type = ipgk,
                  public_state = change_state(UUID, <<"running">>)}}.
 
 wait_for_started(UUID, S) ->

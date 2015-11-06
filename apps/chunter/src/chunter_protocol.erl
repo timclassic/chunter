@@ -60,7 +60,8 @@ handle_info({_OK, Socket, BinData}, State = #state{
                                   type = dtrace}};
         {console, UUID} ->
             lager:info("Console: ~p.", [UUID]),
-            chunter_zlogin:subscribe(UUID),
+            {ok, Type} = chunter_vm_fsm:type(UUID),
+            chunter_zlogin:subscribe(UUID, Type),
             {noreply, State#state{state = UUID,
                                   type = console}};
         ping ->
@@ -123,7 +124,8 @@ handle_info({_OK, _S, Data}, State = #state{
                                         type = console,
                                         state = UUID,
                                         ok = _OK}) ->
-    chunter_zlogin:send(UUID, Data),
+    {ok, Type} = chunter_vm_fsm:type(UUID),
+    chunter_zlogin:send(UUID, Type, Data),
     {noreply, State};
 
 handle_info({_Closed, _}, State = #state{ closed = _Closed}) ->

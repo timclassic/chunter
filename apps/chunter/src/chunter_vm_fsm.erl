@@ -35,6 +35,7 @@
 
 -export([create/4,
          load/1,
+         type/1,
          start/1,
          update_fw/1,
          delete/1,
@@ -118,6 +119,9 @@ load(UUID) ->
 
 update_fw(UUID) ->
     gen_fsm:send_all_state_event({global, {vm, UUID}}, update_fw).
+
+type(UUID) ->
+    gen_fsm:sync_send_all_state_event({global, {vm, UUID}}, type).
 
 
 -spec transition(UUID::fifo:uuid(), State::fifo:vm_state()) -> ok.
@@ -777,6 +781,10 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
+
+handle_sync_event(type, _From, StateName,
+                  State = #state{zone_type = Type}) ->
+    {reply, {ok, Type}, StateName, State};
 
 handle_sync_event({door, Ref, Data}, _From, StateName,
                   State = #state{auth_ref=Ref, uuid=UUID}) ->

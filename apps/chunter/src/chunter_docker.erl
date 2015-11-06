@@ -5,7 +5,7 @@
 -define(IMGADM, "/usr/sbin/imgadm").
 
 import(Image) ->
-    case chunter_cmd:run(?IMGADM, ["import", q, Image]) of
+    case fifo_cmd:run(?IMGADM, ["import", q, Image]) of
         {ok, <<"Importing ", UUID:36/binary, _/binary>>} ->
             {ok, UUID};
         {ok, <<"Image ", UUID:36/binary, _/binary>>} ->

@@ -34,7 +34,7 @@
   {git,"https://github.com/project-fifo/fifo_spec.git",
        {ref,"56db8e12b1e1a62df576aff76ab5371a8de2cecd"}},
   0},
- {<<"fifo_utils">>,{pkg,<<"fifo_utils">>,<<"0.1.16">>},0},
+ {<<"fifo_utils">>,{pkg,<<"fifo_utils">>,<<"0.1.17">>},0},
  {<<"getopt">>,
   {git,"git://github.com/jcomellas/getopt.git",
        {ref,"659a28f4145bc9843598972854299dc4ea77e4cb"}},

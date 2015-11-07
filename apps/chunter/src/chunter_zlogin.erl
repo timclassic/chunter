@@ -13,7 +13,7 @@ start(UUID, Type) ->
     end.
 
 stop(UUID) ->
-    gen_fsm:send_event({global, {zlogin, UUID}}, stop).
+    gen_fsm:send_all_state_event({global, {zlogin, UUID}}, stop).
 
 send(UUID, Type, Data) ->
     case global:whereis_name({zlogin, UUID}) of

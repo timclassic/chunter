@@ -1,8 +1,11 @@
 -module(chunter_docker).
 
--export([import/1]).
+-export([import/1, get/1]).
 
 -define(IMGADM, "/usr/sbin/imgadm").
+
+get(Image) ->
+    fifo_cmd:run_json(?IMGADM, ["get", Image]).
 
 import(Image) ->
     case fifo_cmd:run(?IMGADM, ["import", q, Image]) of

@@ -498,14 +498,16 @@ generate_spec(Package, Dataset, OwnerData) ->
                                                          jsxd:set([<<"internal_metadata">>, <<"docker:", K/binary>>], V, Acc)
                                                  end, Base13, jsxd:get([<<"docker">>], [], OwnerData)),
                             %% We we did not have a docker command we see if there is one in the image
-                            case jsxd:get([<<"docker">>], OwnerData) of
+                            case jsxd:get([<<"docker">>, <<"cmd">>], OwnerData) of
                                 {ok, _} ->
                                     Base14;
                                 _ ->
                                     {ok, Manifest} = chunter_docker:get(ImageID),
                                     case jsxd:get([<<"manifest">>, <<"tags">>, <<"docker:config">>, <<"Cmd">>], Manifest) of
                                         {ok, Cmd} ->
-                                            jsxd:set([<<"internal_metadata">>, <<"docker:cmd">>], Cmd, Base14);
+                                            CmdS = jsx:encode(Cmd),
+                                            jsxd:set([<<"internal_metadata">>,
+                                                      <<"docker:cmd">>], CmdS, Base14);
                                         _ ->
                                             Base14
                                     end

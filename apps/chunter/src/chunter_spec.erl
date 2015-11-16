@@ -406,6 +406,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                          {merge, jsxd:select([<<"nic_driver">>,
                                               <<"disk_driver">>], Dataset)}],
                         OwnerData),
+    {ok, ImageID} = jsxd:get(<<"uuid">>, Dataset),
     Base1 = case jsxd:get(<<"type">>, Dataset) of
                 {ok, <<"kvm">>} ->
                     Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
@@ -414,22 +415,23 @@ generate_spec(Package, Dataset, OwnerData) ->
                                  _ ->
                                      Base0
                              end,
-                    Base02 = jsxd:thread([{set, <<"ram">>, Ram},
-                                          {set, <<"brand">>, <<"kvm">>},
-                                          {set, <<"max_physical_memory">>,
-                                           Ram + chunter_server:kvm_mem()},
-                                          {set, [<<"disks">>, 0, <<"boot">>], true},
-                                          %% Hack for dataset bug that image size is handled a string
-                                          {set, [<<"disks">>, 0, <<"image_size">>],
-                                           case jsxd:get(<<"image_size">>, 0, Dataset) of
-                                               I when is_integer(I) ->
-                                                   I;
-                                               S when is_binary(S) ->
-                                                   list_to_integer(binary_to_list(S))
-                                           end},
-                                          {set, [<<"disks">>, 0, <<"image_uuid">>],
-                                           jsxd:get(<<"uuid">>, <<"">>, Dataset)}],
-                                         Base01),
+                    Base02 =
+                        jsxd:thread([{set, <<"ram">>, Ram},
+                                     {set, <<"brand">>, <<"kvm">>},
+                                     {set, <<"max_physical_memory">>,
+                                      Ram + chunter_server:kvm_mem()},
+                                     {set, [<<"disks">>, 0, <<"boot">>], true},
+                                     %% Hack for dataset bug that image size is handled a string
+                                     {set, [<<"disks">>, 0, <<"image_size">>],
+                                      case jsxd:get(<<"image_size">>, 0, Dataset) of
+                                          I when is_integer(I) ->
+                                              I;
+                                          S when is_binary(S) ->
+                                              list_to_integer(binary_to_list(S))
+                                      end},
+                                     {set, [<<"disks">>, 0, <<"image_uuid">>],
+                                      ImageID}],
+                                    Base01),
                     Base05 = case jsxd:get(<<"quota">>, 0, Package) of
                                  0 ->
                                      Base02;
@@ -464,8 +466,7 @@ generate_spec(Package, Dataset, OwnerData) ->
                                           {set, <<"brand">>, <<"joyent">>},
                                           {set, <<"quota">>,
                                            jsxd:get(<<"quota">>, 0, Package)},
-                                          {set, <<"image_uuid">>,
-                                           jsxd:get(<<"uuid">>, <<"">>, Dataset)}],
+                                          {set, <<"image_uuid">>, ImageID}],
                                          Base0),
                     Base12 = case jsxd:get(<<"compression">>, Package) of
                                  {ok, Compression} ->
@@ -493,9 +494,24 @@ generate_spec(Package, Dataset, OwnerData) ->
                                         {set, [<<"internal_metadata">>, <<"docker:wait_for_attach">>],
                                          erlang:system_time(milli_seconds) + 60000}
                                        ], Base12),
-                            lists:foldl(fun ({K, V}, Acc) ->
-                                                jsxd:set([<<"internal_metadata">>, <<"docker:", K/binary>>], V, Acc)
-                                        end, Base13, jsxd:get([<<"docker">>], [], OwnerData));
+                            Base14 = lists:foldl(fun ({K, V}, Acc) ->
+                                                         jsxd:set([<<"internal_metadata">>, <<"docker:", K/binary>>], V, Acc)
+                                                 end, Base13, jsxd:get([<<"docker">>], [], OwnerData)),
+                            %% We we did not have a docker command we see if there is one in the image
+                            case jsxd:get([<<"docker">>, <<"cmd">>], OwnerData) of
+                                {ok, _} ->
+                                    Base14;
+                                _ ->
+                                    {ok, Manifest} = chunter_docker:get(ImageID),
+                                    case jsxd:get([<<"manifest">>, <<"tags">>, <<"docker:config">>, <<"Cmd">>], Manifest) of
+                                        {ok, Cmd} ->
+                                            CmdS = jsx:encode(Cmd),
+                                            jsxd:set([<<"internal_metadata">>,
+                                                      <<"docker:cmd">>], CmdS, Base14);
+                                        _ ->
+                                            Base14
+                                    end
+                            end;
                         _ ->
                             Base12
                     end

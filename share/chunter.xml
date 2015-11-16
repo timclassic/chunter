@@ -35,6 +35,13 @@
     </dependency>
 
     <dependency
+        name='zlogin'
+        grouping='require_all'
+        restart_on='none' type='service'>
+      <service_fmri value='svc:/fifo/zlogin:default'/>
+    </dependency>
+
+    <dependency
         name='epmd'
         grouping='require_all'
         restart_on='none' type='service'>

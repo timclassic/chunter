@@ -104,7 +104,8 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(tick, State = #state{last = Last,
                                  skipped = Skipped}) ->
-    case get_stats("/usr/sbin/zpool list -pH -oname,size,alloc,free,dedup,health") of
+    case get_stats("/usr/sbin/zpool list -pH "
+                   "-oname,size,alloc,free,dedup,health") of
         Last when Skipped < 120 ->
             {noreply, State};
         Pools ->

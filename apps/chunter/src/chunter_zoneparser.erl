@@ -17,43 +17,43 @@
         create_zone_data([{Key, _}|R], Disks, Nics, Datasets) ->
                create_zone_data(R, Disks, Nics, Datasets)).
 
--define(RENAME_INT(Old,New),
+-define(RENAME_INT(Old, New),
         create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
                {Num, []} = string:to_integer(binary_to_list(Value)),
                [{New, Num}
                 |create_zone_data(R, Disks, Nics, Datasets)]).
 
--define(RENAME_B64(Old,New),
+-define(RENAME_B64(Old, New),
         create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
                [{New, base64:decode(Value)}
                 |create_zone_data(R, Disks, Nics, Datasets)]).
 
--define(RENAME_BOOL(Old,New),
+-define(RENAME_BOOL(Old, New),
         create_zone_data([{Old, <<"true">>}|R], Disks, Nics, Datasets) ->
                [{New, true}|create_zone_data(R, Disks, Nics, Datasets)];
             create_zone_data([{Old, <<"false">>}|R], Disks, Nics, Datasets) ->
                [{New, false}|create_zone_data(R, Disks, Nics, Datasets)]).
 
--define(RENAME_SPLIT(Old,New),
+-define(RENAME_SPLIT(Old, New),
         create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
-               [{New, re:split(Value,",")}
+               [{New, re:split(Value, ", ")}
                 |create_zone_data(R, Disks, Nics, Datasets)]).
 
--define(RENAME(Old,New),
+-define(RENAME(Old, New),
         create_zone_data([{Old, Value}|R], Disks, Nics, Datasets) ->
                [{New, Value}
                 |create_zone_data(R, Disks, Nics, Datasets)]).
 
--define(NIC_RENAME(Old,New),
+-define(NIC_RENAME(Old, New),
         create_nic([{Old, Value}|R]) ->
                [{New, Value}
                 |create_nic(R)]).
--define(NIC_RENAME_INT(Old,New),
+-define(NIC_RENAME_INT(Old, New),
         create_nic([{Old, Value}|R]) ->
                {Num, []} = string:to_integer(binary_to_list(Value)),
                [{New, Num}
                 |create_nic(R)]).
--define(NIC_RENAME_BOOL(Old,New),
+-define(NIC_RENAME_BOOL(Old, New),
         create_nic([{Old, <<"true">>}|R]) ->
                [{New, true}
                 |create_nic(R)];
@@ -61,17 +61,17 @@
                [{New, false}
                 |create_nic(R)]).
 
--define(DISK_RENAME(Old,New),
+-define(DISK_RENAME(Old, New),
         create_disk([{Old, Value}|R]) ->
                [{New, Value}
                 |create_disk(R)]).
 
--define(DISK_RENAME_INT(Old,New),
+-define(DISK_RENAME_INT(Old, New),
         create_disk([{Old, Value}|R]) ->
                {Num, []} = string:to_integer(binary_to_list(Value)),
                [{New, Num}
                 |create_disk(R)]).
--define(DISK_RENAME_BOOL(Old,New),
+-define(DISK_RENAME_BOOL(Old, New),
         create_disk([{Old, <<"true">>}|R]) ->
                [{New, true}
                 |create_disk(R)];
@@ -114,8 +114,9 @@ convert(F, VM)->
     case file:read_file(F) of
         {ok, XML}  ->
             case erlsom:simple_form(XML) of
-                {ok,{"zone",Attrs,Value},_}->
-                    jsxd:from_list(create_zone_data(VM ++ map_attrs(Attrs)  ++ parse_xml(Value)));
+                {ok, {"zone", Attrs, Value}, _}->
+                    jsxd:from_list(create_zone_data(VM ++ map_attrs(Attrs)
+                                                    ++ parse_xml(Value)));
                 Err->
                     Err
             end;
@@ -123,31 +124,32 @@ convert(F, VM)->
             {error, not_found}
     end.
 
--spec parse_xml([xml_element()]) -> [xml_element() | {Key::binary()|atom(), Value::term()}].
+-spec parse_xml([xml_element()]) ->
+                       [xml_element() | {Key::binary()|atom(), Value::term()}].
 
-parse_xml([{"zone",Attrib,Value}|T])->
+parse_xml([{"zone", Attrib, Value}|T])->
     [{"zone", Attrib, lists:flatten(parse_xml(Value))}|parse_xml(T)];
 
-parse_xml([{"dataset",Attrib,_Value}|T])->
+parse_xml([{"dataset", Attrib, _Value}|T])->
     [{<<"dataset">>, list_to_binary(proplists:get_value("name", Attrib))}
      |parse_xml(T)];
 
-parse_xml([{"attr",Attrib,_Value}|T])->
+parse_xml([{"attr", Attrib, _Value}|T])->
     [{list_to_binary(proplists:get_value("name", Attrib)),
       list_to_binary(proplists:get_value("value", Attrib))}
      |parse_xml(T)];
 
-parse_xml([{"rctl",Attrib,[{"rctl-value",
-                            Values,
-                            _}]}|T])->
+parse_xml([{"rctl", Attrib, [{"rctl-value",
+                              Values,
+                              _}]}|T])->
     [{list_to_binary(proplists:get_value("name", Attrib)),
       list_to_binary(proplists:get_value("limit", Values))}
      |parse_xml(T)];
 
-parse_xml([{"net-attr",[{"name",Name},{"value",Value}],[]}|T])->
+parse_xml([{"net-attr", [{"name", Name}, {"value", Value}], []}|T])->
     [{list_to_binary(Name), list_to_binary(Value)}|parse_xml(T)];
 
-parse_xml([{"net-attr",[{"value",Value},{"name",Name}],[]}|T])->
+parse_xml([{"net-attr", [{"value", Value}, {"name", Name}], []}|T])->
     [{list_to_binary(Name), list_to_binary(Value)}|parse_xml(T)];
 
 parse_xml([{"device",
@@ -165,8 +167,9 @@ parse_xml([{"network",
       map_attrs(Attrs) ++ parse_xml(Content)}
      |parse_xml(T)];
 
-parse_xml([{Node,Attribs,Value}|T])->
-    [{list_to_binary(Node), map_attrs(Attribs) ++ lists:flatten(parse_xml(Value))}|parse_xml(T)];
+parse_xml([{Node, Attribs, Value}|T])->
+    [{list_to_binary(Node), map_attrs(Attribs) ++
+          lists:flatten(parse_xml(Value))}|parse_xml(T)];
 
 parse_xml(Value)->
     Value.
@@ -174,16 +177,16 @@ parse_xml(Value)->
 -spec map_attrs([{string(), string()}]) ->
                        [{binary(), binary()}].
 map_attrs(Attrs) ->
-    lists:map(fun ({K,V}) ->
+    lists:map(fun ({K, V}) ->
                       {list_to_binary(K), list_to_binary(V)}
               end, Attrs).
 
 
 -spec create_zone_data(Data::[{atom()|binary(), term()}]) -> fifo:vm_config().
 create_zone_data(Data) ->
-    create_zone_data(Data, [], [],[]).
+    create_zone_data(Data, [], [], []).
 
-create_zone_data([], [], [],[]) ->
+create_zone_data([], [], [], []) ->
     [];
 
 create_zone_data([], [], [], Datasets) ->
@@ -290,4 +293,3 @@ create_disk([T|R]) ->
 %%     <<"type">>, <<"type">>,
 %%     <<"raw">>, <<"raw">>
 %% },
-

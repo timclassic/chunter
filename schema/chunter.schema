@@ -137,17 +137,10 @@
  end
 }.
 
-%% @doc cpu_type used for creating VM's. This only applies to KVM machines,
-%% 'default' will not set the option at all. Please see 'man vmadm' for details.
-{mapping, "cpu_type", "chunter.cpu_type",
- [{default, default},
-  {datatype, {enum, [default, qemu64, host]}}]}.
-
 %% @doc zone root for creating new zones
 {mapping, "zone_root", "chunter.zone_root",
  [{default, "/zones"},
   {datatype, string}]}.
-
 
 %% @doc Default resolvers when not provided as part of the VM config
 {mapping, "resolvers", "chunter.resolvers",

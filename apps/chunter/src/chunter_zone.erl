@@ -11,37 +11,37 @@
 -define(ZONEADM, "/usr/sbin/zoneadm").
 
 
--export([list/0, get/1, get_raw/1, zonecfg/1]).
+-export([list/0, list_/0, get/1, get_raw/1, zonecfg/1]).
 
 
--export([ex1/0, ex2/0]).
--ignore_xref([ex1/0, ex2/0, get_raw/1]).
+-export([ex2/0]).
+-ignore_xref([ex2/0, get_raw/1]).
 
 
 list() ->
     %% TODO: find a way to unify this!
+    [chunter_zoneparser:load([{<<"name">>, Name},
+                              {<<"uuid">>, UUID}]) ||
+        #{name := Name, uuid := UUID} <- list_()].
+
+list_() ->
     case chunter_utils:system() of
         smartos ->
-            [chunter_zoneparser:load([{<<"name">>, Name}, {<<"uuid">>, UUID}]) ||
+            [#{uuid => UUID, name => Name, state => VMState} ||
                 %% SmartOS seems to have one more coumn
-                [ID,Name,_VMState,_Path,UUID,_Type,_IP | _] <-
-                    [ re:split(Line, ":")
-                      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-                ID =/= <<"0">>];
+                [ID, Name, VMState, _Path, UUID, _Type, _IP | _] <-
+                    zoneadm_list(), ID =/= <<"0">>];
         omnios ->
-            [chunter_zoneparser:load([{<<"name">>, UUID}, {<<"uuid">>, UUID}]) ||
+            [#{uuid => UUID, name => UUID, state => VMState} ||
                 %% SmartOS seems to have one more coumn
-                [ID,UUID,_VMState,_Path,_OtherUUID,_Type,_IP | _] <-
-                    [ re:split(Line, ":")
-                      || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-                ID =/= <<"0">>]
+                [ID, UUID, VMState, _Path, _OtherUUID, _Type, _IP | _] <-
+                    zoneadm_list(), ID =/= <<"0">>]
     end.
-
 
 -spec get(ZUUID::fifo:uuid()) -> fifo:vm_config() | {error, not_found}.
 
 get(ZUUID) ->
-    case [chunter_zoneparser:load([{<<"name">>,Name},
+    case [chunter_zoneparser:load([{<<"name">>, Name},
                                    {<<"state">>, VMState},
                                    {<<"zonepath">>, Path},
                                    {<<"type">>, Type}]) ||
@@ -64,40 +64,17 @@ get_raw(ZUUID) when is_binary(ZUUID) ->
     case chunter_utils:system() of
         smartos ->
             Zones = [ re:split(Line, ":")
-                      || Line <- re:split(os:cmd([?ZONEADM, " -u ", UUIDs, " list -p"]), "\n")],
+                      || Line <- re:split(os:cmd([?ZONEADM, " -u ", UUIDs,
+                                                  " list -p"]), "\n")],
             [{ID, Name, VMState, Path, UUID, Type} ||
                 [ID, Name, VMState, Path, UUID, Type, _IP | _] <- Zones];
         omnios ->
             Zones = [ re:split(Line, ":")
-                      || Line <- re:split(os:cmd([?ZONEADM, " -z ", UUIDs, " list -p"]), "\n")],
+                      || Line <- re:split(os:cmd([?ZONEADM, " -z ", UUIDs,
+                                                  " list -p"]), "\n")],
             [{ID, UUID, VMState, Path, UUID, Type} ||
                 [ID, UUID, VMState, Path, _UUID, Type, _IP | _] <- Zones]
     end.
-
-%% create
-%% set zonename=<uuid>
-%% set uuid=<uuid>
-%% set zonepath=/zones/<uuid>
-%% set autoboot=true
-%% set limitpriv=default,dtrace_proc,dtrace_user
-%% set ip-type=exclusive
-%% add net
-%% set physical=myzone0
-%% end
-%% verify
-%% commit
-%% exit
-ex1() ->
-    zonecfg([create,
-             {zonename, <<"uuid">>},
-             {zonepath, <<"/zones/uuid">>},
-             {autoboot, true},
-             {limitpriv, [default,dtrace_proc,dtrace_user]},
-             {'ip-type', exclusive},
-             {add, net, [{physical, "myzone0"}]},
-             verify,
-             commit,
-             exit]).
 
 ex2() ->
     zonecfg(
@@ -129,8 +106,10 @@ ex2() ->
        {rctl, <<"zone.max-swap">>, privileged, 6442450944, deny},
        {attr, <<"vm-version">>, string, 1},
        {attr, <<"create-timestamp">>, string, <<"2015-04-26T11:29:31.297Z">>},
-       {attr, <<"billing-id">>, string, <<"00000000-0000-0000-0000-000000000000">>},
-       {attr, <<"owner-uuid">>, string, <<"00000000-0000-0000-0000-000000000000">>},
+       {attr, <<"billing-id">>, string,
+        <<"00000000-0000-0000-0000-000000000000">>},
+       {attr, <<"owner-uuid">>, string,
+        <<"00000000-0000-0000-0000-000000000000">>},
        {attr, <<"hostname">>, string, <<"fifo01">>},
        {attr, <<"dns-domain">>, string, <<"local">>},
        {attr, <<"resolvers">>, string, <<"8.8.8.8,8.8.4.4">>},
@@ -139,19 +118,19 @@ ex2() ->
 
 %% zonecfg -z 2398fe7c-032f-11e5-abb0-b33f9f953915 delete -F
 
-%% zoneadm: zone '2398fe7c-032f-11e5-abb0-b33f9f953915': WARNING: Ignoring unrecognized rctl 'zone.max-physical-memory'.
+%% zoneadm: WARNING: Ignoring unrecognized rctl 'zone.max-physical-memory'.
 %% zoneadm -z 2398fe7c-032f-11e5-abb0-b33f9f953915 install
 %% zoneadm -z 2398fe7c-032f-11e5-abb0-b33f9f953915 boot
 
 %% WARNING: skipping network interface 'net0': object not found
-%% zone '2398fe7c-032f-11e5-abb0-b33f9f953915': WARNING: The zone.cpu-shares rctl is set but
-%% zone '2398fe7c-032f-11e5-abb0-b33f9f953915': FSS is not the default scheduling class for
-%% zone '2398fe7c-032f-11e5-abb0-b33f9f953915': this zone.  FSS will be used for processes
-%% zone '2398fe7c-032f-11e5-abb0-b33f9f953915': in the zone but to get the full benefit of FSS,
-%% zone '2398fe7c-032f-11e5-abb0-b33f9f953915': it should be the default scheduling class.
-%% zone '2398fe7c-032f-11e5-abb0-b33f9f953915': See dispadmin(1M) for more details.
-%% zone '2398fe7c-032f-11e5-abb0-b33f9f953915': failed to add network device: Error 0
-%% zoneadm: zone '2398fe7c-032f-11e5-abb0-b33f9f953915': call to zoneadmd failed
+%% WARNING: The zone.cpu-shares rctl is set but
+%% FSS is not the default scheduling class for
+%% this zone.  FSS will be used for processes
+%% in the zone but to get the full benefit of FSS,
+%% it should be the default scheduling class.
+%% See dispadmin(1M) for more details.
+%% failed to add network device: Error 0
+%% zoneadm: call to zoneadmd failed
 
 zonecfg(L) ->
     [zonecfg1(C) || C <- L].
@@ -180,16 +159,18 @@ zonecfg1({rctl, Name, Priv, Limit, Action}) ->
      "end\n"];
 
 zonecfg1({property, Name, Value}) ->
-    ["add property ", val_list([{name, Name}, {value, [$\", Value, $\"]}]), $\n];
+    ["add property ",
+     val_list([{name, Name}, {value, ["\"" , Value, "\""]}]),
+     $\n];
 
 zonecfg1({add, What, Opts}) ->
-                                                              add(What, Opts);
+    add(What, Opts);
 
-                                                           zonecfg1({attr, Name, Type, Value}) ->
-                                                              add(attr,
-                                                                  [{name, Name},
-                                                                   {type, Type},
-                                                                   {value, Value}]).
+zonecfg1({attr, Name, Type, Value}) ->
+    add(attr,
+        [{name, Name},
+         {type, Type},
+         {value, Value}]).
 
 add(Type, Values) ->
     ["add ", v(Type), $\n,
@@ -226,3 +207,7 @@ v(L) when is_list(L) ->
     L;
 v(A) when is_atom(A) ->
     atom_to_list(A).
+
+zoneadm_list() ->
+    [re:split(Line, ":")
+     || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")].

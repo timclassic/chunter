@@ -10,7 +10,6 @@
 -module(chunter_spec).
 
 -ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
 -endif.
 
 -export([to_vmadm/3,
@@ -24,9 +23,9 @@
 
 to_vmadm(Package, Dataset, OwnerData) ->
     case lists:keyfind(<<"type">>, 1, Dataset) of
-        {<<"type">>,<<"kvm">>} ->
+        {<<"type">>, <<"kvm">>} ->
             generate_spec(Package, Dataset, OwnerData);
-        {<<"type">>,<<"zone">>} ->
+        {<<"type">>, <<"zone">>} ->
             generate_spec(Package, Dataset, OwnerData)
     end.
 
@@ -66,89 +65,83 @@ brand_to_type(<<"joyent-minimal">>) ->
 generate_sniffle(In, _Type) ->
     KeepKeys =
         [<<"state">>, <<"alias">>, <<"quota">>, <<"cpu_cap">>, <<"routes">>,
-         <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>, <<"nic_driver">>,
-         <<"hostname">>, <<"autoboot">>, <<"created_at">>, <<"dns_domain">>,
-         <<"resolvers">>, <<"ram">>, <<"uuid">>, <<"cpu_shares">>, <<"max_swap">>,
-         <<"kernel_version">>],
-    jsxd:fold(fun (<<"internal_metadata">>, Int, Obj) ->
-                      jsxd:merge(Int, Obj);
-                  (<<"dataset_uuid">>, V, Obj) ->
-                      jsxd:set(<<"dataset">>, V, Obj);
-                  (<<"image_uuid">>, V, Obj) ->
-                      jsxd:set(<<"dataset">>, V, Obj);
-                  (<<"docker">>, true, Obj) ->
-                      jsxd:set(<<"zone_type">>, <<"docker">>, Obj);
-                  (<<"brand">>, Brand, Obj) ->
-                      case brand_to_type(Brand) of
-                          kvm ->
-                              jsxd:set(<<"type">>, <<"kvm">>, Obj);
-                          zone ->
-                              O1 = jsxd:set(<<"type">>, <<"zone">>, Obj),
-                              case {Brand, jsxd:get(<<"zone_type">>, O1)} of
-                                  {<<"lx">>, undefined} ->
-                                      jsxd:set(<<"zone_type">>, <<"lx">>, O1);
-                                  _ ->
-                                      O1
-                              end;
-                          ipkg ->
-                              jsxd:set(<<"type">>, <<"ipkg">>, Obj)
-                      end;
-                  (<<"max_physical_memory">>, V, Obj) ->
-                      jsxd:update(<<"ram">>, fun(E) -> E end, round(V/(1024*1024)), Obj);
-                  (<<"zonepath">>, V, Obj) ->
-                      case re:split(os:cmd(binary_to_list(<<"/usr/sbin/zfs list -pH ", V/binary>>)), "\t", [{return, list}]) of
-                          [_, Used, Avail | _] ->
-                              {UsedI, _} = string:to_integer(Used),
-                              {AvailI, _} = string:to_integer(Avail),
-                              jsxd:thread([{set, <<"zonepath">>, V},
-                                           {set, <<"quota">>, round((UsedI + AvailI) / (1024*1024*1024))}], Obj);
-                          _ ->
-                              jsxd:set(<<"zonepath">>, V, Obj)
-                      end;
-                  (<<"customer_metadata">>, V, Obj) ->
-                      jsxd:fold(fun (<<"root_authorized_keys">>, V1, Obj1) ->
-                                        jsxd:set(<<"ssh_keys">>, V1, Obj1);
-                                    (K, V1, Obj1) ->
-                                        jsxd:set([<<"metadata">>, K], V1, Obj1)
-                                end, Obj, V);
-                  (<<"disks">>, Disks, Obj) ->
-                      {ObjOut, Size} = jsxd:fold(
-                                         fun(_, Disk, {Obj1, Sum}) ->
-                                                 Size = jsxd:get(<<"size">>, 0, Disk),
-                                                 Total = Sum + round(Size / 1024),
-                                                 case jsxd:get(<<"image_uuid">>, Disk) of
-                                                     {ok, Dataset} ->
-                                                         {jsxd:set(<<"dataset">>, Dataset, Obj1), Total};
-                                                     _ ->
-                                                         {Obj1, Total}
-                                                 end
-                                         end, {Obj, 0}, Disks),
-                      jsxd:thread([{set, <<"quota">>, Size},
-                                   {set, <<"disks">>, Disks}], ObjOut);
-                  (<<"nics">>, V, Obj) ->
-                      jsxd:set(<<"networks">>, V, Obj);
-                  (_,_,Obj) ->
-                      Obj
-              end, jsxd:select(KeepKeys, In), In).
+         <<"zfs_io_priority">>, <<"disk_driver">>, <<"vcpus">>,
+         <<"nic_driver">>, <<"hostname">>, <<"autoboot">>, <<"created_at">>,
+         <<"dns_domain">>, <<"resolvers">>, <<"ram">>, <<"uuid">>,
+         <<"cpu_shares">>, <<"max_swap">>, <<"kernel_version">>],
+    Sniffle0 = jsxd:select(KeepKeys, In),
+    jsxd:fold(fun translate_to_sniffle/3, Sniffle0, In).
+
+translate_to_sniffle(<<"internal_metadata">>, Int, Obj) ->
+    jsxd:merge(Int, Obj);
+translate_to_sniffle(<<"dataset_uuid">>, V, Obj) ->
+    jsxd:set(<<"dataset">>, V, Obj);
+translate_to_sniffle(<<"image_uuid">>, V, Obj) ->
+    jsxd:set(<<"dataset">>, V, Obj);
+translate_to_sniffle(<<"docker">>, true, Obj) ->
+    jsxd:set(<<"zone_type">>, <<"docker">>, Obj);
+translate_to_sniffle(<<"brand">>, Brand, Obj) ->
+    case brand_to_type(Brand) of
+        kvm ->
+            jsxd:set(<<"type">>, <<"kvm">>, Obj);
+        zone ->
+            O1 = jsxd:set(<<"type">>, <<"zone">>, Obj),
+            case {Brand, jsxd:get(<<"zone_type">>, O1)} of
+                {<<"lx">>, undefined} ->
+                    jsxd:set(<<"zone_type">>, <<"lx">>, O1);
+                _ ->
+                    O1
+            end;
+        ipkg ->
+            jsxd:set(<<"type">>, <<"ipkg">>, Obj)
+    end;
+translate_to_sniffle(<<"max_physical_memory">>, V, Obj) ->
+    jsxd:update(<<"ram">>, fun(E) -> E end, round(V/(1024*1024)), Obj);
+translate_to_sniffle(<<"zonepath">>, V, Obj) ->
+    Result = os:cmd(binary_to_list(<<"/usr/sbin/zfs list -pH ", V/binary>>)),
+    Parts = re:split(Result, "\t", [{return, list}]),
+    case Parts of
+        [_, Used, Avail | _] ->
+            {UsedI, _} = string:to_integer(Used),
+            {AvailI, _} = string:to_integer(Avail),
+            Quota = round((UsedI + AvailI) / (1024*1024*1024)),
+            jsxd:thread([{set, <<"zonepath">>, V},
+                         {set, <<"quota">>, Quota}], Obj);
+        _ ->
+            jsxd:set(<<"zonepath">>, V, Obj)
+    end;
+translate_to_sniffle(<<"customer_metadata">>, V, Obj) ->
+    jsxd:fold(fun (<<"root_authorized_keys">>, V1, Obj1) ->
+                      jsxd:set(<<"ssh_keys">>, V1, Obj1);
+                  (K, V1, Obj1) ->
+                      jsxd:set([<<"metadata">>, K], V1, Obj1)
+              end, Obj, V);
+
+translate_to_sniffle(<<"disks">>, Disks, Obj) ->
+    {ObjOut, Size} = jsxd:fold(
+                       fun(_, Disk, {Obj1, Sum}) ->
+                               Size = jsxd:get(<<"size">>, 0, Disk),
+                               Total = Sum + round(Size / 1024),
+                               case jsxd:get(<<"image_uuid">>, Disk) of
+                                   {ok, Dataset} ->
+                                       {jsxd:set(<<"dataset">>, Dataset, Obj1),
+                                        Total};
+                                   _ ->
+                                       {Obj1, Total}
+                               end
+                       end, {Obj, 0}, Disks),
+    jsxd:thread([{set, <<"quota">>, Size},
+                 {set, <<"disks">>, Disks}], ObjOut);
+translate_to_sniffle(<<"nics">>, V, Obj) ->
+    jsxd:set(<<"networks">>, V, Obj);
+translate_to_sniffle(_, _, Obj) ->
+    Obj.
 
 
 generate_zonecfg(Package, Dataset, OwnerData) ->
     Ram = ft_package:ram(Package),
-    RamPerc = case string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")) of
-                  {TotalMem, _} when is_number(TotalMem),
-                                     TotalMem =/= 0 ->
-                      io:format("~p~n", [TotalMem]),
-                      Ram/TotalMem;
-                  _ ->
-                      0
-              end,
-    RamShare = round(1024*RamPerc),
-    MaxSwap = case ft_package:max_swap(Package) of
-                  undefined ->
-                      Ram * 2;
-                  MaxSwapX ->
-                      MaxSwapX
-              end,
+    RamShare = ram_shares(Ram),
+    MaxSwap = dflt(ft_package:max_swap(Package), Ram * 2),
     {ok, NicsIn} = jsxd:get(<<"nics">>, OwnerData),
     NicsIn1 = jsxd:set([0, <<"primary">>], true, NicsIn),
     lager:info("nics: ~p", [NicsIn1]),
@@ -162,22 +155,13 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
             {zonepath, <<ZoneRoot/binary, "/", UUID/binary>>},
             {brand, ft_dataset:zone_type(Dataset)},
             {autoboot, true},
-            {limitpriv, [default,dtrace_proc,dtrace_user]},
+            {limitpriv, [default, dtrace_proc, dtrace_user]},
             {'ip-type', exclusive}],
     Network = [{add, net, [{physical, NIC}]} || {NIC, _} <- NICs],
     RamB = Ram * 1024 * 1024,
-    CPUShares = case ft_package:cpu_shares(Package) of
-                    undefined ->
-                        RamShare;
-                    CPUSharesX ->
-                        CPUSharesX
-                end,
-    ZFSShares = case ft_package:cpu_shares(Package) of
-                    undefined ->
-                        RamShare;
-                    ZFSSharesX ->
-                        ZFSSharesX
-                end,
+    CPUShares = dflt(ft_package:cpu_shares(Package), RamShare),
+    ZFSShares = dflt(ft_package:cpu_shares(Package), RamShare),
+    CPUCap = ft_package:cpu_cap(Package),
     RCTL = [{rctl, <<"zone.cpu-shares">>, privileged, CPUShares, none},
             %% Constants
             {rctl, <<"zone.max-lwps">>,    privileged, 2000, deny},
@@ -187,7 +171,7 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
             %% Seems = mem/2
             {rctl, <<"zone.max-shm-memory">>, privileged, RamB div 2, deny},
             {rctl, <<"zone.zfs-io-priority">>, privileged, ZFSShares, none},
-            {rctl, <<"zone.cpu-cap">>, privileged, ft_package:cpu_cap(Package), deny},
+            {rctl, <<"zone.cpu-cap">>, privileged, CPUCap, deny},
             {add, 'capped-memory',
              [{physical, RamB},
               {swap, MaxSwap1},
@@ -197,11 +181,14 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
     %% {rctl, <<"zone.max-physical-memory">>, privileged, RamB, deny},
     %% {rctl, <<"zone.max-locked-memory">>, privileged, RamB, deny},
     %% {rctl, <<"zone.max-swap">>, privileged, MaxSwap1, deny}],
+    Owner = jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>,
+                     OwnerData),
+    lager:warning("[TODO] We don't generate a propper timestamp here"),
+    Time = <<"2015-04-26T11:29:31.297Z">>,
     Attr = [{attr, <<"vm-version">>, string, 1},
             %% TODO: generte proper date
-            {attr, <<"create-timestamp">>, string, <<"2015-04-26T11:29:31.297Z">>},
-            {attr, <<"owner-uuid">>, string,
-             jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>, OwnerData)},
+            {attr, <<"create-timestamp">>, string, Time},
+            {attr, <<"owner-uuid">>, string, Owner},
             {attr, <<"tmpfs">>, string, Ram * 2}],
     Opt = jsxd:fold(fun (<<"resolvers">>, V, Acc) ->
                             [{attr, <<"resolvers">>, string, V} | Acc];
@@ -209,164 +196,16 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
                             [{attr, <<"hostname">>, string, V} | Acc];
                         (<<"alias">>, V, Acc) ->
                             Base64 = base64:encode(V),
-                            [{attr, <<"alias">>, string, <<"\"", Base64/binary, "\"">>} | Acc];
-                        %% (<<"ssh_keys">>, V, Obj) ->
-                        %%     jsxd:set([<<"customer_metadata">>,
-                        %%               <<"root_authorized_keys">>], V, Obj);
-                        %% (<<"metadata">>, V, Obj) ->
-                        %%     jsxd:update(<<"customer_metadata">>,
-                        %%                 fun(M) ->
-                        %%                         jsxd:merge(M, V)
-                        %%                 end, V, Obj);
-                        %% (<<"note">>, V, Obj) ->
-                        %%     jsxd:set([<<"internal_metadata">>, <<"note">>],
-                        %%              V, Obj);
-                        %% (<<"network_map">>, V, Obj) ->
-                        %%     jsxd:set([<<"internal_metadata">>,
-                        %%               <<"network_map">>], V, Obj);
+                            [{attr, <<"alias">>, string,
+                              <<"\"", Base64/binary, "\"">>} | Acc];
                         (K, _V, Acc) ->
                             lager:warning("[zonecfg] Unsupported key: ~s", [K]),
                             Acc
-                            %%     case re:run(K, "_pw$") of
-                            %%         nomatch ->
-                            %%             Obj;
-                            %%         _ ->
-                            %%             jsxd:set([<<"internal_metadata">>, K],
-                            %%                      V, Obj)
-                            %%     end
                     end, [], OwnerData),
     Finish = [verify,
               commit,
               exit],
     {NICs, Base ++ Network ++ RCTL ++ Attr ++ Opt ++ Finish}.
-%% Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>, <<"routes">>,
-%%                                <<"nics">>]},
-%%                      {set, [<<"nics">>, 0, <<"primary">>], true},
-%%                      {set, <<"autoboot">>,
-%%                       jsxd:get(<<"autoboot">>, true,  OwnerData)},
-%%                      {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
-%%                      {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
-%%                      {set, <<"max_swap">>, MaxSwap1},
-%%                      {set, <<"owner_uuid">>,
-%%                       jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>,  OwnerData)},
-%%                      {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare, Package)},
-%%                      {set, [<<"internal_metadata">>, <<"package">>],
-%%                       jsxd:get(<<"uuid">>, <<"-">>, Package)},
-%%                      {set, [<<"package_name">>],
-%%                       jsxd:get(<<"uuid">>, <<"-">>, Package)},
-%%                      {set, <<"cpu_cap">>, jsxd:get([<<"cpu_cap">>], 100, Package)},
-%%                      {merge, jsxd:select([<<"nic_driver">>,
-%%                                           <<"disk_driver">>], Dataset)}],
-%%                     OwnerData),
-%% Base1 = case jsxd:get(<<"type">>, Dataset) of
-%%             {ok, <<"kvm">>} ->
-%%                 Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
-%%                              {ok, V} ->
-%%                                  jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
-%%                              _ ->
-%%                                  Base0
-%%                          end,
-%%                 Base02 = jsxd:thread([{set, <<"ram">>, Ram},
-%%                                       {set, <<"brand">>, <<"kvm">>},
-%%                                       {set, <<"max_physical_memory">>,
-%%                                        Ram + chunter_server:kvm_mem()},
-%%                                       {set, [<<"disks">>, 0, <<"boot">>], true},
-%%                                       %% Hack for dataset bug that image size is handled a string
-%%                                       {set, [<<"disks">>, 0, <<"image_size">>],
-%%                                        case jsxd:get(<<"image_size">>, 0, Dataset) of
-%%                                            I when is_integer(I) ->
-%%                                                I;
-%%                                            S when is_binary(S) ->
-%%                                                list_to_integer(binary_to_list(S))
-%%                                        end},
-%%                                       {set, [<<"disks">>, 0, <<"image_uuid">>],
-%%                                        jsxd:get(<<"uuid">>, <<"">>, Dataset)}],
-%%                                      Base01),
-%%                 Base05 = case jsxd:get(<<"quota">>, 0, Package) of
-%%                              0 ->
-%%                                  Base02;
-%%                              Q ->
-%%                                  Base03 = jsxd:thread([{set, [<<"disks">>, 1, <<"boot">>], false},
-%%                                                        {set, [<<"disks">>, 1, <<"size">>],
-%%                                                         Q * 1024}],
-%%                                                       Base02),
-%%                                  Base04 = case jsxd:get(<<"blocksize">>, Package) of
-%%                                               {ok, BS} ->
-%%                                                   jsxd:set([<<"disks">>, 1, <<"blocksize">>], BS, Base03);
-%%                                               _ ->
-%%                                                   Base03
-%%                                           end,
-%%                                  case jsxd:get(<<"compression">>, Package) of
-%%                                      {ok, Compression} ->
-%%                                          jsxd:set([<<"disks">>, 1, <<"compression">>], Compression, Base04);
-%%                                      _ ->
-%%                                          Base04
-%%                                  end
-%%                          end,
-%%                 case application:get_env(cpu_type) of
-%%                     {ok, qemu64} ->
-%%                         jsxd:set([<<"cpu_type">>], <<"qemu64">>, Base05);
-%%                     {ok, host} ->
-%%                         jsxd:set([<<"cpu_type">>], <<"host">>, Base05);
-%%                     _ ->
-%%                         Base05
-%%                 end;
-%%             {ok, <<"zone">>} ->
-%%                 Base11 = jsxd:thread([{set, <<"max_physical_memory">>, Ram},
-%%                                       {set, <<"brand">>, <<"joyent">>},
-%%                                       {set, <<"quota">>,
-%%                                        jsxd:get(<<"quota">>, 0, Package)},
-%%                                       {set, <<"image_uuid">>,
-%%                                        jsxd:get(<<"uuid">>, <<"">>, Dataset)}],
-%%                                      Base0),
-%%                 Base12 = case jsxd:get(<<"compression">>, Package) of
-%%                              {ok, Compression} ->
-%%                                  jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
-%%                              _ ->
-%%                                  Base11
-%%                          end,
-%%                 case jsxd:get([<<"zone_type">>], Dataset) of
-%%                     {ok, <<"lx">>} ->
-%%                         {ok, KVersion} = jsxd:get([<<"kernel_version">>], Dataset),
-%%                         jsxd:thread(
-%%                           [{set, <<"kernel_version">>, KVersion},
-%%                            {set, <<"brand">>, <<"lx">>}], Base12);
-%%                     _ ->
-%%                         Base12
-%%                 end
-%%         end,
-%% Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
-%%                            jsxd:set([<<"customer_metadata">>,
-%%                                      <<"root_authorized_keys">>], V, Obj);
-%%                        (<<"resolvers">>, V, Obj) ->
-%%                            jsxd:set(<<"resolvers">>, V, Obj);
-%%                        (<<"hostname">>, V, Obj) ->
-%%                            jsxd:set(<<"hostname">>, V, Obj);
-%%                        (<<"metadata">>, V, Obj) ->
-%%                            jsxd:update(<<"customer_metadata">>,
-%%                                        fun(M) ->
-%%                                                jsxd:merge(M, V)
-%%                                        end, V, Obj);
-%%                        (<<"note">>, V, Obj) ->
-%%                            jsxd:set([<<"internal_metadata">>, <<"note">>],
-%%                                     V, Obj);
-%%                        (<<"network_map">>, V, Obj) ->
-%%                            jsxd:set([<<"internal_metadata">>,
-%%                                      <<"network_map">>], V, Obj);
-%%                        (K, V, Obj) ->
-%%                            case re:run(K, "_pw$") of
-%%                                nomatch ->
-%%                                    Obj;
-%%                                _ ->
-%%                                    jsxd:set([<<"internal_metadata">>, K],
-%%                                             V, Obj)
-%%                            end
-%%                    end, Base1, OwnerData),
-%% lager:debug("Converted ~p / ~p / ~p to: ~p.",
-%%             [Package, Dataset, OwnerData, Result]),
-%% Result.
-
-%% [].
 
 -spec generate_spec(Package::fifo:config(),
                     Dataset::fifo:config(),
@@ -374,147 +213,38 @@ generate_zonecfg(Package, Dataset, OwnerData) ->
 
 generate_spec(Package, Dataset, OwnerData) ->
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
-    RamPerc = case string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")) of
-                  {TotalMem, _} when is_number(TotalMem),
-                                     TotalMem =/= 0 ->
-                      io:format("~p~n", [TotalMem]),
-                      Ram/TotalMem;
-                  _ ->
-                      0
-              end,
-    RamShare = round(1024*RamPerc),
+    {ok, PackageUUID} = jsxd:get(<<"uuid">>, Package),
+    {ok, CPUCap} = jsxd:get([<<"cpu_cap">>], Package),
+    RamShare = ram_shares(Ram),
     MaxSwap = jsxd:get(<<"max_swap">>, Ram*2, Package),
     MaxSwap1 = erlang:max(256, MaxSwap),
-    DefaultResolversS = application:get_env(chunter, resolvers, "8.8.8.8,8.8.4.4"),
+    DefaultResolversS = application:get_env(chunter, resolvers,
+                                            "8.8.8.8,8.8.4.4"),
     DefaultResolvers = re:split(DefaultResolversS, ","),
+    Autoboot = jsxd:get(<<"autoboot">>, true,  OwnerData),
+    CPUShares =jsxd:get(<<"cpu_shares">>, RamShare, Package),
+    Owner = jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>,
+                     OwnerData),
+    ZFSIOPriority = jsxd:get(<<"zfs_io_priority">>, RamShare, Package),
     Base0 = jsxd:thread([{select, [<<"uuid">>, <<"alias">>, <<"routes">>,
                                    <<"nics">>]},
                          {set, [<<"nics">>, 0, <<"primary">>], true},
-                         {set, <<"autoboot">>,
-                          jsxd:get(<<"autoboot">>, true,  OwnerData)},
+                         {set, <<"autoboot">>, Autoboot},
                          {set, <<"resolvers">>, DefaultResolvers},
-                         {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
+                         {set, <<"cpu_shares">>, CPUShares},
                          {set, <<"max_swap">>, MaxSwap1},
-                         {set, <<"owner_uuid">>,
-                          jsxd:get(<<"owner">>, <<"00000000-0000-0000-0000-000000000000">>,  OwnerData)},
-                         {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare, Package)},
-                         {set, [<<"internal_metadata">>, <<"package">>],
-                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
-                         {set, [<<"package_name">>],
-                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
-                         {set, <<"cpu_cap">>, jsxd:get([<<"cpu_cap">>], 100, Package)},
+                         {set, <<"owner_uuid">>, Owner},
+                         {set, <<"zfs_io_priority">>, ZFSIOPriority},
+                         {set, <<"package_name">>, PackageUUID},
+                         {set, <<"cpu_cap">>, CPUCap},
                          {merge, jsxd:select([<<"nic_driver">>,
                                               <<"disk_driver">>], Dataset)}],
                         OwnerData),
-    {ok, ImageID} = jsxd:get(<<"uuid">>, Dataset),
     Base1 = case jsxd:get(<<"type">>, Dataset) of
                 {ok, <<"kvm">>} ->
-                    Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
-                                 {ok, V} ->
-                                     jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
-                                 _ ->
-                                     Base0
-                             end,
-                    Base02 =
-                        jsxd:thread([{set, <<"ram">>, Ram},
-                                     {set, <<"brand">>, <<"kvm">>},
-                                     {set, <<"max_physical_memory">>,
-                                      Ram + chunter_server:kvm_mem()},
-                                     {set, [<<"disks">>, 0, <<"boot">>], true},
-                                     %% Hack for dataset bug that image size is handled a string
-                                     {set, [<<"disks">>, 0, <<"image_size">>],
-                                      case jsxd:get(<<"image_size">>, 0, Dataset) of
-                                          I when is_integer(I) ->
-                                              I;
-                                          S when is_binary(S) ->
-                                              list_to_integer(binary_to_list(S))
-                                      end},
-                                     {set, [<<"disks">>, 0, <<"image_uuid">>],
-                                      ImageID}],
-                                    Base01),
-                    Base05 = case jsxd:get(<<"quota">>, 0, Package) of
-                                 0 ->
-                                     Base02;
-                                 Q ->
-                                     Base03 = jsxd:thread([{set, [<<"disks">>, 1, <<"boot">>], false},
-                                                           {set, [<<"disks">>, 1, <<"size">>],
-                                                            Q * 1024}],
-                                                          Base02),
-                                     Base04 = case jsxd:get(<<"blocksize">>, Package) of
-                                                  {ok, BS} ->
-                                                      jsxd:set([<<"disks">>, 1, <<"blocksize">>], BS, Base03);
-                                                  _ ->
-                                                      Base03
-                                              end,
-                                     case jsxd:get(<<"compression">>, Package) of
-                                         {ok, Compression} ->
-                                             jsxd:set([<<"disks">>, 1, <<"compression">>], Compression, Base04);
-                                         _ ->
-                                             Base04
-                                     end
-                             end,
-                    case application:get_env(cpu_type) of
-                        {ok, qemu64} ->
-                            jsxd:set([<<"cpu_type">>], <<"qemu64">>, Base05);
-                        {ok, host} ->
-                            jsxd:set([<<"cpu_type">>], <<"host">>, Base05);
-                        _ ->
-                            Base05
-                    end;
+                    kvm_spec(Base0, Package, Dataset);
                 {ok, <<"zone">>} ->
-                    Base11 = jsxd:thread([{set, <<"max_physical_memory">>, Ram},
-                                          {set, <<"brand">>, <<"joyent">>},
-                                          {set, <<"quota">>,
-                                           jsxd:get(<<"quota">>, 0, Package)},
-                                          {set, <<"image_uuid">>, ImageID}],
-                                         Base0),
-                    Base12 = case jsxd:get(<<"compression">>, Package) of
-                                 {ok, Compression} ->
-                                     jsxd:set([<<"zfs_root_compression">>], Compression, Base11);
-                                 _ ->
-                                     Base11
-                             end,
-                    case jsxd:get([<<"zone_type">>], Dataset) of
-                        {ok, <<"lx">>} ->
-                            {ok, KVersion} = jsxd:get([<<"kernel_version">>], Dataset),
-                            jsxd:thread(
-                              [{delete, <<"dns_domain">>},
-                               {set, <<"kernel_version">>, KVersion},
-                               {set, <<"brand">>, <<"lx">>}], Base12);
-                        {ok, <<"docker">>} ->
-                            KVersion = jsxd:get([<<"kernel_version">>], <<"3.13.0">>, Dataset),
-                            Base13 = jsxd:thread(
-                                       [{delete, <<"dns_domain">>},
-                                        {set, <<"kernel_version">>, KVersion},
-                                        {set, <<"brand">>, <<"lx">>},
-                                        {set, <<"docker">>, true},
-                                        {set, <<"internal_metadata_namespaces">>, [<<"docker">>]},
-                                        {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>},
-                                        %% What a hack :/
-                                        {set, [<<"internal_metadata">>, <<"docker:wait_for_attach">>],
-                                         erlang:system_time(milli_seconds) + 60000}
-                                       ], Base12),
-                            Base14 = lists:foldl(fun ({K, V}, Acc) ->
-                                                         jsxd:set([<<"internal_metadata">>, <<"docker:", K/binary>>], V, Acc)
-                                                 end, Base13, jsxd:get([<<"docker">>], [], OwnerData)),
-                            %% We we did not have a docker command we see if there is one in the image
-                            case jsxd:get([<<"docker">>, <<"cmd">>], OwnerData) of
-                                {ok, _} ->
-                                    Base14;
-                                _ ->
-                                    {ok, Manifest} = chunter_docker:get(ImageID),
-                                    case jsxd:get([<<"manifest">>, <<"tags">>, <<"docker:config">>, <<"Cmd">>], Manifest) of
-                                        {ok, Cmd} ->
-                                            CmdS = jsx:encode(Cmd),
-                                            jsxd:set([<<"internal_metadata">>,
-                                                      <<"docker:cmd">>], CmdS, Base14);
-                                        _ ->
-                                            Base14
-                                    end
-                            end;
-                        _ ->
-                            Base12
-                    end
+                    zone_spec(Base0, Package, Dataset, OwnerData)
             end,
     Result = jsxd:fold(fun (<<"ssh_keys">>, V, Obj) ->
                                jsxd:set([<<"customer_metadata">>,
@@ -596,56 +326,51 @@ create_update(_, undefined, Config) ->
 create_update(Original, Package, Config) ->
     Base = create_update(Original, undefined, Config),
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
-    RamPerc = case string:to_integer(os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'")) of
-                  {TotalMem, _} when is_number(TotalMem),
-                                     TotalMem =/= 0 ->
-                      io:format("~p~n", [TotalMem]),
-                      Ram/TotalMem;
-                  _ ->
-                      0
-              end,
-    RamShare = round(1024*RamPerc),
+    {ok, Q} = jsxd:get(<<"quota">>, Package),
+    {ok, PackageUUID} = jsxd:get(<<"uuid">>, Package),
+    RamShare = ram_shares(Ram),
     MaxSwap = jsxd:get(<<"max_swap">>, Ram*2, Package),
     MaxSwap1 = erlang:max(256, MaxSwap),
-
-    Base0 = jsxd:thread([{set, [<<"set_internal_metadata">>, <<"package">>],
-                          jsxd:get(<<"uuid">>, <<"-">>, Package)},
-                         {set, <<"cpu_shares">>, jsxd:get(<<"cpu_shares">>, RamShare, Package)},
-                         {set, <<"zfs_io_priority">>, jsxd:get(<<"zfs_io_priority">>, RamShare*2, Package)},
+    CPUShares = jsxd:get(<<"cpu_shares">>, RamShare, Package),
+    ZFSPriority = jsxd:get(<<"zfs_io_priority">>, RamShare*2, Package),
+    Base0 = jsxd:thread([{set, <<"package_name">>, PackageUUID},
+                         {set, <<"cpu_shares">>, CPUShares},
+                         {set, <<"zfs_io_priority">>, ZFSPriority},
                          {set, <<"max_swap">>, MaxSwap1},
                          {merge, jsxd:select([<<"cpu_cap">>], Package)}],
                         Base),
-    Result = case brand_to_type(jsxd:get(<<"brand">>, <<"joyent">>, Original)) of
+    Type = brand_to_type(jsxd:get(<<"brand">>, <<"joyent">>, Original)),
+    Result = case Type of
                  kvm ->
-                     Base01 = case jsxd:get(<<"cpu_cap">>, Base0) of
-                                  {ok, V} ->
-                                      jsxd:set(<<"vcpus">>, ceiling(V/100.0), Base0);
-                                  _ ->
-                                      Base0
-                              end,
-                     Base02 = jsxd:thread([{set, <<"ram">>, Ram},
-                                           {set, <<"max_physical_memory">>, Ram + 1024}],
-                                          Base01),
+                     {ok, CPUCap} = jsxd:get(<<"cpu_cap">>, Base),
+                     VCPUs = ceiling(CPUCap/100.0),
+                     Base1 = jsxd:thread([{set, <<"ram">>, Ram},
+                                          {set, <<"vcpus">>, VCPUs},
+                                          {set, <<"max_physical_memory">>,
+                                           Ram + chunter_server:kvm_mem()}],
+                                         Base0),
                      case update_disk(jsxd:get(<<"disks">>, [], Original)) of
                          {ok, Path} ->
-                             Size = jsxd:get(<<"quota">>, 0, Package) * 1024,
+
                              jsxd:set(<<"update_disks">>,
-                                      [[{<<"path">>, Path}, {<<"size">>, Size}]],
-                                      Base02);
+                                      [[{<<"path">>, Path},
+                                        {<<"size">>, Q * 1024}]],
+                                      Base1);
                          _ ->
-                             Base02
+                             Base1
                      end;
                  zone ->
                      jsxd:thread([{set, <<"max_physical_memory">>, Ram},
-                                  {set, <<"quota">>,
-                                   jsxd:get(<<"quota">>, 0, Package)}],
+                                  {set, <<"quota">>, Q}],
                                  Base0)
              end,
-    lager:debug("Created Update package ~p / ~p / ~p to: ~p.", [Original, Package, Config, Result]),
+    lager:debug("Created Update package ~p / ~p / ~p to: ~p.",
+                [Original, Package, Config, Result]),
     Result.
 
 update_disk([]) ->
     error;
+
 update_disk([Disk | Rest]) ->
     case {jsxd:get(<<"media">>, Disk), jsxd:get(<<"boot">>, Disk)} of
         {{ok, <<"disk">>}, {ok, false}} ->
@@ -659,189 +384,124 @@ update_disk([Disk | Rest]) ->
 ceiling(X) ->
     T = erlang:trunc(X),
     case (X - T) of
-        Neg when Neg < 0 -> T;
-        Pos when Pos > 0 -> T + 1;
-        _ -> T
+        Neg when Neg =< 0 -> T;
+        Pos when Pos > 0 -> T + 1
     end.
 
+ram_shares(Ram) ->
+    Output = os:cmd("/usr/sbin/prtconf | grep Memor | awk '{print $3}'"),
+    RamPerc = case string:to_integer(Output) of
+                  {TotalMem, _} when is_number(TotalMem),
+                                     TotalMem =/= 0 ->
+                      Ram/TotalMem;
+                  _ ->
+                      0
+              end,
+    round(1024*RamPerc).
 
 
+kvm_spec(Base, Package, Dataset) ->
+    {ok, ImageID} = jsxd:get(<<"uuid">>, Dataset),
+    {ok, Ram} = jsxd:get(<<"ram">>, Package),
+    {ok, CPUCap} = jsxd:get(<<"cpu_cap">>, Base),
+    {ok, DatasetSize} = jsxd:get(<<"image_size">>, Dataset),
+    {ok, Q} = jsxd:get(<<"quota">>, Package),
+    VCPUs = ceiling(CPUCap/100.0),
+    Base1 = jsxd:thread([{set, <<"ram">>, Ram},
+                         {set, <<"vcpus">>, VCPUs},
+                         {set, <<"brand">>, <<"kvm">>},
+                         {set, <<"max_physical_memory">>,
+                          Ram + chunter_server:kvm_mem()},
+                         {set, [<<"disks">>, 0, <<"boot">>], true},
+                         {set, [<<"disks">>, 0, <<"image_size">>], DatasetSize},
+                         {set, [<<"disks">>, 0, <<"image_uuid">>], ImageID},
+                         {set, [<<"disks">>, 1, <<"boot">>], false},
+                         {set, [<<"disks">>, 1, <<"size">>], Q * 1024}],
+                        Base),
+    perhaps_map(
+      Package, Base1,
+      [{<<"compression">>, [<<"disks">>, 1, <<"compression">>]},
+       {<<"blocksize">>, [<<"disks">>, 1, <<"blocksize">>]}]).
 
--ifdef(TEST).
+zone_spec(Base0, Package, Dataset, OwnerData) ->
+    {ok, ImageID} = jsxd:get(<<"uuid">>, Dataset),
+    {ok, Ram} = jsxd:get(<<"ram">>, Package),
+    {ok, Quota} = jsxd:get(<<"quota">>, Package),
+    Base11 = jsxd:thread([{set, <<"max_physical_memory">>, Ram},
+                          {set, <<"brand">>, <<"joyent">>},
+                          {set, <<"quota">>, Quota},
+                          {set, <<"image_uuid">>, ImageID}],
+                         Base0),
+    Base12 = perhaps_set(<<"compression">>, Package,
+                         [<<"zfs_root_compression">>], Base11),
+    case jsxd:get([<<"zone_type">>], Dataset) of
+        {ok, <<"lx">>} ->
+            lx_spec(Base12, Dataset);
+        {ok, <<"docker">>} ->
+            docker_spec(Base12, Dataset, OwnerData);
+        _ ->
+            Base12
+    end.
 
-type_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"alias">>, <<"a">>}, {<<"hostname">>, <<"h">>}, {<<"uuid">>, <<"z">>}]),
-    In = apply_defaults(InP, InD, InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+lx_spec(Base, Dataset) ->
+    {ok, KVersion} = jsxd:get([<<"kernel_version">>], Dataset),
+    jsxd:thread(
+      [{delete, <<"dns_domain">>},
+       {set, <<"kernel_version">>, KVersion},
+       {set, <<"brand">>, <<"lx">>}], Base).
 
-autoboot_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"alias">>, <<"a">>}, {<<"hostname">>, <<"h">>},
-                          {<<"uuid">>, <<"z">>}, {<<"autoboot">>, false}]),
-    In0 = apply_defaults(InP, InD, InO),
-    In = jsxd:set(<<"autoboot">>, false, In0),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+docker_spec(Base, Dataset, OwnerData) ->
+    {ok, ImageID} = jsxd:get(<<"uuid">>, Dataset),
+    Base1 = lx_spec(Base, Dataset),
+    DockerData = jsxd:get([<<"docker">>], [], OwnerData),
+    Base2 = jsxd:thread(
+              [{set, <<"docker">>, true},
+               {set, <<"internal_metadata_namespaces">>, [<<"docker">>]},
+               {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>},
+               %% What a hack :/
+               {set, [<<"internal_metadata">>, <<"docker:wait_for_attach">>],
+                erlang:system_time(milli_seconds) + 60000}
+              ], Base1),
+    Base3 = encode_docker_metadata(Base2, DockerData),
+    %% We we did not have a docker command we see if there is one in the image
+    case jsxd:get([<<"docker">>, <<"cmd">>], OwnerData) of
+        {ok, _} ->
+            Base3;
+        _ ->
+            {ok, Manifest} = chunter_docker:get(ImageID),
+            ManifestCmdPath = [<<"manifest">>, <<"tags">>, <<"docker:config">>,
+                               <<"Cmd">>],
+            case jsxd:get(ManifestCmdPath, Manifest) of
+                {ok, Cmd} ->
+                    CmdS = jsx:encode(Cmd),
+                    jsxd:set([<<"internal_metadata">>,
+                              <<"docker:cmd">>], CmdS, Base3);
+                _ ->
+                    Base3
+            end
+    end.
 
-disk_driver_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>},
-                          {<<"disk_driver">>, <<"virtio">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults_kvm(InP, InD, InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
+encode_docker_metadata(Base, DockerData) ->
+    lists:foldl(fun ({K, V}, Acc) ->
+                        PrefixedName = <<"docker:", K/binary>>,
+                        Path = [<<"internal_metadata">>, PrefixedName],
+                        jsxd:set(Path, V, Acc)
+                end, Base, DockerData).
 
-created_at_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In0 = apply_defaults_kvm(InP, InD, InO),
-    In = jsxd:set(<<"created_at">>, 123, In0),
-    VMData = jsxd:set(<<"created_at">>, 123, to_vmadm(InP, InD, InO)),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(VMData))).
+perhaps_set(Key, Src, Target, Obj) ->
+    case jsxd:get(Key, Src) of
+        {ok, Compression} ->
+            jsxd:set(Target, Compression, Obj);
+        _ ->
+            Obj
+    end.
 
+perhaps_map(Src, Obj, Mapping) ->
+    lists:foldl(fun({Key, Target}, Acc) ->
+                        perhaps_set(Key, Src, Target, Acc)
+                end, Obj, Mapping).
 
-nic_driver_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>},
-                          {<<"nic_driver">>, <<"virtio">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults_kvm(InP, InD, InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-zone_ram_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults(InP, InD, InO),
-    VMData = to_vmadm(InP, InD, InO),
-    VMData1 = jsxd:set(<<"max_physical_memory">>, 1024*1024*1024, VMData),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(VMData1))).
-
-kvm_ram_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 1024}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults_kvm(InP, InD, InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-kvm_cpu_cap1_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}, {<<"cpu_cap">>, 100}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults_kvm(InP, InD, InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-kvm_cpu_cap14_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}, {<<"cpu_cap">>, 140}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults_kvm(InP, InD, InO, 140, 2),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-kvm_cpu_cap15_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}, {<<"cpu_cap">>, 150}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults_kvm(InP, InD, InO, 150, 2),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-kvm_cpu_cap2_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}, {<<"cpu_cap">>, 200}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults_kvm(InP, InD, InO, 200, 2),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-kvm_cpu_cap21_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}, {<<"cpu_cap">>, 210}]),
-    InD = jsxd:from_list([{<<"type">>, <<"kvm">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}]),
-    In = apply_defaults_kvm(InP, InD, InO, 210, 3),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-
-resolver_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>}, {<<"resolvers">>, [<<"8.8.8.8">>]}]),
-    In0 = apply_defaults(InP, InD, InO),
-    In = jsxd:set(<<"resolvers">>, [<<"8.8.8.8">>], In0),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-ssh_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
-                          {<<"ssh_keys">>,
-                           <<"ssh-rsa">>}]),
-    In = apply_defaults(InP, InD, InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-passwd_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
-                          {<<"admin_pw">>, <<"admin">>},
-                          {<<"root_pw">>, <<"root">>}]),
-    In = apply_defaults(InP, InD, InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-metadata_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10}, {<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
-                          {<<"admin_pw">>, <<"admin">>},
-                          {<<"metadata">>, [{<<"key">>, <<"value">>}]}]),
-    In = apply_defaults(InP, InD, InO),
-    ?assertEqual(In, ordsets:from_list(to_sniffle(to_vmadm(InP, InD, InO)))).
-
-nics_test() ->
-    InP = jsxd:from_list([{<<"uuid">>, <<"p">>}, {<<"quota">>, 10},{<<"ram">>, 0}]),
-    InD = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InD1 = jsxd:from_list([{<<"type">>, <<"zone">>}, {<<"uuid">>, <<"d">>}]),
-    InO = jsxd:from_list([{<<"uuid">>, <<"z">>},
-                          {<<"nics">>, [[{<<"ip">>, <<"127.0.0.1">>},
-                                         {<<"nic_tag">>, <<"admin">>}]]}]),
-    In = apply_defaults(InP, InD1, InO),
-    Expected = to_sniffle(to_vmadm(InP, InD, InO)),
-    ?assertEqual(In, Expected).
-
-apply_defaults(InP, InD, InO) ->
-    Swap = erlang:max(256, jsxd:get(<<"ram">>, 0, InP)*2),
-    {ok, Dataset} = jsxd:get(<<"uuid">>, InD),
-    InD1 = jsxd:delete(<<"uuid">>, InD),
-    jsxd:thread([{merge, InP},
-                 {set, <<"autoboot">>, true},
-                 {set, <<"cpu_cap">>, 100},
-                 {set, <<"max_swap">>, Swap},
-                 {delete, <<"name">>},
-                 {set, <<"package">>, <<"p">>},
-                 {set, <<"resolvers">>, [<<"8.8.8.8">>, <<"8.8.4.4">>]},
-                 {set, <<"networks">>, jsxd:get(<<"nics">>, [], InO)},
-                 {set, [<<"networks">>, 0, <<"primary">>], true},
-                 {delete, <<"nics">>},
-                 {merge, InD1},
-                 {set, <<"dataset">>, Dataset},
-                 {set, <<"cpu_shares">>, 0},
-                 {set, <<"uuid">>, <<"z">>},
-                 {set, <<"zfs_io_priority">>, 0}],
-                InO).
-
-apply_defaults_kvm(InP, InD, InO) ->
-    apply_defaults_kvm(InP, InD, InO, 100, 1).
-
-apply_defaults_kvm(InP, InD, InO, Cap, N) ->
-    In0 = apply_defaults(InP, InD, InO),
-    jsxd:thread([{set, <<"cpu_cap">>, Cap},
-                 {set, <<"disks">>,
-                  [[{<<"boot">>, true},
-                    {<<"image_size">>, 0},
-                    {<<"image_uuid">>, <<"d">>}],
-                   [{<<"boot">>, false},
-                    {<<"size">>, 10240}]]},
-                 {set, <<"vcpus">>, N}],
-                In0).
--endif.
+dflt(undefined, Dflt) ->
+    Dflt;
+dflt(Value, _Dflt) ->
+    Value.

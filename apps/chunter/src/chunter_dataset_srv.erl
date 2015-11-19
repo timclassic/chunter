@@ -140,7 +140,8 @@ install_image(DatasetUUID, VM) ->
     lager:debug("Installing dataset ~s.", [DatasetUUID]),
     Path = filename:join(<<"/zones">>, DatasetUUID),
     lager:debug("Checking path ~s.", [Path]),
-    case os:cmd("zfs list zones/" ++ binary_to_list(DatasetUUID) ++">/dev/null; echo $?") of
+    case os:cmd("zfs list zones/" ++ binary_to_list(DatasetUUID) ++
+                    ">/dev/null; echo $?") of
         "0\n" ->
             lager:debug("found.", []),
             ok;

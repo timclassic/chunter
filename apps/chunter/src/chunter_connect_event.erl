@@ -2,13 +2,13 @@
 -behaviour(gen_event).
 
 -export([
-	 init/1,
-	 terminate/2,
-	 handle_event/2,
-	 code_change/3,
-	 handle_call/2,
-	 handle_info/2
-	]).
+         init/1,
+         terminate/2,
+         handle_event/2,
+         code_change/3,
+         handle_call/2,
+         handle_info/2
+        ]).
 
 init(_) ->
     {ok, stateless}.
@@ -22,7 +22,6 @@ handle_event({disconnected, "sniffle"}, State) ->
     {ok, State};
 
 handle_event(X, State) ->
-    io:format("Unknown connect event: ~p~n", [X]),
     {ok, State}.
 
 handle_info(_, State) ->

@@ -14,6 +14,7 @@ import(Image) ->
         {ok, <<"Image ", UUID:36/binary, _/binary>>} ->
             {ok, UUID};
         Error ->
-            lager:error("[docker] Could not import image ~s: ~p", [Image, Error]),
+            lager:error("[docker] Could not import image ~s: ~p",
+                        [Image, Error]),
             Error
     end.

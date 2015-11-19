@@ -5,39 +5,22 @@
 -define(MAX_MDATA_SIZE, 1024*1024*32).
 
 call(UUID, R = [{<<"action">>, <<"snapshot-", _/binary>>} | _]) ->
-    case enabled(snapshot_api) of
-        true ->
-            call_(UUID, R);
-        false ->
-            {error, "disabled"}
-    end;
+    check_call(snapshot_api, UUID, R);
 
 call(UUID, R = [{<<"action">>, <<"backup-", _/binary>>} | _]) ->
-    case enabled(backup_api) of
-        true ->
-            call_(UUID, R);
-        false ->
-            {error, "disabled"}
-    end;
+    check_call(backup_api, UUID, R);
 
 call(UUID, R = [{<<"action">>, <<"metadata-", _/binary>>} | _]) ->
-    case enabled(metadata_api) of
-        true ->
-            call_(UUID, R);
-        false ->
-            {error, "disabled"}
-    end;
+    check_call(metadata_api, UUID, R);
 
 call(UUID, R = [{<<"action">>, <<"cluster-", _/binary>>} | _]) ->
-    case enabled(grouping_api) of
-        true ->
-            call_(UUID, R);
-        false ->
-            {error, "disabled"}
-    end;
+    check_call(grouping_api, UUID, R);
 
 call(UUID, R = [{<<"action">>, <<"stack-", _/binary>>} | _]) ->
-    case enabled(grouping_api) of
+    check_call(grouping_api, UUID, R).
+
+check_call(Type, UUID, R) ->
+    case enabled(Type) of
         true ->
             call_(UUID, R);
         false ->
@@ -90,10 +73,10 @@ call_(UUID, [{<<"action">>, <<"metadata-set">>},
         {ok, V} ->
             Size = byte_size(term_to_binary(ft_vm:metadata(V))) +
                 byte_size(term_to_binary(D)),
-            if
-                Size > ?MAX_MDATA_SIZE ->
-                    {error, "out of space"};
+            case Size > ?MAX_MDATA_SIZE of
                 true ->
+                    {error, "out of space"};
+                false ->
                     ls_vm:set_metadata(UUID, D),
                     {ok, V1} = ls_vm:get(UUID),
                     {ok, ft_vm:metadata(V1)}
@@ -114,16 +97,7 @@ call_(UUID, [{<<"action">>, <<"cluster-set">>},
             {<<"data">>, D}]) ->
     case grouping(UUID) of
         {ok, GID, G} ->
-            Size = byte_size(term_to_binary(ft_grouping:config(G))) +
-                byte_size(term_to_binary(D)),
-            if
-                Size > ?MAX_MDATA_SIZE ->
-                    {error, "out of space"};
-                true ->
-                    ls_grouping:set_config(GID, D),
-                    {ok, G1} = ls_grouping:get(GID),
-                    {ok, ft_grouping:config(G1)}
-            end;
+            set_grouping_config(GID, G, D);
         E ->
             E
     end;
@@ -139,17 +113,8 @@ call_(UUID, [{<<"action">>, <<"stack-get">>}]) ->
 call_(UUID, [{<<"action">>, <<"stack-set">>},
             {<<"data">>, D}]) ->
     case stack(UUID) of
-        {ok, SID, S} ->
-            Size = byte_size(term_to_binary(ft_grouping:config(S))) +
-                byte_size(term_to_binary(D)),
-            if
-                Size > ?MAX_MDATA_SIZE ->
-                    {error, "out of space"};
-                true ->
-                    ls_grouping:set_config(SID, D),
-                    {ok, S1} = ls_grouping:get(SID),
-                    {ok, ft_grouping:config(S1)}
-            end;
+        {ok, GID, G} ->
+            set_grouping_config(GID, G, D);
         E ->
             E
     end;
@@ -256,3 +221,15 @@ stack(UUID) ->
 
 enabled(Action) ->
     application:get_env(chunter, Action, true).
+
+set_grouping_config(GID, G, D) ->
+    Size = byte_size(term_to_binary(ft_grouping:config(G))) +
+        byte_size(term_to_binary(D)),
+    case Size > ?MAX_MDATA_SIZE of
+        true ->
+            {error, "out of space"};
+        false ->
+            ls_grouping:set_config(GID, D),
+            {ok, G1} = ls_grouping:get(GID),
+            {ok, ft_grouping:config(G1)}
+    end.

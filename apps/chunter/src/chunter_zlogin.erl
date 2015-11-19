@@ -13,25 +13,15 @@ start(UUID, Type) ->
     end.
 
 stop(UUID) ->
-    gen_fsm:send_all_state_event({global, {zlogin, UUID}}, stop).
+    gen_fsm:send_all_state_event(n(UUID), stop).
 
 send(UUID, Type, Data) ->
-    case global:whereis_name({zlogin, UUID}) of
-        undefined ->
-            start(UUID, Type);
-        _ ->
-            ok
-    end,
-    gen_fsm:send_event({global, {zlogin, UUID}}, {send, Data}).
+    start(UUID, Type),
+    gen_fsm:send_event(n(UUID), {send, Data}).
 
 subscribe(UUID, Type) ->
-    case global:whereis_name({zlogin, UUID}) of
-        undefined ->
-            start(UUID, Type);
-        _ ->
-            ok
-    end,
-    gen_fsm:send_all_state_event({global, {zlogin, UUID}}, {subscribe, self()}).
+    start(UUID, Type),
+    gen_fsm:send_all_state_event(n(UUID), {subscribe, self()}).
 
 wait() ->
     case net_adm:ping(?ZLOGIN_NODE) of
@@ -42,3 +32,6 @@ wait() ->
             timer:sleep(1000),
             wait()
     end.
+
+n(UUID) ->
+    {global, {zlogin, UUID}}.

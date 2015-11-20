@@ -1534,7 +1534,7 @@ howl_update(UUID, Data) ->
 
 spawn_create(UUID, CreateJSON, VMSpec) ->
     spawn(fun() ->
-                  case chunter_vmadm:create(CreateJSON) of
+                  case chunter_vmadm:create(UUID, CreateJSON) of
                       ok ->
                           lager:debug(
                             "[create:~s] Done creating continuing on.", [UUID]),

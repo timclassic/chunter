@@ -17,7 +17,7 @@
          reboot/1,
          force_reboot/1,
          delete/1,
-         create/1,
+         create/2,
          update/2
         ]).
 
@@ -222,14 +222,13 @@ force_reboot(UUID) ->
             zoneadm(UUID, reboot)
     end.
 
--spec create(UUID::fifo:vm_config()) -> ok |
-                                        {error, binary() |
-                                         timeout |
-                                         unknown}.
+-spec create(UUID::binary(), Data::fifo:vm_config()) -> ok |
+                                                        {error, binary() |
+                                                         timeout |
+                                                         unknown}.
 
-create(Data) ->
+create(UUID, Data) ->
     lager:info("New Create: ~p", [Data]),
-    {<<"uuid">>, UUID} = lists:keyfind(<<"uuid">>, 1, Data),
     lager:info("Creation of VM '~s' started.", [UUID]),
     lager:info("vmadm:create"),
     Cmd = "/usr/sbin/vmadm create",

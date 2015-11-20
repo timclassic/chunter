@@ -66,12 +66,6 @@
  [{default, 10},
   {datatype, integer}]}.
 
-%% @doc Enables or disables the ARC stats for this server.
-
-{mapping, "kstat.arc", "chunter.kstat_arc",
- [{default, enabled},
-  {datatype, {flag, enabled, disabled}}]}.
-
 
 %% @doc The interval services for a zone are checked, the default is 10s
 %% changes are noted even when the state is the same at least for the nsq
@@ -105,14 +99,6 @@
 %% undetected for 15s.
 {mapping, "zpool_interval", "chunter.zpool_interval",
  [{default, "15s"},
-  {datatype, {duration, ms}}]}.
-
-
-%% @doc The interval in which the systems ARC status is checked, this is
-%% purely informational and slowly changing a higher interval is usually
-%% not a issue.
-{mapping, "arc_interval", "chunter.arc_interval",
- [{default, "30s"},
   {datatype, {duration, ms}}]}.
 
 

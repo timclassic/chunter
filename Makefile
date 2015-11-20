@@ -9,7 +9,7 @@ include fifo.mk
 # the kstat library will not compile on OS X
 pre-commit:
 	-$(REBAR) compile
-	$(ELVIS) rock
+	$(REBAR) as lint lint
 	$(REBAR) xref
 	$(REBAR) eunit
 

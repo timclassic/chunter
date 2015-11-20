@@ -2,9 +2,7 @@
 ├─ cuttlefish─2.0.0+build.479.reff5f6fdc
 │  ├─ getopt─0.4.3
 │  └─ neotoma─1.7.2
-├─ ekstat─0.2.2
 ├─ eper─0.94.0
-├─ eplugin─0.1.4
 ├─ erlsom─1.2.1
 ├─ erltrace─0.1.4
 ├─ fifo_dt─0.1.57
@@ -24,7 +22,7 @@
 ├─ lager─2.1.1
 │  └─ goldrush─0.1.7
 ├─ libhowl─0.1.29
-│  └─ mdns_client_lib─0.1.28
+│  └─ mdns_client_lib─0.1.29
 │     ├─ mdns_client─0.1.7
 │     └─ pooler─1.4.0
 ├─ libsnarl─0.3.34

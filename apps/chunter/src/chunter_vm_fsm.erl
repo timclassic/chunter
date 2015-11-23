@@ -323,8 +323,11 @@ initialized({create, Package, Dataset, VMSpec},
                 ok ->
                     lager:debug("[create:~s] Done installing image going to "
                                 "create now.", [UUID]),
-                    spawn_create(UUID, VMData, VMSpec),
+                    %% We run the zlogin first even so no zone will be
+                    %% existing at that point, but we need that to be
+                    %% running already when the vmadm is doing it's work
                     chunter_zlogin:start(UUID, ZoneType),
+                    do_create(UUID, VMData, VMSpec),
                     {next_state, creating,
                      State#state{type = Type,
                                  zone_type = ZoneType,
@@ -1532,22 +1535,20 @@ howl_update(UUID, Data) ->
     libhowl:send(UUID, [{<<"event">>, <<"update">>},
                         {<<"data">>, Data}]).
 
-spawn_create(UUID, CreateJSON, VMSpec) ->
-    spawn(fun() ->
-                  case chunter_vmadm:create(UUID, CreateJSON) of
-                      ok ->
-                          lager:debug(
-                            "[create:~s] Done creating continuing on.", [UUID]),
-                          Org = jsxd:get(<<"owner">>, <<>>, VMSpec),
-                          confirm_create(UUID, Org);
-                      {error, E} ->
-                          lager:error(
-                            "[create:~s] Failed to create with error: ~p",
-                            [UUID, E]),
-                          change_state(UUID, <<"failed">>),
-                          delete(UUID)
-                  end
-          end).
+do_create(UUID, CreateJSON, VMSpec) ->
+    case chunter_vmadm:create(UUID, CreateJSON) of
+        ok ->
+            lager:debug(
+              "[create:~s] Done creating continuing on.", [UUID]),
+            Org = jsxd:get(<<"owner">>, <<>>, VMSpec),
+            confirm_create(UUID, Org);
+        {error, E} ->
+            lager:error(
+              "[create:~s] Failed to create with error: ~p",
+              [UUID, E]),
+            change_state(UUID, <<"failed">>),
+            delete(UUID)
+    end.
 
 confirm_create(_UUID, <<>>) ->
     ok;

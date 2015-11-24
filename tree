@@ -5,7 +5,7 @@
 ├─ eper─0.94.0
 ├─ erlsom─1.2.1
 ├─ erltrace─0.1.4
-├─ fifo_dt─0.1.57
+├─ fifo_dt─0.1.58
 │  ├─ libsnarlmatch─0.1.7
 │  └─ riak_dt─2.1.1
 ├─ fifo_lager─0.1.1
@@ -15,19 +15,19 @@
 │  ├─ base16─1.0
 │  ├─ erlcloud─0.8.6
 │  └─ poolboy─1.5.1
-├─ fifo_spec─0.1.23
+├─ fifo_spec─0.1.24
 ├─ fifo_utils─0.1.17
 ├─ jsx─1.4.5
 ├─ jsxd─0.1.10
 ├─ lager─2.1.1
 │  └─ goldrush─0.1.7
-├─ libhowl─0.1.29
+├─ libhowl─0.1.30
 │  └─ mdns_client_lib─0.1.30
 │     ├─ mdns_client─0.1.7
 │     └─ pooler─1.4.0
-├─ libsnarl─0.3.34
+├─ libsnarl─0.3.35
 │  └─ oauth2─0.6.0
-├─ libsniffle─0.3.31
+├─ libsniffle─0.3.32
 ├─ ranch─1.1.0
 ├─ recon─2.2.1
 ├─ smurf─0.1.3

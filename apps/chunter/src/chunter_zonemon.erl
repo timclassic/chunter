@@ -113,34 +113,18 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(zonecheck, State) ->
-    case chunter_utils:system() of
-        smartos ->
-            [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-                [ID,_Name,VMState,_Path,UUID,_Type,_IP,_SomeNumber] <-
-                    [re:split(Line, ":")
-                     || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-                ID =/= <<"0">>];
-        omnios ->
-            [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
-                [ID, UUID, VMState, _Path,_OtherUUID,_Type,_IP] <-
-                    [re:split(Line, ":")
-                     || Line <- re:split(os:cmd("/usr/sbin/zoneadm list -ip"), "\n")],
-                ID =/= <<"0">>]
-        end,
+    [chunter_vm_fsm:force_state(UUID, simplifie_state(VMState)) ||
+        #{uuid := UUID, state := VMState} <- chunter_zone:list_()],
     {noreply, State};
 
-
-handle_info({_Port, {data, {eol, Data}}}, #state{name=_Name, port=_Port} = State) ->
+handle_info({_Port, {data, {eol, Data}}},
+            #state{name=_Name, port=_Port} = State) ->
     case parse_data(Data) of
         {error, unknown} ->
-            %%       statsderl:increment([Name, ".vm.zonewatchdog_error"], 1, 1),
             lager:error("watchdog:zone - unknwon message: ~p", [Data]);
         {_UUID, <<"crate">>} ->
-            %%       statsderl:increment([Name, ".vm.create"], 1, 1),
-            %%chunter_vm_fsm:load(UUID);
             ok;
         {UUID, Action} ->
-            %%       statsderl:increment([Name, ".vm.", UUID, ".state_change"], 1, 1),
             chunter_vm_fsm:transition(UUID, simplifie_state(Action))
     end,
     {noreply, State};
@@ -203,7 +187,8 @@ simplifie_state(<<"dying">>) ->
 simplifie_state(<<"dead">>) ->
     <<"stopped">>.
 
--spec parse_data(binary()) -> {UUID::fifo:uuid(), State::binary()} | {error, unknown}.
+-spec parse_data(binary()) ->
+                        {UUID::fifo:uuid(), State::binary()} | {error, unknown}.
 
 parse_data(<<"S00: ", UUID/binary>>) ->
     {UUID, <<"uninitialized">>};

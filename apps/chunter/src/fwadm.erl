@@ -104,8 +104,8 @@ convert(VM, {Action, outbound, Dst, {Proto, Filter}}) ->
     [{Action, [{vm, VM}], [D], Proto, Filter} || D <- convert_target(Dst)];
 
 convert(VM, {Action, Dst, inbound, Src, {Proto, Filter}}) ->
-    [{Action, [S], [D], Proto, Filter} ||
-        S <- convert_target(Src), D <- convert_vm(VM, Dst)];
+    %% Inbound is the reverse of outboutl, go figure!
+    convert(VM, {Action, Src, outbound, Dst, {Proto, Filter}});
 
 convert(VM, {Action, Src, outbound, Dst, {Proto, Filter}}) ->
     [{Action, [S], [D], Proto, Filter} ||
@@ -116,7 +116,7 @@ build({Action, Src, Dst, icmp, Tags}) ->
 
 build({Action, Src, Dst, Protocol, all})
   when Protocol =:= udp; Protocol =:= tcp ->
-    [build1(Action, Src, Dst), atom_to_list(Protocol)," PORT all"];
+    [build1(Action, Src, Dst), atom_to_list(Protocol), " PORT all"];
 
 build({Action, Src, Dst, Protocol, Ports})
   when Protocol =:= udp; Protocol =:= tcp ->
@@ -214,8 +214,8 @@ read_result(P, Acc) ->
     receive
         {P, {data, {_, Data}}} ->
             read_result(P, <<Acc/binary, Data/binary>>);
-        {P,{exit_status, 0}} -> {ok, Acc};
-        {P,{exit_status, N}} -> {error, N, Acc}
+        {P, {exit_status, 0}} -> {ok, Acc};
+        {P, {exit_status, N}} -> {error, N, Acc}
     end.
 -spec convert_target(fifo:fw_target()) ->
                             fifo:smartos_fw_targets().
@@ -345,7 +345,8 @@ build_target_test() ->
     ?assertEqual("ip 1.2.3.4", bt({ip, 16#01020304})),
     ?assertEqual("subnet 10.0.0.0/24", bt({subnet, 16#0A000000, 24})),
     ?assertEqual("tag \"test\"", bt({tag, <<"test">>})),
-    ?assertEqual("tag \"test\" = \"toast\"", bt({tag, <<"test">>, <<"toast">>})),
+    ?assertEqual("tag \"test\" = \"toast\"",
+                 bt({tag, <<"test">>, <<"toast">>})),
     ok.
 
 
@@ -363,7 +364,7 @@ build_test() ->
     ?assertEqual(
        "FROM subnet 10.8.0.0/16 TO vm 0f570678-c007-4610-a2c0-bbfcaab9f4e6 "
        "ALLOW tcp PORT 443",
-       b({allow, [{subnet, 16#0A080000,16}],
+       b({allow, [{subnet, 16#0A080000, 16}],
           [{vm, "0f570678-c007-4610-a2c0-bbfcaab9f4e6"}], tcp, [443]})),
     ?assertEqual(
        "FROM all vms TO tag \"syslog\" ALLOW udp PORT 514",

@@ -20,12 +20,15 @@
 -ignore_xref([start_link/0]).
 
 -define(SERVER, ?MODULE).
--define(HEATRBEAT_INTERVAL, 1000). % 2 seconds - zonedoor terminates after 7 sec of no HB. Allow 2 misses
--define(LINE_WIDTH, 2048). % 2 seconds - zonedoor terminates after 7 sec of no HB. Allow 2 misses
+%% 1 seconds - zonedoor terminates after 7 sec of no HB. Allow 6 misses
+-define(HEATRBEAT_INTERVAL, 1000).
+-define(LINE_WIDTH, 2048).
 
 
 -record(door, {ref, zone, door, pid, monitor, module}).
 -record(state, {port, doors=[]}).
+-define(OPTS,
+        [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status, binary]).
 
 %%%===================================================================
 %%% API
@@ -63,10 +66,7 @@ remove(Ref) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    Cmd = code:priv_dir(chunter) ++ "/zonedoor",
-    PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
-                binary],
-    DoorPort = open_port({spawn_executable, Cmd},  PortOpts),
+    DoorPort = zdoor_port(),
     erlang:send_after(?HEATRBEAT_INTERVAL, self(), heartbeat),
     process_flag(trap_exit, true),
     {ok, #state{port = DoorPort}}.
@@ -99,12 +99,11 @@ handle_call({add, Module, ZoneUUID, DoorName}, {From, _},
     %%lager:info("[ezdoor] Requesting door for ~s/~s", [ZoneUUID, DoorName]),
     case zdoor_exists(ZoneUUID, DoorName, Doors) of
         true ->
-            %%lager:info("[ezdoor] ~s/~s already exists.", [ZoneUUID, DoorName]),
             {reply, {error, doublicate}, State};
         false ->
             Ref = make_ref(),
             lager:info("[ezdoor] ~s/~s created.", [ZoneUUID, DoorName]),
-            port_command(Port, [$a, ZoneUUID, $\s, DoorName, $\s, r2s(Ref), $\n]),
+            port_command(Port, cmd_add(ZoneUUID, DoorName, Ref)),
             MRef = do_monitor(From, Doors),
             Door = #door{ref=Ref, zone=ZoneUUID, door=DoorName, pid=From,
                          monitor=MRef, module=Module},
@@ -115,7 +114,7 @@ handle_call({remove, Ref}, {From, _},
             State = #state{port = Port, doors = Doors}) ->
     case find_door(Ref, Doors) of
         {ok, D = #door{zone=UUID, door=Door}} ->
-            port_command(Port, [$d, UUID, $\s, Door, $\n]),
+            port_command(Port, cmd_del(UUID, Door)),
             Doors1 = lists:delete(D, Doors),
             case find_monitor(From, Doors1) of
                 undefined ->
@@ -163,11 +162,8 @@ handle_info(heartbeat, State) ->
 handle_info({'EXIT', _Port, Reason},
             State = #state{port = _Port, doors = Doors}) ->
     lager:warning("[ezdoor] Port exited with reason: ~p", [Reason]),
-    Cmd = code:priv_dir(chunter) ++ "/zonedoor",
-    PortOpts = [{args, []}, use_stdio, {line, ?LINE_WIDTH}, exit_status,
-                binary],
-    DoorPort = open_port({spawn_executable, Cmd},  PortOpts),
-    [port_command(DoorPort, [$a, UUID, $\s, Door, $\s, r2s(Ref), $\n]) ||
+    DoorPort = zdoor_port(),
+    [port_command(DoorPort, cmd_add(UUID, Door, Ref)) ||
         #door{ref=Ref, zone=UUID, door=Door} <- Doors],
     {noreply, State#state{port = DoorPort}};
 
@@ -175,17 +171,17 @@ handle_info({'DOWN', MRef, _Type, _Object, _Info} = Msg,
             State = #state{doors = Doors, port = Port}) ->
     lager:error("[zonedoor] Client down: ~p", [Msg]),
     Doors1 = [D || D<-Doors, D#door.monitor /= MRef],
-    [port_command(Port, [$d, Zone, $\s, Door, $\n])
+    [port_command(Port, cmd_del(Zone, Door))
      || #door{zone=Zone, door=Door, monitor=AMRef}<-Doors, AMRef == MRef],
     {noreply, State#state{doors = Doors1}};
 
-handle_info({Port, {data, {eol,Data}}},
+handle_info({Port, {data, {eol, Data}}},
             State = #state{port = Port, doors=Doors}) ->
     {Ref, Cmd} = extract_ref(Data),
     case find_door(Ref, Doors) of
         {ok, #door{pid=Pid, module=Mod}} ->
-            {ok, Res} = Mod:door_event(Pid, Ref, Cmd),
-            port_command(Port, [$r, Res, $\n]);
+            {ok, Res} = ezdoor_behaviour:event(Mod, Pid, Ref, Cmd),
+            port_command(Port, cmd_reply(Res));
         _ ->
             ok
     end,
@@ -207,8 +203,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 terminate(shutdown, #state{port = Port, doors = Doors}) ->
     [begin
-         port_command(Port, [$d, Zone, $\s, Door, $\n]),
-         Mod:door_event(Pid, Ref, down)
+         port_command(Port, cmd_del(Zone, Door)),
+         ezdoor_behaviour:event(Mod, Pid, Ref, down)
      end
      || #door{zone=Zone, door=Door, pid=Pid, module=Mod, ref=Ref}<-Doors],
     incinerate(Port),
@@ -286,3 +282,16 @@ incinerate(Port) ->
         undefined ->
             lager:warning("Process has no pid not incinerating.")
     end.
+
+zdoor_port() ->
+    Cmd = code:priv_dir(chunter) ++ "/zonedoor",
+    open_port({spawn_executable, Cmd}, ?OPTS).
+
+cmd_add(ZoneUUID, DoorName, Ref) ->
+    [$a, ZoneUUID, $\s, DoorName, $\s, r2s(Ref), $\n].
+
+cmd_del(ZoneUUID, DoorName) ->
+    [$d, ZoneUUID, $\s, DoorName, $\n].
+
+cmd_reply(Reply) ->
+    [$r, Reply, $\n].

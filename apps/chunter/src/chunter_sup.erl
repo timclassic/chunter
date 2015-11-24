@@ -24,12 +24,6 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    ArkSrvs = case application:get_env(chunter, kstat_arc) of
-                  {ok, false} ->
-                      [];
-                  _ ->
-                      [?CHILD(chunter_kstat_arc, worker)]
-              end,
     {ok, {{one_for_one, 5, 10},
           [
            ?CHILD(ezdoor_server, worker),
@@ -39,4 +33,4 @@ init([]) ->
            ?CHILD(chunter_server, worker),
            ?CHILD(chunter_zpool_monitor, worker),
            ?CHILD(chunter_zonemon, worker)
-          ] ++ ArkSrvs}}.
+          ]}}.

@@ -84,27 +84,7 @@ zfs(Cmd, Args, Target) ->
 
 zfs(Args) ->
     lager:debug("ZFS: ~s ~p", [?ZFS, Args]),
-    Port = port(?ZFS, Args),
-    wait_for_port(Port, <<>>).
-
-port(Cmd, Args) when is_list(Cmd)  ->
-    open_port({spawn_executable, Cmd},
-              [use_stdio, binary, {line, 1000}, {args, Args}, stderr_to_stdout,
-               exit_status]).
-
-
-wait_for_port(Port, Reply) ->
-    receive
-        {Port, {data, {eol, Data}}} ->
-            wait_for_port(Port, <<Reply/binary, Data/binary>>);
-        {Port, {data, Data}} ->
-            wait_for_port(Port, <<Reply/binary, Data/binary>>);
-        {Port,{exit_status, 0}} ->
-            {ok, Reply};
-        {Port,{exit_status, S}} ->
-            {error, S, Reply}
-    end.
-
+    fifo_cmd:run(?ZFS, Args).
 
 build_opts([], _) ->
     "";

@@ -1,6 +1,6 @@
 .PHONY: deps rel package quick-test tree
 
-all: apps/chunter/priv/zonedoor compile version_header
+all: apps/chunter/priv/zonedoor version_header compile 
 
 include fifo.mk
 

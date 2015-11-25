@@ -21,7 +21,7 @@ handle_event({disconnected, "sniffle"}, State) ->
     chunter_server:disconnect(),
     {ok, State};
 
-handle_event(X, State) ->
+handle_event(_Event, State) ->
     {ok, State}.
 
 handle_info(_, State) ->

@@ -17,7 +17,10 @@ call(UUID, R = [{<<"action">>, <<"cluster-", _/binary>>} | _]) ->
     check_call(grouping_api, UUID, R);
 
 call(UUID, R = [{<<"action">>, <<"stack-", _/binary>>} | _]) ->
-    check_call(grouping_api, UUID, R).
+    check_call(grouping_api, UUID, R);
+
+call(UUID, R = [{<<"action">>, <<"remote-", _/binary>>} | _]) ->
+    check_call(remote_api, UUID, R).
 
 check_call(Type, UUID, R) ->
     case enabled(Type) of
@@ -27,8 +30,14 @@ check_call(Type, UUID, R) ->
             {error, "disabled"}
     end.
 
+call_(_UUID, [{<<"action">>, <<"remote-stop">>}])->
+    {error, "not implemented!"};
+
+call_(_UUID, [{<<"action">>, <<"remote-start">>}])->
+    {error, "not implemented!"};
+
 call_(UUID, [{<<"action">>, <<"snapshot-create">>},
-            {<<"comment">>, Comment}]) ->
+             {<<"comment">>, Comment}]) ->
     case ls_vm:snapshot(UUID, Comment) of
         {ok, SUUID} ->
             {ok, [{uuid, SUUID}]};
@@ -45,7 +54,7 @@ call_(UUID, [{<<"action">>, <<"snapshot-list">>}]) ->
     end;
 
 call_(UUID, [{<<"action">>, <<"snapshot-get">>},
-            {<<"uuid">>, SnapID}]) ->
+             {<<"uuid">>, SnapID}]) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
             Snaps = ft_vm:snapshots(V),
@@ -68,7 +77,7 @@ call_(UUID, [{<<"action">>, <<"metadata-get">>}]) ->
     end;
 
 call_(UUID, [{<<"action">>, <<"metadata-set">>},
-            {<<"data">>, D}]) ->
+             {<<"data">>, D}]) ->
     case ls_vm:get(UUID) of
         {ok, V} ->
             Size = byte_size(term_to_binary(ft_vm:metadata(V))) +
@@ -93,8 +102,16 @@ call_(UUID, [{<<"action">>, <<"cluster-get">>}]) ->
             E
     end;
 
+call_(UUID, [{<<"action">>, <<"cluster-vms">>}]) ->
+    case grouping(UUID) of
+        {ok, _, G} ->
+            {ok, ft_grouping:elements(G)};
+        E ->
+            E
+    end;
+
 call_(UUID, [{<<"action">>, <<"cluster-set">>},
-            {<<"data">>, D}]) ->
+             {<<"data">>, D}]) ->
     case grouping(UUID) of
         {ok, GID, G} ->
             set_grouping_config(GID, G, D);
@@ -110,8 +127,16 @@ call_(UUID, [{<<"action">>, <<"stack-get">>}]) ->
             E
     end;
 
+call_(UUID, [{<<"action">>, <<"stack-vms">>}]) ->
+    case stack(UUID) of
+        {ok, _, G} ->
+            {ok, stack_vms(G)};
+        E ->
+            E
+    end;
+
 call_(UUID, [{<<"action">>, <<"stack-set">>},
-            {<<"data">>, D}]) ->
+             {<<"data">>, D}]) ->
     case stack(UUID) of
         {ok, GID, G} ->
             set_grouping_config(GID, G, D);
@@ -128,8 +153,8 @@ call_(UUID, [{<<"action">>, <<"backup-list">>}]) ->
     end;
 
 call_(UUID, [{<<"action">>, <<"backup-create">>},
-            {<<"comment">>, Comment},
-            {<<"delete">>, Delete}]) ->
+             {<<"comment">>, Comment},
+             {<<"delete">>, Delete}]) ->
     Opts = case Delete of
                true ->
                    [delete, xml];
@@ -144,9 +169,9 @@ call_(UUID, [{<<"action">>, <<"backup-create">>},
     end;
 
 call_(UUID, [{<<"action">>, <<"backup-create">>},
-            {<<"comment">>, Comment},
-            {<<"delete">>, Delete},
-            {<<"parent">>, Parent}]) ->
+             {<<"comment">>, Comment},
+             {<<"delete">>, Delete},
+             {<<"parent">>, Parent}]) ->
     Opts = case Delete of
                true ->
                    [delete, xml];
@@ -193,6 +218,7 @@ grouping(UUID) ->
         E ->
             E
     end.
+
 stack_id(UUID) ->
     case grouping(UUID) of
         {ok, _, G} ->
@@ -222,6 +248,15 @@ stack(UUID) ->
 enabled(Action) ->
     application:get_env(chunter, Action, true).
 
+stack_vms(Stack) ->
+    Clusters = ft_grouping:elements(Stack),
+    [{UUID, grouping_elements(UUID)} || UUID <- Clusters].
+
+grouping_elements(UUID) ->
+    {ok, G} = ls_grouping:get(UUID),
+    ft_grouping:elements(G).
+
+
 set_grouping_config(GID, G, D) ->
     Size = byte_size(term_to_binary(ft_grouping:config(G))) +
         byte_size(term_to_binary(D)),
@@ -233,3 +268,4 @@ set_grouping_config(GID, G, D) ->
             {ok, G1} = ls_grouping:get(GID),
             {ok, ft_grouping:config(G1)}
     end.
+

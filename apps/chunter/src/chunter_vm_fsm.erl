@@ -89,6 +89,17 @@
 -define(AUTH_DOOR, "_joyent_sshd_key_is_authorized").
 -define(API_DOOR, "_fifo").
 
+-type snapshot_fun() :: fun((binary(), binary(), binary(), [term()]) ->
+                                   {ok, binary()} |
+                                   {error, integer(), binary()}).
+
+-type snapshot_complete_fun() :: fun((_, _, _, _) ->
+                                            'error' |
+                                            'ok' |
+                                            {'error', 'no_servers'}).
+
+-type snapshot_res() :: {error, binary()} | {ok, binary()}.
+
 
 %%%===================================================================
 %%% API
@@ -1120,23 +1131,41 @@ finish_backup(VM, UUID, Opts, ok) ->
 finish_backup(_VM, _UUID, _, error) ->
     error.
 
-snapshot_action_on_disks(_VM, _UUID, _Fun, {error, E}, _Disks, _Opts) ->
-    {error, E};
+-spec snapshot_action_on_disks(VM :: binary(),
+                               UUID :: binary(),
+                               Fun :: snapshot_fun(),
+                               Res :: snapshot_res(),
+                               Disks ::[[{binary(), term()}]],
+                               Opts :: [term()]) -> snapshot_res().
 snapshot_action_on_disks(VM, UUID, Fun, LastReply, Disks, Opts) ->
     AccIn = {{VM, UUID, Fun, Opts}, LastReply},
-    {_, Reply} = lists:foldl(fun snapshot_fold/2, AccIn, Disks),
-    Reply.
+    case lists:foldl(fun snapshot_fold/2, AccIn, Disks) of
+        {error, _} = E -> E;
+        {_, Reply} ->
+            Reply
+    end.
+
+-type disk_fold_acc() :: {error, binary()} |
+                      {{VM :: binary(),
+                        UUID :: binary(),
+                        Fun :: snapshot_fun(),
+                        Opts :: [term()]},
+                       {ok, binary()}}.
+
+-spec snapshot_fold(Disk :: [{binary(), term()}],
+                    Return :: disk_fold_acc()) ->
+                           disk_fold_acc().
 
 snapshot_fold(_, {error, _E} = R) ->
     R;
-snapshot_fold(Disk, {Env = {VM, UUID, Fun, Opts}, {S, Reply0}}) ->
+snapshot_fold(Disk, {Env = {VM, UUID, Fun, Opts}, {ok, Reply0}}) ->
     case jsxd:get(<<"path">>, Disk) of
         {ok, <<_:14/binary, P1/binary>>} ->
             case Fun(P1, VM, UUID, Opts) of
                 {ok, Res} ->
-                    {Env, {S, <<Reply0/binary, "\n", Res/binary>>}};
+                    {Env, {ok, <<Reply0/binary, "\n", Res/binary>>}};
                 {ok, Res, _} ->
-                    {Env, {S, <<Reply0/binary, "\n", Res/binary>>}};
+                    {Env, {ok, <<Reply0/binary, "\n", Res/binary>>}};
                 {error, Code, Res} ->
                     lager:error("Failed snapshot disk ~s from VM ~s ~p:~s.",
                                 [P1, VM, Code, Res]),
@@ -1164,22 +1193,27 @@ snapshot_action1(VM, Spec, UUID, Fun, CompleteFun, Opts) ->
     case jsxd:get(<<"zonepath">>, Spec) of
         {ok, P} ->
             case Fun(P, VM, UUID, Opts) of
+                %% TODO can this even happen?
                 {ok, Rx, _} ->
-                    snapshot_action2(VM, Spec, {ok, Rx},
-                                     UUID, Fun, CompleteFun, Opts),
+                    snapshot_action2(VM, Spec, UUID, {ok, Rx}, Fun,
+                                     CompleteFun, Opts),
+                    {ok, Rx};
+                {ok, Rx} ->
+                    snapshot_action2(VM, Spec, UUID, {ok, Rx}, Fun,
+                                     CompleteFun, Opts),
                     {ok, Rx};
                 {error, Code, Reply} ->
                     lager:error("Failed snapshot VM ~s ~p: ~s.",
                                 [VM, Code, Reply]),
                     ls_vm:log(VM, <<"Failed to snapshot: ",
                                     Reply/binary>>),
-                    CompleteFun(VM, UUID, Opts, error);
-                _ ->
-                    lager:error("Failed to snapshot VM ~s.", [VM]),
-                    ls_vm:log(VM, <<"Failed snapshot: can't find zonepath.">>),
-                    error
+                    CompleteFun(VM, UUID, Opts, error)
             end
     end.
+
+-spec snapshot_action2(binary(), term(), binary(), {'ok', binary()},
+                       snapshot_fun(), snapshot_complete_fun(), [term()]) ->
+                              'error' | 'ok' | {'error', 'no_servers'}.
 
 snapshot_action2(VM, Spec, UUID, R0, Fun, CompleteFun, Opts) ->
     Disks = jsxd:get(<<"disks">>, [], Spec),
@@ -1194,7 +1228,7 @@ snapshot_action2(VM, Spec, UUID, R0, Fun, CompleteFun, Opts) ->
                          [{<<"event">>, <<"snapshot">>},
                           {<<"data">>,
                            [{<<"action">>, <<"error">>},
-                            {<<"message">>, list_to_binary(E)},
+                            {<<"message">>, E},
                             {<<"uuid">>, UUID}]}]),
             lager:error("Snapshot failed with: ~p", E),
             CompleteFun(VM, UUID, Opts, error)

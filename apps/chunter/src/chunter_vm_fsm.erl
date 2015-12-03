@@ -1164,7 +1164,12 @@ snapshot_action1(VM, Spec, UUID, Fun, CompleteFun, Opts) ->
     case jsxd:get(<<"zonepath">>, Spec) of
         {ok, P} ->
             case Fun(P, VM, UUID, Opts) of
+                %% TODO can this even happen?
                 {ok, Rx, _} ->
+                    snapshot_action2(VM, Spec, {ok, Rx},
+                                     UUID, Fun, CompleteFun, Opts),
+                    {ok, Rx};
+                {ok, Rx} ->
                     snapshot_action2(VM, Spec, {ok, Rx},
                                      UUID, Fun, CompleteFun, Opts),
                     {ok, Rx};
@@ -1173,11 +1178,7 @@ snapshot_action1(VM, Spec, UUID, Fun, CompleteFun, Opts) ->
                                 [VM, Code, Reply]),
                     ls_vm:log(VM, <<"Failed to snapshot: ",
                                     Reply/binary>>),
-                    CompleteFun(VM, UUID, Opts, error);
-                _ ->
-                    lager:error("Failed to snapshot VM ~s.", [VM]),
-                    ls_vm:log(VM, <<"Failed snapshot: can't find zonepath.">>),
-                    error
+                    CompleteFun(VM, UUID, Opts, error)
             end
     end.
 

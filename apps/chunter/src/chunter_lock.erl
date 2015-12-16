@@ -118,10 +118,10 @@ handle_call({lock, UUID}, _From, #state{lock = {UUID, Old}} = State) ->
 handle_call({lock, NewUUID}, _From, #state{lock = {OldUUID, Old}} = State) ->
     case erlang:system_time(milli_seconds) - Old of
         D when D > ?LOCK_TIMEOUT ->
-            io:format("~p > ~p ~n.", [D, ?LOCK_TIMEOUT]),
             lager:warning("[lock] Lock ~s timed out after ~ps and replaced by "
                           "~s.", [OldUUID, D/1000, NewUUID]),
-            {reply, ok, State#state{lock = {NewUUID, erlang:system_time(milli_seconds)}}};
+            NewTime = erlang:system_time(milli_seconds),
+            {reply, ok, State#state{lock = {NewUUID, NewTime}}};
         D ->
             lager:info("[lock] Lock ~s rejected old lock ~s still in effect "
                        "for another ~ps.",

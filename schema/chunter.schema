@@ -66,12 +66,6 @@
  [{default, 10},
   {datatype, integer}]}.
 
-%% @doc Enables or disables the ARC stats for this server.
-
-{mapping, "kstat.arc", "chunter.kstat_arc",
- [{default, enabled},
-  {datatype, {flag, enabled, disabled}}]}.
-
 
 %% @doc The interval services for a zone are checked, the default is 10s
 %% changes are noted even when the state is the same at least for the nsq
@@ -108,14 +102,6 @@
   {datatype, {duration, ms}}]}.
 
 
-%% @doc The interval in which the systems ARC status is checked, this is
-%% purely informational and slowly changing a higher interval is usually
-%% not a issue.
-{mapping, "arc_interval", "chunter.arc_interval",
- [{default, "30s"},
-  {datatype, {duration, ms}}]}.
-
-
 %% @doc The port And IP chunter does listen on, usually it will be
 %% auto detected as the first network iterface in the system, if it still
 %% needs to be changed it can be done here.
@@ -137,17 +123,16 @@
  end
 }.
 
-%% @doc cpu_type used for creating VM's. This only applies to KVM machines,
-%% 'default' will not set the option at all. Please see 'man vmadm' for details.
-{mapping, "cpu_type", "chunter.cpu_type",
- [{default, default},
-  {datatype, {enum, [default, qemu64, host]}}]}.
-
 %% @doc zone root for creating new zones
 {mapping, "zone_root", "chunter.zone_root",
  [{default, "/zones"},
   {datatype, string}]}.
 
+%% @doc Default resolvers when not provided as part of the VM config
+{mapping, "resolvers", "chunter.resolvers",
+ [{default, "8.8.8.8,8.8.4.4"},
+  {commented, "8.8.8.8,8.8.4.4"},
+  {datatype, string}]}.
 
 %% @doc network mappings only apply for OmniOS hosts, they are handled in the
 %% /usbkey/config in SmartOS and this setting iwll be ignored there.

@@ -37,100 +37,87 @@ upload(<<_:1/binary, P/binary>>, VM, SnapID, Options) ->
     S3Host = proplists:get_value(s3_host, Options),
     S3Port = proplists:get_value(s3_port, Options),
     Bucket = proplists:get_value(s3_bucket, Options),
-    {ok, Upload} = fifo_s3_upload:new(AKey, SKey, S3Host, S3Port, Bucket, Target),
+    {ok, Upload} = fifo_s3_upload:new(AKey, SKey, S3Host, S3Port, Bucket,
+                                      Target),
     Cmd = code:priv_dir(chunter) ++ "/zfs_export.gzip.sh",
     Prt = case proplists:get_value(parent, Options) of
               undefined ->
-                  lager:debug("Running ZFS command: ~p ~s ~s",
-                              [Cmd, P, SnapID]),
-                  open_port({spawn_executable, Cmd},
-                            [{args, [P, SnapID]}, use_stdio, binary,
-                             stderr_to_stdout, exit_status, stream]);
+                  run(Cmd, [P, SnapID]);
               Inc ->
                   backup_update(VM, SnapID, <<"parent">>, Inc, Options),
-                  lager:debug("Running ZFS command: ~p ~s ~s ~s",
-                              [Cmd, P, SnapID, Inc]),
-                  open_port({spawn_executable, Cmd},
-                            [{args, [P, SnapID, Inc]}, use_stdio, binary,
-                             stderr_to_stdout, exit_status, stream])
+                  run(Cmd, [P, SnapID, Inc])
           end,
     backup_update(VM, SnapID, <<"state">>, <<"uploading">>, Options),
-    backup_update(VM, SnapID, <<"size">>, 0, Options),
-    {ok, VMObj} = ls_vm:get(VM),
-    Backups = ft_vm:backups(VMObj),
-    Size = jsxd:get([SnapID, <<"size">>], 0, Backups),
-    Fs = jsxd:get([SnapID, <<"files">>], [], Backups),
-    backup_update(VM, SnapID, <<"files">>, [Target | Fs], Options),
+    backup_update(VM, SnapID, [<<"files">>, Target, <<"size">>], 0, Options),
     Ctx = crypto:hash_init(sha),
-    upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, Size, Ctx, Options).
+    upload_to_cloud(VM, SnapID, Prt, Upload, <<>>, Chunk, 0, Ctx, Target,
+                    Options).
 
 
-upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Options) ->
-    case AccIn of
-        <<MB:Chunk/binary, Acc/binary>> ->
-            case fifo_s3_upload:part(Upload, binary:copy(MB)) of
+%% Wish we could match on binary AccIn in the haed sadly erlang doesn't allow
+%% that :/
+upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Target,
+                Options) when byte_size(AccIn) >= Chunk ->
+    <<MB:Chunk/binary, Acc/binary>> = AccIn,
+    case fifo_s3_upload:part(Upload, binary:copy(MB)) of
+        ok ->
+            lager:debug("Uploading: ~p MB.", [round(Size/1024/1024)]),
+            update_size(UUID, SnapID, Target, Size, Options),
+            upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk,
+                            Size, Ctx, Target, Options);
+        {error, E} ->
+            fail_upload(UUID, SnapID, Upload, Options, E),
+            {error, 3, E}
+    end;
+
+upload_to_cloud(UUID, SnapID, Port, Upload, AccIn, Chunk, Size, Ctx, Target,
+                Options) ->
+    receive
+        {Port, {data, Data}} ->
+            Size1 = Size + byte_size(Data),
+            Ctx1 = crypto:hash_update(Ctx, Data),
+            upload_to_cloud(UUID, SnapID, Port, Upload,
+                            <<AccIn/binary, Data/binary>>, Chunk, Size1,
+                            Ctx1, Target, Options);
+        {Port, {exit_status, 0}} ->
+            R = case AccIn of
+                    <<>> ->
+                        ok;
+                    _ ->
+                        fifo_s3_upload:part(Upload, binary:copy(AccIn))
+                end,
+            case R of
                 ok ->
-                    lager:debug("Uploading: ~p MB.", [round(Size/1024/1024)]),
-                    backup_update(UUID, SnapID, <<"size">>, Size, Options),
-                    upload_to_cloud(UUID, SnapID, Port, Upload, Acc, Chunk,
-                                    Size, Ctx, Options);
-                {error, E} ->
-                    fifo_s3_upload:abort(Upload),
-                    lager:error("Upload error: ~p", [E]),
-                    backup_update(UUID, SnapID, <<"state">>, <<"upload failed">>, Options),
-                    {error, 3, E}
-            end;
-        Acc ->
-            receive
-                {Port, {data, Data}} ->
-                    Size1 = Size + byte_size(Data),
-                    Ctx1 = crypto:hash_update(Ctx, Data),
-                    upload_to_cloud(UUID, SnapID, Port, Upload,
-                                    <<Acc/binary, Data/binary>>, Chunk, Size1,
-                                    Ctx1, Options);
-                {Port, {exit_status, 0}} ->
-                    R = case Acc of
-                            <<>> ->
-                                fifo_s3_upload:done(Upload),
-                                ok;
-                            _ ->
-                                case fifo_s3_upload:part(Upload, binary:copy(Acc)) of
-                                    ok ->
-                                        fifo_s3_upload:done(Upload),
-                                        lager:debug("Upload done."),
-                                        ok;
-                                    {error, Err} ->
-                                        lager:error("Upload error: ~p", [Err]),
-                                        {error, Err}
-                                end
-                        end,
-                    case R of
-                        ok ->
-                            lager:debug("Upload complete: ~p MB.",
-                                        [round(Size/1024/1024)]),
-                            backup_update(UUID, SnapID, <<"size">>, Size,
-                                          Options),
-                            Digest = base16:encode(crypto:hash_final(Ctx)),
-                            backup_update(UUID, SnapID, <<"sha1">>, Digest,
-                                          Options),
-                            M = io_lib:format("Uploaded ~s with a total size of"
-                                              " done: ~p", [UUID, Size]),
+                    fifo_s3_upload:done(Upload),
+                    lager:debug("Upload complete: ~p MB.",
+                                [round(Size/1024/1024)]),
+                    update_size(UUID, SnapID, Target, Size, Options),
+                    Digest = base16:encode(crypto:hash_final(Ctx)),
+                    backup_update(UUID, SnapID,
+                                  [<<"files">>, Target, <<"sha1">>],
+                                  Digest, Options),
+                    M = io_lib:format("Uploaded ~s with a total size of"
+                                      " done: ~p", [UUID, Size]),
 
-                            {ok, list_to_binary(M), Digest};
-                        {error, E} ->
-                            fifo_s3_upload:abort(Upload),
-                            backup_update(UUID, SnapID, <<"state">>,
-                                          <<"upload failed">>, Options),
-                            {error, 2, E}
-                    end;
-                {Port, {exit_status, S}} ->
-                    fifo_s3_upload:abort(Upload),
-                    lager:error("Upload error: ~p", [S]),
-                    backup_update(UUID, SnapID, <<"state">>,
-                                  <<"upload failed">>, Options),
-                    {error, S, <<"upload failed">>}
-            end
+                    {ok, list_to_binary(M), Digest};
+                {error, E} ->
+                    fail_upload(UUID, SnapID, Upload, Options, E),
+                    {error, 2, E}
+            end;
+        {Port, {exit_status, S}} ->
+            fail_upload(UUID, SnapID, Upload, Options, S),
+            {error, S, <<"upload failed">>}
     end.
+fail_upload(UUID, SnapID, Upload, Options, Error) ->
+    fifo_s3_upload:abort(Upload),
+    lager:error("Upload error: ~p", [Error]),
+    backup_update(UUID, SnapID, <<"state">>, <<"failed">>, Options).
+
+update_size(UUID, SnapID, Target, Size, Options) ->
+    backup_update(UUID, SnapID,
+                  [<<"files">>, Target, <<"size">>],
+                  Size, Options).
+
 
 download(<<_:1/binary, P/binary>>, VM, SnapID, SHA1, Options) ->
     Disk = case P of
@@ -156,10 +143,7 @@ download(<<_:1/binary, P/binary>>, VM, SnapID, SHA1, Options) ->
     {ok, Download} = fifo_s3_download:new(AKey, SKey, S3Host, S3Port, Bucket,
                                           Target, [{chunk_size, Chunk}]),
     Cmd = code:priv_dir(chunter) ++ "/zfs_import.gzip.sh",
-    lager:debug("Running ZFS command: ~p ~s ~s", [Cmd, P, SnapID]),
-    Prt = open_port({spawn_executable, Cmd},
-                    [{args, [P, SnapID]}, use_stdio, binary,
-                     stderr_to_stdout, exit_status, stream]),
+    Prt = run(Cmd, [P, SnapID]),
     Ctx = crypto:hash_init(sha),
     download_to_port(Prt, Download, undefined, SHA1, Ctx, 0).
 
@@ -185,10 +169,10 @@ download_to_port(Prt, Download, Lock, SHA1, Ctx, I) ->
                     {ok, done};
                 Digests ->
                     lager:error("[download] Corrupted got ~p but expected ~s",
-                                  [Digests, SHA1]),
+                                [Digests, SHA1]),
                     port_close(Prt),
                     {error, 0, corrupted}
-                end;
+            end;
         {ok, Data} ->
             Ctx1 = crypto:hash_update(Ctx, Data),
             lager:debug("Download part: ~p.", [I]),
@@ -203,11 +187,11 @@ download_to_port(Prt, Download, Lock, SHA1, Ctx, I) ->
 describe_restore([{local, U} | R]) ->
     lager:debug("[restore] Using local snapshot ~s", [U]),
     describe_restore(R);
-describe_restore([{full, U, SHA1} | R]) ->
-    lager:debug("[restore] Using full backup ~s(~s)", [U, SHA1]),
+describe_restore([{full, U, SHAs} | R]) ->
+    lager:debug("[restore] Using full backup ~s(~p)", [U, SHAs]),
     describe_restore(R);
-describe_restore([{incr, U, SHA1} | R]) ->
-    lager:debug("[restore] incremental update to ~s(~s)", [U, SHA1]),
+describe_restore([{incr, U, SHAs} | R]) ->
+    lager:debug("[restore] incremental update to ~s(~p)", [U, SHAs]),
     describe_restore(R);
 describe_restore([]) ->
     ok.
@@ -217,7 +201,7 @@ get(UUID) ->
     Res = os:cmd(Cmd),
     Ls = [L || L <- re:split(Res, "\n"), L =/= <<>>],
     Ls1 = [re:run(L, ".*@(.*?)\t.*", [{capture, [1], binary}]) || L <- Ls],
-    [M || {match,[M]} <- Ls1].
+    [M || {match, [M]} <- Ls1].
 
 %% @doc Sum up the sizes of the original snapshot and the size of disks for
 %% KVM machines.
@@ -262,19 +246,23 @@ restore_path(Target, Remote, Local, Path) ->
         false ->
             case jsxd:get(Target, Remote) of
                 {ok, Snap} ->
-                    SHA1 = jsxd:get(<<"sha1">>, <<>>, Snap),
-                    case jsxd:get(<<"parent">>, Snap) of
-                        {ok, Parent} ->
-                            restore_path(Parent, Remote, Local,
-                                         [{incr,  Target, SHA1} | Path]);
-                        _ ->
-                            {ok, [{full, Target, SHA1} | Path]}
-                    end;
+                    restore_snap(Target, Remote, Local, Path, Snap);
                 _ ->
                     {error, nopath}
             end
     end.
 
+restore_snap(Target, Remote, Local, Path, Snap) ->
+    Files = jsxd:get(<<"files">>, [], Snap),
+    SHAs = [{ID, jsxd:get(<<"sha1">>, <<>>, V)}
+            || {ID, V} <- Files],
+    case jsxd:get(<<"parent">>, Snap) of
+        {ok, Parent} ->
+            restore_path(Parent, Remote, Local,
+                         [{incr,  Target, SHAs} | Path]);
+        _ ->
+            {ok, [{full, Target, SHAs} | Path]}
+    end.
 
 mk_s3_conf(Options) ->
     AKey = proplists:get_value(access_key, Options),
@@ -283,11 +271,11 @@ mk_s3_conf(Options) ->
     S3Port = proplists:get_value(s3_port, Options),
     fifo_s3:make_config(AKey, SKey, S3Host, S3Port).
 
-backup_update(VM, SnapID, K, V, Opts) ->
+backup_update(VM, SnapID, K, V, Opts) when is_list(K) ->
     case proplists:get_value(quiet, Opts, false) of
         false ->
             Event = proplists:get_value(event, Opts, <<"backup">>),
-            ls_vm:set_backup(VM, [{[SnapID, K], V}]),
+            ls_vm:set_backup(VM, [{[SnapID | K], V}]),
             libhowl:send(VM,
                          [{<<"event">>, Event},
                           {<<"data">>,
@@ -296,7 +284,11 @@ backup_update(VM, SnapID, K, V, Opts) ->
                             {<<"uuid">>, SnapID}]}]);
         true ->
             ok
-    end.
+    end;
+
+backup_update(VM, SnapID, K, V, Opts) ->
+    backup_update(VM, SnapID, [K], V, Opts).
+
 
 -ifdef(TEST).
 restore_path_test() ->
@@ -314,10 +306,16 @@ restore_path_test() ->
     ResG = restore_path(<<"g">>, Remote, Local),
 
     ?assertEqual([{local, <<"b">>}], ResB),
-    ?assertEqual([{local, <<"c">>}, {incr, <<"a">>, <<>>}], ResA),
-    ?assertEqual([{full, <<"f">>, <<>>}, {incr, <<"e">>, <<>>},
-                  {incr, <<"d">>, <<>>}], ResD),
+    ?assertEqual([{local, <<"c">>}, {incr, <<"a">>, []}], ResA),
+    ?assertEqual([{full, <<"f">>, []}, {incr, <<"e">>, []},
+                  {incr, <<"d">>, []}], ResD),
     ?assertEqual({error, nopath}, ResG),
     ok.
 
 -endif.
+
+run(Cmd, Args) ->
+    lager:debug("Running ZFS command: ~s ~p", [Cmd, Args]),
+    open_port({spawn_executable, Cmd},
+              [{args, Args}, use_stdio, binary,
+               stderr_to_stdout, exit_status, stream]).

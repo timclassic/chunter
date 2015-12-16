@@ -19,13 +19,15 @@
                 state = undefined}).
 
 start_link(ListenerPid, Socket, Transport, Opts) ->
-    proc_lib:start_link(?MODULE, init, [[ListenerPid, Socket, Transport, Opts]]).
+    proc_lib:start_link(?MODULE, init,
+                        [[ListenerPid, Socket, Transport, Opts]]).
 
 init([ListenerPid, Socket, Transport, _Opts]) ->
     ok = proc_lib:init_ack({ok, self()}),
     %% Perform any required state initialization here.
     ok = ranch:accept_ack(ListenerPid),
-    ok = Transport:setopts(Socket, [{active, true}, {packet,4}, {nodelay, true}]),
+    ok = Transport:setopts(Socket,
+                           [{active, true}, {packet, 4}, {nodelay, true}]),
     {OK, Closed, Error} = Transport:messages(),
     gen_server:enter_loop(?MODULE, [], #state{
                                           ok = OK,
@@ -34,8 +36,8 @@ init([ListenerPid, Socket, Transport, _Opts]) ->
                                           socket = Socket,
                                           transport = Transport}).
 
-handle_info({data,Data}, State = #state{socket = Socket,
-                                        transport = Transport}) ->
+handle_info({data, Data}, State = #state{socket = Socket,
+                                         transport = Transport}) ->
     Transport:send(Socket, Data),
     {noreply, State};
 
@@ -60,7 +62,8 @@ handle_info({_OK, Socket, BinData}, State = #state{
                                   type = dtrace}};
         {console, UUID} ->
             lager:info("Console: ~p.", [UUID]),
-            chunter_vm_fsm:console_link(UUID, self()),
+            {ok, Type} = chunter_vm_fsm:type(UUID),
+            chunter_zlogin:subscribe(UUID, Type),
             {noreply, State#state{state = UUID,
                                   type = console}};
         ping ->
@@ -92,27 +95,8 @@ handle_info({_OK, Socket, BinData},  State = #state{
         {Act, Ref, Fn} ->
             lager:info("<~p> Starting ~p.", [Ref, Act]),
             Transport:send(Socket, term_to_binary({ok, Ref})),
-            {Time, Res} = timer:tc(fun() ->
-                                           case Act of
-                                               walk ->
-                                                   erltrace:walk(Handle);
-                                               consume ->
-                                                   erltrace:consume(Handle)
-                                           end
-                                   end),
-            {Time1, Res1} = timer:tc(fun () ->
-                                             case Res of
-                                                 {ok, D} ->
-                                                     case Fn of
-                                                         llquantize ->
-                                                             {ok, llquantize(D)};
-                                                         identity ->
-                                                             {ok, D}
-                                                     end;
-                                                 D ->
-                                                     D
-                                             end
-                                     end),
+            {Time, Res} = timed_erltrace(Act, Handle),
+            {Time1, Res1} = timed_aggregate(Res, Fn),
             Transport:send(Socket, term_to_binary(Res1)),
             lager:info("<~p> Dtrace ~p  took ~pus + ~pus + ~pus.",
                        [Ref, Act, Time, Time1])
@@ -123,7 +107,8 @@ handle_info({_OK, _S, Data}, State = #state{
                                         type = console,
                                         state = UUID,
                                         ok = _OK}) ->
-    chunter_vm_fsm:console_send(UUID, Data),
+    {ok, Type} = chunter_vm_fsm:type(UUID),
+    chunter_zlogin:send(UUID, Type, Data),
     {noreply, State};
 
 handle_info({_Closed, _}, State = #state{ closed = _Closed}) ->
@@ -140,7 +125,7 @@ handle_message({fw, update, UUID}, State) when is_binary(UUID) ->
     {stop, State};
 
 handle_message({machines, start, UUID}, State) when is_binary(UUID) ->
-    chunter_vmadm:start(UUID),
+    chunter_vm_fsm:start(UUID),
     {stop, State};
 
 handle_message({machines, update, UUID, Package, Config}, State)
@@ -209,14 +194,14 @@ handle_message({machines, snapshot, store,
                            {quiet, true}| Opts],
                   ls_dataset:imported(Img, 0),
                   ls_dataset:status(Img, <<"pending">>),
-				  {ok, VM} = ls_vm:get(UUID),
-				  Type = jsxd:get([<<"type">>], <<"zone">>, ft_vm:config(VM)),
-				  Path = case Type of
-							 <<"zone">> ->
-								 <<"/zones/", UUID/binary>>;
-							 <<"kvm">> ->
-								 <<"/zones/", UUID/binary, "-disk0">>
-						 end,
+                  {ok, VM} = ls_vm:get(UUID),
+                  Type = jsxd:get([<<"type">>], <<"zone">>, ft_vm:config(VM)),
+                  Path = case Type of
+                             <<"zone">> ->
+                                 <<"/zones/", UUID/binary>>;
+                             <<"kvm">> ->
+                                 <<"/zones/", UUID/binary, "-disk0">>
+                         end,
                   case chunter_snap:upload(Path, UUID, SnapId, Opts1) of
                       {ok, _, Digest} ->
                           ls_dataset:sha1(Img, Digest),
@@ -252,7 +237,7 @@ handle_message({release, UUID}, State) ->
     {stop, chunter_lock:release(UUID), State};
 
 handle_message({machines, create, UUID, PSpec, DSpec, Config}, State)
-  when is_binary(UUID), is_tuple(PSpec), is_tuple(DSpec), is_list(Config) ->
+  when is_binary(UUID), is_list(Config) ->
     case chunter_lock:lock(UUID) of
         ok ->
             chunter_vm_fsm:create(UUID, PSpec, DSpec, Config),
@@ -298,7 +283,8 @@ llquantize(Data) ->
 llquantize_({_, Path, Vals}, Obj) ->
     BPath = lists:map(fun ensure_bin/1, Path),
     lists:foldr(fun({{Start, End}, Value}, Obj1) ->
-                        B = list_to_binary(io_lib:format("~p-~p", [Start, End])),
+                        B = list_to_binary(io_lib:format("~p-~p",
+                                                         [Start, End])),
                         jsxd:set(BPath ++ [B], Value, Obj1)
                 end, Obj, Vals).
 
@@ -309,3 +295,15 @@ ensure_bin(B) when is_binary(B) ->
     B;
 ensure_bin(N) when is_number(N) ->
     list_to_binary(integer_to_list(N)).
+
+-spec timed_erltrace(walk | consume, any()) ->
+                            {pos_integer(), {ok | error, term()}}.
+timed_erltrace(Act, Handle) ->
+    timer:tc(erltrace, Act, [Handle]).
+
+-spec timed_aggregate({ok | error, term()}, llquantize | identity) ->
+                             {pos_integer(), {ok | error, term()}}.
+timed_aggregate({ok, D}, llquantize) ->
+    timer:tc(fun() -> {ok, llquantize(D)} end);
+timed_aggregate(R, _) ->
+    R.

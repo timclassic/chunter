@@ -2,7 +2,7 @@
 
 . /usbkey/config
 
-TESTED_VERSIONS=20150108T111855Z\|20150417T032339Z\|20150806T063417Z\|20151001T070028Z
+TESTED_VERSIONS=20150108T111855Z\|20150417T032339Z\|20150806T063417Z\|20151001T070028Z\|20151104T185720Z
 BAD_VERSIONS=2012\|2013\|2014\|20150528T153328Z
 
 
@@ -121,10 +121,8 @@ else
 fi
 
 mkdir -p "$DST/custom/smf"
-cp "$DST/chunter/share/epmd.xml" "$DST/custom/smf"
 cp "$DST/chunter/share/chunter.xml" "$DST/custom/smf"
 
-svccfg import "$DST/custom/smf/epmd.xml"
 svccfg import "$DST/custom/smf/chunter.xml"
 
 exit 0;

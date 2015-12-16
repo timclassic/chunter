@@ -229,7 +229,8 @@ handle_cast(update_mem, State = #state{
     {TotalMem, ProvMem} = mem(),
     lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
                [Host, ProvMem, TotalMem]),
-    ls_hypervisor:set_resource(Host, [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
+    FreeMem = TotalMem - ReservedMem - ProvMem,
+    ls_hypervisor:set_resource(Host, [{[<<"free-memory">>], FreeMem},
                                        {[<<"reserved-memory">>], ReservedMem},
                                        {[<<"provisioned-memory">>], ProvMem},
                                        {[<<"total-memory">>], TotalMem}]),
@@ -276,10 +277,14 @@ handle_cast(connect, #state{name = Host,
             Networks1 = [list_to_binary(N) || {N, _} <- Networks],
             ls_hypervisor:networks(Host, Networks1);
         smartos ->
-            Networks = re:split(os:cmd("cat /usbkey/config  | grep -v '^#' | grep '_nic=' | sed 's/_nic.*$//'"), "\n"),
+            Networks = re:split(
+                         os:cmd("cat /usbkey/config  | grep -v '^#' | "
+                                "grep '_nic=' | sed 's/_nic.*$//'"),
+                         "\n"),
             Networks1 = lists:delete(<<>>, Networks),
             Etherstub = re:split(
-                          os:cmd("cat /usbkey/config | grep etherstub | sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
+                          os:cmd("cat /usbkey/config | grep etherstub | "
+                                 "sed -e 's/etherstub=\"\\(.*\\)\"/\\1/'"),
                           ",\\s*|\n"),
             Etherstub1 = lists:delete(<<>>, Etherstub),
             ls_hypervisor:networks(Host, Networks1),
@@ -394,8 +399,9 @@ host_info() ->
            end,
     {IPStr, Port} = case application:get_env(chunter, endpoint) of
                         undefined ->
-                            {ok, {A, B, C, D}} = inet:getaddr(binary_to_list(Host), inet),
-                            {io_lib:format("~p.~p.~p.~p", [A,B,C,D]), 4200};
+                            {ok, {A, B, C, D}} =
+                                inet:getaddr(binary_to_list(Host), inet),
+                            {io_lib:format("~p.~p.~p.~p", [A, B, C, D]), 4200};
                         {ok, R} ->
                             R
                     end,
@@ -440,29 +446,28 @@ update_services(_, []) ->
     ok;
 
 update_services(UUID, Changed) ->
-    case [{Srv, New} || {Srv, _Old, New} <- Changed, _Old =/= New] of
+    case [{Srv, New} || {Srv, Old, New} <- Changed, Old =/= New] of
         [] ->
             ok;
         Changed1 ->
-            libhowl:send(UUID, [{<<"event">>, <<"services">>}, {<<"data">>, Changed1}])
+            libhowl:send(UUID, [{<<"event">>, <<"services">>},
+                                {<<"data">>, Changed1}])
     end.
 
 mem() ->
     VMS = chunter_zone:list(),
     ProvMemA = lists:foldl(
                  fun (VM, Mem) ->
-                         M = case jsxd:get(<<"max_physical_memory">>, VM) of
-                                 {ok, Mx} ->
-                                     Mx;
-                                 _ ->
-                                     case jsxd:get([<<"mcap">>, <<"physcap">>], VM) of
-                                         {ok, MCap} ->
-                                             binary_to_integer(MCap);
-                                         _ ->
-                                             0
-                                     end
-                             end,
-                         Mem + M
+                         MTpl = {jsxd:get(<<"max_physical_memory">>, VM),
+                                 jsxd:get([<<"mcap">>, <<"physcap">>], VM)},
+                         case MTpl of
+                             {{ok, Mx}, _} ->
+                                 Mx;
+                             {_, {ok, MCap}} ->
+                                 binary_to_integer(MCap);
+                             _ ->
+                                 0
+                         end + Mem
                  end, 0, VMS),
     ProvMem = round(ProvMemA / (1024*1024)),
     {TotalMem, _} =

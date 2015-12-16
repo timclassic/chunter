@@ -12,7 +12,9 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    lager_watchdog_srv:set_version(?VERSION),
+    lager:info("chunter:load - waiting for zlogin server.", []),
+    chunter_zlogin:wait(),
+    lager:info("chunter:load - initializing ranch.", []),
     {ok, {_, Port}} = application:get_env(chunter, endpoint),
     {ok, _} = ranch:start_listener(chunter_server, 1,
                                    ranch_tcp,

@@ -14,8 +14,10 @@
 sysinfo() ->
     case system() of
         smartos ->
-            SysInfo0 = jsxd:from_list(jsx:decode(list_to_binary(os:cmd("sysinfo")))),
-            SysInfo = jsxd:delete([<<"Boot Parameters">>, <<"root_shadow">>], SysInfo0),
+            BinResponse = list_to_binary(os:cmd("sysinfo")),
+            SysInfo0 = jsxd:from_list(jsx:decode(BinResponse)),
+            SysInfo = jsxd:delete([<<"Boot Parameters">>, <<"root_shadow">>],
+                                  SysInfo0),
             {ok, SysInfo};
         omnios ->
             {ok, []};

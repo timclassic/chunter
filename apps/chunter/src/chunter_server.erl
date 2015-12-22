@@ -432,7 +432,7 @@ register_hypervisor() ->
         {ok, H} ->
             ls_hypervisor:register(Host, IPStr, Port),
             case ft_hypervisor:alias(H) of
-                undefined ->
+                <<>> ->
                     ls_hypervisor:alias(Host, Alias);
                 _ ->
                     ok

@@ -24,6 +24,7 @@
          reserve_mem/1,
          service_action/2,
          kvm_mem/0,
+         host_id/0,
          disconnect/0]).
 
 
@@ -79,6 +80,9 @@ reserve_mem(N) ->
 
 disconnect() ->
     gen_server:cast(?SERVER, disconnect).
+
+host_id() ->
+    gen_server:call(?SERVER, host_id).
 
 kvm_mem() ->
     try
@@ -184,8 +188,10 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({call, _Auth, Call}, _From, #state{name = _Name} = State) ->
-    %%    statsderl:increment([Name, ".call.unknown"], 1, 1.0),
+handle_call(host_id, _From, #state{name = Name} = State) ->
+    {reply, {ok, Name}, State};
+
+handle_call({call, _Auth, Call}, _From, State) ->
     lager:info([{fifo_component, chunter}],
                "unsupported call - ~p", [Call]),
     Reply = {error, {unsupported, Call}},

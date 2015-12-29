@@ -168,6 +168,9 @@ register(UUID) ->
 start(UUID) ->
     gen_fsm:send_event({global, {vm, UUID}}, start).
 
+next() ->
+    gen_fsm:send_event(self(), next).
+
 restore_backup(UUID, SnapID, Options) ->
     case global:whereis_name({vm, UUID}) of
         undefined ->
@@ -398,7 +401,7 @@ initialized({restore, SnapID, Options},
                           {<<"uuid">>, uuid:uuid4s()},
                           {<<"data">>,
                            [{<<"uuid">>, UUID}]}]),
-            restoring_backup(timeout, State1);
+            restoring_backup(next, State1);
         E ->
             {next_state, E, initialized, State}
     end;
@@ -481,7 +484,7 @@ shutting_down({transition, NextState = <<"stopped">>}, State) ->
 shutting_down(_, State) ->
     {next_state, shutting_down, State}.
 
-restoring_backup(timeout, State =
+restoring_backup(next, State =
                      #state{orig_state = NextState,
                             args = {SnapID, Options, Path, Toss},
                             uuid = VM}) ->
@@ -503,7 +506,7 @@ restoring_backup(timeout, State =
     ls_vm:update(VM, Package, []),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
-creating_backup(timeout, State = #state{orig_state = NextState, uuid=VM,
+creating_backup(next, State = #state{orig_state = NextState, uuid=VM,
                                         args={SnapID, Options}}) ->
     lager:debug("Creating Backup with options: ~p", [Options]),
     case proplists:is_defined(create, Options) of
@@ -542,19 +545,19 @@ create_backup_fn(VM, SnapID, Options) ->
             backup_update(VM, SnapID, <<"local">>, true)
     end.
 
-creating_snapshot(timeout, State = #state{orig_state = NextState,
+creating_snapshot(next, State = #state{orig_state = NextState,
                                           args={SnapID}}) ->
     snapshot_action(State#state.uuid, SnapID, fun do_snapshot/4,
                     fun finish_snapshot/4, []),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
-deleting_snapshot(timeout, State = #state{orig_state = NextState,
+deleting_snapshot(next, State = #state{orig_state = NextState,
                                           args={SnapID}}) ->
     snapshot_action(State#state.uuid, SnapID, fun do_delete_snapshot/4,
                     fun finish_delete_snapshot/4, []),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
-rolling_back_snapshot(timeout, State = #state{orig_state = NextState,
+rolling_back_snapshot(next, State = #state{orig_state = NextState,
                                               args={SnapID}}) ->
     snapshot_action(State#state.uuid, SnapID, fun do_rollback_snapshot/4,
                     fun finish_rollback_snapshot/4, []),
@@ -834,7 +837,8 @@ handle_sync_event({backup, restore, SnapID, Options}, _F, StateName, State) ->
             backup_update(VM, SnapID, <<"local">>, true),
             State1 = State#state{orig_state=StateName,
                                  args={SnapID, Options, Path, Toss}},
-            {reply, ok, restoring_backup, State1, 0};
+            next(),
+            {reply, ok, restoring_backup, State1};
         E ->
             {reply, E, StateName, State}
     end;
@@ -843,7 +847,8 @@ handle_sync_event({backup, delete, SnapID}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID}},
     backup_update(State#state.uuid, SnapID, <<"local">>, false),
     backup_update(State#state.uuid, SnapID, <<"local_size">>, 0),
-    {reply, ok, deleting_snapshot, State1, 0};
+    next(),
+    {reply, ok, deleting_snapshot, State1};
 
 handle_sync_event({service, enable, Service}, _From, StateName, State) ->
     {reply, smurf:enable(Service, [{zone, State#state.uuid}]),
@@ -867,23 +872,27 @@ handle_sync_event({service, clear, Service}, _From, StateName, State) ->
 
 handle_sync_event({backup, SnapID, Options}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName, args={SnapID, Options}},
-    {reply, ok, creating_backup, State1, 0};
+    next(),
+    {reply, ok, creating_backup, State1};
 
 handle_sync_event({snapshot, SnapID}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName,
                          args={SnapID}},
-    {reply, ok, creating_snapshot, State1, 0};
+    next(),
+    {reply, ok, creating_snapshot, State1};
 
 handle_sync_event({snapshot, delete, SnapID}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName,
                          args={SnapID}},
-    {reply, ok, deleting_snapshot, State1, 0};
+    next(),
+    {reply, ok, deleting_snapshot, State1};
 
 
 handle_sync_event({snapshot, rollback, SnapID}, _From, StateName, State) ->
     State1 = State#state{orig_state=StateName,
                          args={SnapID}},
-    {reply, ok, rolling_back_snapshot, State1, 0};
+    next(),
+    {reply, ok, rolling_back_snapshot, State1};
 
 handle_sync_event(delete, _From, StateName, State) ->
     case load_vm(State#state.uuid) of

@@ -540,6 +540,7 @@ create_backup_fn(VM, SnapID, Options) ->
             lager:debug("Deleting parent: ~p", [Parent]),
             snapshot_action(VM, Parent, fun do_delete_snapshot/4,
                             fun finish_delete_snapshot/4, Options),
+            backup_update(VM, SnapID, <<"local">>, true),
             backup_update(VM, Parent, <<"local">>, false);
         {undefined, _} ->
             backup_update(VM, SnapID, <<"local">>, true)

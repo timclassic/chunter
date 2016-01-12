@@ -1073,9 +1073,7 @@ do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
 finish_snapshot(_VM, _SnapID, [backup], ok) ->
     ok;
 finish_snapshot(VM, SnapID, _, ok) ->
-    ls_vm:set_snapshot(
-      VM, [{[SnapID, <<"state">>],
-            <<"completed">>}]),
+    snap_state(VM, SnapID, <<"completed">>),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -1085,6 +1083,10 @@ finish_snapshot(VM, SnapID, _, ok) ->
 
 finish_snapshot(_VM, _SnapID, _, error) ->
     error.
+
+snap_state(VM, SnapID, State) ->
+    ls_vm:set_snapshot(VM, [{[SnapID, <<"state">>], State}]).
+
 
 do_delete_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
     chunter_zfs:destroy_snapshot(P, SnapID, [f, r]).
@@ -1294,18 +1296,19 @@ snapshot_sizes(VM) ->
 %% _:43 is '/zones/' + uuid
 do_restore(Path, VM, {local, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path = <<_:43/binary, Dx/binary>>, VM, {full, SnapId, SHAs}, Opts) ->
+do_restore(Path = <<_:43/binary, Dx/binary>>, VM, {Type, SnapId, SHAs}, Opts)
+when Type =:= full;
+     Type =:= incr ->
     File = <<VM/binary, "/", SnapId/binary, Dx/binary>>,
     SHA1 = jsxd:get([File], <<>>, SHAs),
-    do_destroy(Path, VM, SnapId, Opts),
+    case Type of
+        full -> do_destroy(Path, VM, SnapId, Opts);
+        _    -> ok
+    end,
+    snap_state(VM, SnapId, <<"restoring">>),
     chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
-    do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path = <<_:43/binary, Dx/binary>>, VM, {incr, SnapId, SHAs}, Opts) ->
-    File = <<VM/binary, "/", SnapId/binary, Dx/binary>>,
-    SHA1 = jsxd:get([File], <<>>, SHAs),
-    chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
-    wait_import(Path),
+    snap_state(VM, SnapId, <<"completed">>),
     do_rollback_snapshot(Path, VM, SnapId, Opts).
 
 do_destroy(<<_:1/binary, P/binary>>, _VM, _SnapID, _) ->

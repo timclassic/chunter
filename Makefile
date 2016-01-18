@@ -17,7 +17,7 @@ version_header: version
 	cp chunter.version rel/files/chunter.version
 	@echo "-define(VERSION, <<\"$(shell cat chunter.version)\">>)." > apps/chunter/src/chunter_version.hrl
 
-package: rel
+package: update rel
 	make -C rel/pkg package
 
 clean:

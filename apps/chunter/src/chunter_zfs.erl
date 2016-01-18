@@ -8,7 +8,8 @@
          destroy/1,
          destroy/2,
          rollback/2,
-         rollback/3
+         rollback/3,
+         list/1
         ]).
 
 -ignore_xref([
@@ -19,7 +20,8 @@
          destroy/1,
          destroy/2,
          rollback/2,
-         rollback/3
+         rollback/3,
+         list/1
         ]).
 -define(ZFS, "/usr/sbin/zfs").
 
@@ -34,7 +36,8 @@ destroy_snapshot(Path, SnapID, Args) ->
     P = <<Path/binary, "@", SnapID/binary>>,
     destroy(P, Args).
 
-
+list(Path) ->
+    zfs("list", [r, {t, "all"}], Path).
 
 snapshot(Path, SnapID) ->
     snapshot(Path, SnapID, []).

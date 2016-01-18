@@ -4,6 +4,9 @@
 
 -define(MAX_MDATA_SIZE, 1024*1024*32).
 
+call(UUID, R = [{<<"action">>, <<"zfs-", _/binary>>} | _]) ->
+    check_call(snapshot_api, UUID, R);
+
 call(UUID, R = [{<<"action">>, <<"snapshot-", _/binary>>} | _]) ->
     check_call(snapshot_api, UUID, R);
 
@@ -29,6 +32,15 @@ check_call(Type, UUID, R) ->
         false ->
             {error, "disabled"}
     end.
+
+call_(UUID, [{<<"action">>, <<"zfs-list">>}])->
+    case chunter_zfs:list(<<"zones/", UUID/binary>>) of
+        {ok, Data} ->
+            {ok, [{reply, Data}]};
+        E ->
+            lager:warning("[api] zfs-list(~s) failed: ~p", [UUID, E]),
+            {error, "failed!"}
+    end;
 
 call_(_UUID, [{<<"action">>, <<"remote-stop">>}])->
     {error, "not implemented!"};

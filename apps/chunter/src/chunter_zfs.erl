@@ -55,26 +55,26 @@ rollback(Path, SnapID, Args) ->
 
 
 
-rollback_opt_to_char(force) -> $f;
-rollback_opt_to_char(f) -> $f;
-rollback_opt_to_char(recurseive) -> $r;
-rollback_opt_to_char(r) -> $r;
-rollback_opt_to_char(recurseive_clones) -> $R;
-rollback_opt_to_char('R') -> $R.
+rollback_opt_to_char(force) -> f;
+rollback_opt_to_char(f) -> f;
+rollback_opt_to_char(recurseive) -> r;
+rollback_opt_to_char(r) -> r;
+rollback_opt_to_char(recurseive_clones) -> 'R';
+rollback_opt_to_char('R') -> 'R'.
 
-snapshot_opt_to_char(recurseive) -> $r;
-snapshot_opt_to_char(r) -> $r.
+snapshot_opt_to_char(recurseive) -> r;
+snapshot_opt_to_char(r) -> r.
 
-destroy_opt_to_char(defer) -> $d;
-destroy_opt_to_char(d) -> $d;
-destroy_opt_to_char(force) -> $f;
-destroy_opt_to_char(f) -> $f;
-destroy_opt_to_char(recurseive) -> $r;
-destroy_opt_to_char(r) -> $r;
-destroy_opt_to_char(recurseive_dependants) -> $R;
-destroy_opt_to_char('R') -> $R;
-destroy_opt_to_char(dry_run) -> $n;
-destroy_opt_to_char(n) -> $n;
+destroy_opt_to_char(defer) -> d;
+destroy_opt_to_char(d) -> d;
+destroy_opt_to_char(force) -> f;
+destroy_opt_to_char(f) -> f;
+destroy_opt_to_char(recurseive) -> r;
+destroy_opt_to_char(r) -> r;
+destroy_opt_to_char(recurseive_dependants) -> 'R';
+destroy_opt_to_char('R') -> 'R';
+destroy_opt_to_char(dry_run) -> n;
+destroy_opt_to_char(n) -> n;
 destroy_opt_to_char(C) -> opt_to_char(C).
 
 
@@ -83,21 +83,20 @@ destroy_opt_to_char(C) -> opt_to_char(C).
 zfs(Cmd, [], Target) ->
     zfs([Cmd, Target]);
 zfs(Cmd, Args, Target) ->
-    zfs([Cmd, Args, Target]).
+    zfs([Cmd | Args] ++ [Target]).
 
 zfs(Args) ->
     lager:debug("ZFS: ~s ~p", [?ZFS, Args]),
     fifo_cmd:run(?ZFS, Args).
 
 build_opts([], _) ->
-    "";
+    [];
 build_opts(Opts, F) ->
-    [$- |
-     [F(O) || O <- Opts]].
+    [F(O) || O <- Opts].
 
-opt_to_char(p) -> $p;
-opt_to_char(parsable) -> $p;
-opt_to_char(v) -> $p;
-opt_to_char(verbose) -> $v.
+opt_to_char(p) -> p;
+opt_to_char(parsable) -> p;
+opt_to_char(v) -> v;
+opt_to_char(verbose) -> v.
 
 

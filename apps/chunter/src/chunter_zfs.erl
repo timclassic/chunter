@@ -53,8 +53,6 @@ rollback(Path, SnapID, Args) ->
     P = <<Path/binary, "@", SnapID/binary>>,
     zfs("rollback", build_opts(Args, fun rollback_opt_to_char/1), P).
 
-
-
 rollback_opt_to_char(force) -> f;
 rollback_opt_to_char(f) -> f;
 rollback_opt_to_char(recurseive) -> r;

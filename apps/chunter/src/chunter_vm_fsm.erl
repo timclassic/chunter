@@ -342,6 +342,8 @@ initialized({create, Package, Dataset, VMSpec},
                     %% running already when the vmadm is doing it's work
                     chunter_zlogin:start(UUID, ZoneType),
                     do_create(UUID, VMData, VMSpec),
+                    update_time(UUID),
+                    chunter_vmadm:start(UUID),
                     {next_state, creating,
                      State#state{type = Type,
                                  zone_type = ZoneType,

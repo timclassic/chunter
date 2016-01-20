@@ -24,7 +24,6 @@ echo "Gathering System information."
 log_run ifconfig
 echo >> $log_file >> $log_file
 echo >> $log_file
-pkgin list | grep fifo-chunter >> $log_file
 log_run svcs svc:/network/epmd:default
 log_run svcs svc:/network/chunter:default
 log_run svcs svc:/fifo/zlogin:default
@@ -54,7 +53,7 @@ le '========================================'
 le "Common errors"
 le '========================================'
 
-if ! grep nxdomain /var/log/chunter/error.log* > /dev/null
+if grep nxdomain /var/log/chunter/error.log* > /dev/null
 then
     le "[error] DNS is not propperly set up, the leoFS domain can not be resolved"
 fi
@@ -65,7 +64,7 @@ zlogin_cookie=`egrep '^\-setcookie' /opt/fifo_zlogin/releases/0.1.1/vm.args | aw
 
 if [ "${chunter_cookie}" != "${zlogin_cookie}" ]
 then
-    le "[error] Zlogin and Chunter cookies do not match!"
+    le "[error] zlogin and Chunter cookies do not match!"
 fi
 
 echo "Compressing data"

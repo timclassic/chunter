@@ -456,6 +456,7 @@ docker_spec(Base, Dataset, OwnerData) ->
     DockerData = jsxd:get([<<"docker">>], [], OwnerData),
     Base2 = jsxd:thread(
               [{set, <<"docker">>, true},
+               {set, <<"autoboot">>, false},
                {set, <<"internal_metadata_namespaces">>, [<<"docker">>]},
                {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>},
                %% What a hack :/

@@ -186,7 +186,7 @@ door_event(Pid, Ref, down) ->
     gen_fsm:send_all_state_event(Pid, {door, Ref, down});
 
 door_event(Pid, Ref, Data) ->
-    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
+    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}, 1000).
 
 service_action(UUID, Action, Service)
   when Action =:= enable;
@@ -342,7 +342,7 @@ initialized({create, Package, Dataset, VMSpec},
                     %% running already when the vmadm is doing it's work
                     chunter_zlogin:start(UUID, ZoneType),
                     do_create(UUID, VMData, VMSpec),
-                    update_time(UUID),
+                    update_timeout(UUID),
                     chunter_vmadm:start(UUID),
                     {next_state, creating,
                      State#state{type = Type,
@@ -438,9 +438,7 @@ stopped({transition, NextState = <<"booting">>}, State) ->
      State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 stopped(start, State = #state{uuid = UUID, zone_type = docker}) ->
-    T = erlang:system_time(milli_seconds) + 60000,
-    chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
-                                 [{<<"docker:wait_for_attach">>, T}]}]),
+    update_timeout(UUID),
     chunter_vmadm:start(UUID),
     {next_state, stopped, State};
 
@@ -1603,3 +1601,8 @@ confirm_create(_UUID, <<>>) ->
 confirm_create(UUID, Org) ->
     ls_acc:update(Org, UUID, timestamp(),
                   [{<<"event">>, <<"confirm_create">>}]).
+
+update_timeout(UUID) ->
+    T = erlang:system_time(milli_seconds) + 60000,
+    chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
+                                 [{<<"docker:wait_for_attach">>, T}]}]).

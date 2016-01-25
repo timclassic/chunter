@@ -186,7 +186,7 @@ door_event(Pid, Ref, down) ->
     gen_fsm:send_all_state_event(Pid, {door, Ref, down});
 
 door_event(Pid, Ref, Data) ->
-    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}, 1000).
+    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
 
 service_action(UUID, Action, Service)
   when Action =:= enable;
@@ -433,18 +433,14 @@ loading({transition, NextState}, State = #state{uuid = UUID}) ->
 -spec stopped({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.
 
-stopped({transition, NextState = <<"booting">>},
-        State = #state{uuid = UUID, zone_type = docker}) ->
-    update_time(UUID),
-    {next_state, binary_to_atom(NextState),
-     State#state{public_state = change_state(State#state.uuid, NextState)}};
-
 stopped({transition, NextState = <<"booting">>}, State) ->
     {next_state, binary_to_atom(NextState),
      State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 stopped(start, State = #state{uuid = UUID, zone_type = docker}) ->
-    update_time(UUID),
+    T = erlang:system_time(milli_seconds) + 60000,
+    chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
+                                 [{<<"docker:wait_for_attach">>, T}]}]),
     chunter_vmadm:start(UUID),
     {next_state, stopped, State};
 
@@ -1607,8 +1603,3 @@ confirm_create(_UUID, <<>>) ->
 confirm_create(UUID, Org) ->
     ls_acc:update(Org, UUID, timestamp(),
                   [{<<"event">>, <<"confirm_create">>}]).
-
-update_time(UUID) ->
-    T = erlang:system_time(milli_seconds) + 60000,
-    chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
-                                 [{<<"docker:wait_for_attach">>, T}]}]).

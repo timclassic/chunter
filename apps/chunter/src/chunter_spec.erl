@@ -9,9 +9,6 @@
 
 -module(chunter_spec).
 
--ifdef(TEST).
--endif.
-
 -export([to_vmadm/3,
          to_zonecfg/3,
          to_sniffle/1,
@@ -456,6 +453,7 @@ docker_spec(Base, Dataset, OwnerData) ->
     DockerData = jsxd:get([<<"docker">>], [], OwnerData),
     Base2 = jsxd:thread(
               [{set, <<"docker">>, true},
+               {set, <<"autoboot">>, false},
                {set, <<"internal_metadata_namespaces">>, [<<"docker">>]},
                {set, <<"init_name">>, <<"/native/usr/vm/sbin/dockerinit">>},
                %% What a hack :/

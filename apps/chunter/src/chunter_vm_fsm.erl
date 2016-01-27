@@ -186,7 +186,7 @@ door_event(Pid, Ref, down) ->
     gen_fsm:send_all_state_event(Pid, {door, Ref, down});
 
 door_event(Pid, Ref, Data) ->
-    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}).
+    gen_fsm:sync_send_all_state_event(Pid, {door, Ref, Data}, 1000).
 
 service_action(UUID, Action, Service)
   when Action =:= enable;
@@ -342,6 +342,8 @@ initialized({create, Package, Dataset, VMSpec},
                     %% running already when the vmadm is doing it's work
                     chunter_zlogin:start(UUID, ZoneType),
                     do_create(UUID, VMData, VMSpec),
+                    update_timeout(UUID),
+                    chunter_vmadm:start(UUID),
                     {next_state, creating,
                      State#state{type = Type,
                                  zone_type = ZoneType,
@@ -436,9 +438,7 @@ stopped({transition, NextState = <<"booting">>}, State) ->
      State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 stopped(start, State = #state{uuid = UUID, zone_type = docker}) ->
-    T = erlang:system_time(milli_seconds) + 60000,
-    chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
-                                 [{<<"docker:wait_for_attach">>, T}]}]),
+    update_timeout(UUID),
     chunter_vmadm:start(UUID),
     {next_state, stopped, State};
 
@@ -1073,9 +1073,7 @@ do_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
 finish_snapshot(_VM, _SnapID, [backup], ok) ->
     ok;
 finish_snapshot(VM, SnapID, _, ok) ->
-    ls_vm:set_snapshot(
-      VM, [{[SnapID, <<"state">>],
-            <<"completed">>}]),
+    snap_state(VM, SnapID, <<"completed">>),
     libhowl:send(VM,
                  [{<<"event">>, <<"snapshot">>},
                   {<<"data">>,
@@ -1085,6 +1083,10 @@ finish_snapshot(VM, SnapID, _, ok) ->
 
 finish_snapshot(_VM, _SnapID, _, error) ->
     error.
+
+snap_state(VM, SnapID, State) ->
+    ls_vm:set_snapshot(VM, [{[SnapID, <<"state">>], State}]).
+
 
 do_delete_snapshot(<<_:1/binary, P/binary>>, _VM, SnapID, _) ->
     chunter_zfs:destroy_snapshot(P, SnapID, [f, r]).
@@ -1294,18 +1296,19 @@ snapshot_sizes(VM) ->
 %% _:43 is '/zones/' + uuid
 do_restore(Path, VM, {local, SnapId}, Opts) ->
     do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path = <<_:43/binary, Dx/binary>>, VM, {full, SnapId, SHAs}, Opts) ->
+do_restore(Path = <<_:43/binary, Dx/binary>>, VM, {Type, SnapId, SHAs}, Opts)
+when Type =:= full;
+     Type =:= incr ->
     File = <<VM/binary, "/", SnapId/binary, Dx/binary>>,
     SHA1 = jsxd:get([File], <<>>, SHAs),
-    do_destroy(Path, VM, SnapId, Opts),
+    case Type of
+        full -> do_destroy(Path, VM, SnapId, Opts);
+        _    -> ok
+    end,
+    snap_state(VM, SnapId, <<"restoring">>),
     chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
     wait_import(Path),
-    do_rollback_snapshot(Path, VM, SnapId, Opts);
-do_restore(Path = <<_:43/binary, Dx/binary>>, VM, {incr, SnapId, SHAs}, Opts) ->
-    File = <<VM/binary, "/", SnapId/binary, Dx/binary>>,
-    SHA1 = jsxd:get([File], <<>>, SHAs),
-    chunter_snap:download(Path, VM, SnapId, SHA1, Opts),
-    wait_import(Path),
+    snap_state(VM, SnapId, <<"completed">>),
     do_rollback_snapshot(Path, VM, SnapId, Opts).
 
 do_destroy(<<_:1/binary, P/binary>>, _VM, _SnapID, _) ->
@@ -1598,3 +1601,8 @@ confirm_create(_UUID, <<>>) ->
 confirm_create(UUID, Org) ->
     ls_acc:update(Org, UUID, timestamp(),
                   [{<<"event">>, <<"confirm_create">>}]).
+
+update_timeout(UUID) ->
+    T = erlang:system_time(milli_seconds) + 60000,
+    chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
+                                 [{<<"docker:wait_for_attach">>, T}]}]).

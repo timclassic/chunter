@@ -1,0 +1,77 @@
+#!/usr/bin/bash
+
+date=$(date +%F-%H-%M-%S)
+base=/var/tmp/chunter-diag
+dir=$base/$date
+mkdir -p $dir
+log_file=$dir/chunter-diag.log
+echo '========================================' > $log_file
+echo "Chunter Diagnostics ${date}" >> $log_file
+echo '========================================' >> $log_file
+function le() {
+    echo "$1"
+    echo "$1" >> $log_file
+}
+function log_run(){
+  echo >> $log_file
+  echo >> $log_file
+  echo '----------------------------------------' >> $log_file
+  echo "$*" >> $log_file
+  echo '----------------------------------------' >> $log_file
+  $* >> $log_file
+}
+echo "Gathering System information."
+log_run ifconfig
+echo >> $log_file >> $log_file
+echo >> $log_file
+log_run svcs svc:/network/epmd:default
+log_run svcs svc:/network/chunter:default
+log_run svcs svc:/fifo/zlogin:default
+log_run df -h
+log_run zonememstat
+log_run prstat 1 1
+log_run sysinfo
+
+
+pid=$(pgrep -f /opt/chunter/*/bin/beam.smp)
+log_run lsof -P $pid
+log_run lsof -F $pid
+
+echo "Copying Logfiles"
+cp -r /var/log/chunter $dir/logs
+cp /var/svc/log/network-chunter:default.log $dir/logs
+
+echo "Copying config files"
+mkdir $dir/config
+cp /opt/chunter/etc/chunter.conf* $dir/config
+cp -r /var/tmp/generated.configs/ $dir/config
+cp -r /opt/fifo_zlogin/releases/ $dir/config
+
+le
+le
+le '========================================'
+le "Common errors"
+le '========================================'
+
+if grep nxdomain /var/log/chunter/error.log* > /dev/null
+then
+    le "[error] DNS is not propperly set up, the leoFS domain can not be resolved"
+fi
+
+chunter_cookie=`egrep '^[ \t]*distributed_cookie[ \t]*=[ \t]*' /opt/chunter/etc/chunter.conf 2> /dev/null | cut -d = -f 2 | sed -e 's/^[ ]*//'`
+
+zlogin_cookie=`egrep '^\-setcookie' /opt/fifo_zlogin/releases/0.1.1/vm.args | awk '{ print $2 }' 2> /dev/null`
+
+if [ "${chunter_cookie}" != "${zlogin_cookie}" ]
+then
+    le "[error] zlogin and Chunter cookies do not match!"
+fi
+
+echo "Compressing data"
+(cd $base; tar cfz chunter-diag-$date.tgz $date)
+
+
+echo
+echo
+echo "Diagnostics run complete the the file can be found in $base/chunter-diag-$date.tgz the data provided can be inspected in $base/$date."
+

@@ -16,7 +16,7 @@
 │  ├─ base16─1.0.0
 │  ├─ erlcloud─0.8.6
 │  └─ poolboy─1.5.1
-├─ fifo_spec─0.1.24
+├─ fifo_spec─0.1.26
 ├─ fifo_utils─0.1.19
 ├─ jsx─1.4.5
 ├─ jsxd─0.1.10

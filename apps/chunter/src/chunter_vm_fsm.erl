@@ -342,7 +342,7 @@ initialized({create, Package, Dataset, VMSpec},
                     %% running already when the vmadm is doing it's work
                     chunter_zlogin:start(UUID, ZoneType),
                     do_create(UUID, VMData, VMSpec),
-                    update_time(UUID),
+                    update_timeout(UUID),
                     chunter_vmadm:start(UUID),
                     {next_state, creating,
                      State#state{type = Type,
@@ -433,18 +433,12 @@ loading({transition, NextState}, State = #state{uuid = UUID}) ->
 -spec stopped({transition, NextState::fifo:vm_state()}, State::term()) ->
                      {next_state, atom(), State::term()}.
 
-stopped({transition, NextState = <<"booting">>},
-        State = #state{uuid = UUID, zone_type = docker}) ->
-    update_time(UUID),
-    {next_state, binary_to_atom(NextState),
-     State#state{public_state = change_state(State#state.uuid, NextState)}};
-
 stopped({transition, NextState = <<"booting">>}, State) ->
     {next_state, binary_to_atom(NextState),
      State#state{public_state = change_state(State#state.uuid, NextState)}};
 
 stopped(start, State = #state{uuid = UUID, zone_type = docker}) ->
-    update_time(UUID),
+    update_timeout(UUID),
     chunter_vmadm:start(UUID),
     {next_state, stopped, State};
 
@@ -1608,7 +1602,7 @@ confirm_create(UUID, Org) ->
     ls_acc:update(Org, UUID, timestamp(),
                   [{<<"event">>, <<"confirm_create">>}]).
 
-update_time(UUID) ->
+update_timeout(UUID) ->
     T = erlang:system_time(milli_seconds) + 60000,
     chunter_vmadm:update(UUID, [{<<"set_internal_metadata">>,
                                  [{<<"docker:wait_for_attach">>, T}]}]).

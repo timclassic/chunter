@@ -9,9 +9,6 @@
 
 -module(chunter_spec).
 
--ifdef(TEST).
--endif.
-
 -export([to_vmadm/3,
          to_zonecfg/3,
          to_sniffle/1,

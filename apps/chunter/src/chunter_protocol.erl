@@ -319,6 +319,8 @@ timed_aggregate(R, _) ->
 
 run_cmd(Transport, Socket, Port) ->
     receive
+        {Port, {exit_status, E}} ->
+            Transport:send(Socket, term_to_binary({exit_status, E}));
         {Port, Data} ->
             Transport:send(Socket, term_to_binary(Data)),
             run_cmd(Transport, Socket, Port)

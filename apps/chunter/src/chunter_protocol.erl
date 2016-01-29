@@ -66,6 +66,14 @@ handle_info({_OK, Socket, BinData}, State = #state{
             chunter_zlogin:subscribe(UUID, Type),
             {noreply, State#state{state = UUID,
                                   type = console}};
+        {execute, UUID, Cmd} ->
+            Port = open_port({spawn_executable, "/usr/sbin/zlogin"},
+                             [use_stdio, binary, {args, [UUID] ++ Cmd},
+                              stderr_to_stdout, exit_status]),
+            run_cmd(Transport, Socket, Port),
+            Transport:send(Socket, term_to_binary(done)),
+            Transport:close(Socket),
+            {stop, normal, State};
         ping ->
             Transport:send(Socket, term_to_binary(pong)),
             ok = Transport:close(Socket),
@@ -307,3 +315,11 @@ timed_aggregate({ok, D}, llquantize) ->
     timer:tc(fun() -> {ok, llquantize(D)} end);
 timed_aggregate(R, _) ->
     R.
+
+
+run_cmd(Transport, Socket, Port) ->
+    receive
+        {Port, Data} ->
+            Transport:send(Socket, term_to_binary(Data)),
+            run_cmd(Transport, Socket, Port)
+    end.

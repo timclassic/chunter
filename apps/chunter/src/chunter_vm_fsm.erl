@@ -503,7 +503,7 @@ restoring_backup(next, State =
     %% we reapply the package to make sure it is applied.
     {ok, V} = ls_vm:get(VM),
     Package = ft_vm:package(V),
-    ls_vm:update(VM, Package, []),
+    update(VM, Package, []),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 creating_backup(next, State = #state{orig_state = NextState, uuid=VM,

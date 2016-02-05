@@ -12,6 +12,7 @@
                   inets,
                   erlsom,
                   libsniffle,
+                  libchunter,
                   libsnarl,
                   libhowl,
                   fifo_spec,

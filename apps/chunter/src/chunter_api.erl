@@ -281,8 +281,13 @@ enabled(Action) ->
     application:get_env(chunter, Action, true).
 
 stack_vms(Stack) ->
-    Clusters = ft_grouping:elements(Stack),
-    [{UUID, grouping_elements(UUID)} || UUID <- Clusters].
+    Clusters = ft_grouping:groupings(Stack),
+    [{ft_grouping:uuid(Stack), ft_grouping:elements(Stack)} |
+     [{UUID, grouping_elements(UUID)} || UUID <- Clusters]].
+
+stack_vms_flat(Stack) ->
+    Res = [VMs || {_, VMs} <- stack_vms(Stack)],
+    lists:flatten(Res).
 
 grouping_elements(UUID) ->
     {ok, G} = ls_grouping:get(UUID),
@@ -303,7 +308,7 @@ set_grouping_config(GID, G, D) ->
 
 
 stack_power(VM, Action, Stack) ->
-    case lists:member(VM, stack_vms(Stack)) of
+    case lists:member(VM, stack_vms_flat(Stack)) of
         true ->
             stack_power(VM, Action);
         false ->
@@ -311,7 +316,7 @@ stack_power(VM, Action, Stack) ->
     end.
 
 stack_execute(VM, Command, Stack) ->
-    case lists:member(VM, stack_vms(Stack)) of
+    case lists:member(VM, stack_vms_flat(Stack)) of
         true ->
             stack_execute(VM, Command);
         false ->

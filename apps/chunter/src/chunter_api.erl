@@ -281,7 +281,7 @@ enabled(Action) ->
     application:get_env(chunter, Action, true).
 
 stack_vms(Stack) ->
-    Clusters = ft_grouping:groupings(Stack),
+    Clusters = ft_grouping:elements(Stack),
     [{ft_grouping:uuid(Stack), ft_grouping:elements(Stack)} |
      [{UUID, grouping_elements(UUID)} || UUID <- Clusters]].
 

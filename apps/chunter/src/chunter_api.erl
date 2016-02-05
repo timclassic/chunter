@@ -282,12 +282,11 @@ enabled(Action) ->
 
 stack_vms(Stack) ->
     Clusters = ft_grouping:elements(Stack),
-    [{ft_grouping:uuid(Stack), ft_grouping:elements(Stack)} |
-     [{UUID, grouping_elements(UUID)} || UUID <- Clusters]].
+    [{UUID, grouping_elements(UUID)} || UUID <- Clusters].
 
 stack_vms_flat(Stack) ->
     Res = [VMs || {_, VMs} <- stack_vms(Stack)],
-    lists:flatten(Res).
+    lists:usort(lists:flatten(Res)).
 
 grouping_elements(UUID) ->
     {ok, G} = ls_grouping:get(UUID),
@@ -360,7 +359,7 @@ stack_power(VM, <<"force-stop">>) ->
     {ok, [{<<"reply">>, <<"stopping">>}]};
 stack_power(VM, <<"reboot">>) ->
     ls_vm:reboot(VM),
-    {ok, [{<<"reply">>, <<"stopping">>}]};
+    {ok, [{<<"reply">>, <<"rebooting">>}]};
 stack_power(VM, <<"force-reboot">>) ->
     ls_vm:reboot(VM, [force]),
-    {ok, [{<<"reply">>, <<"stopping">>}]}.
+    {ok, [{<<"reply">>, <<"rebooting">>}]}.

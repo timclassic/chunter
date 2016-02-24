@@ -145,6 +145,8 @@ init([]) ->
         case System of
             omnios ->
                 [<<"ipkg">>];
+            solaris ->
+                [<<"ipkg">>];
             smartos ->
                 case os:cmd("ls /dev/kvm") of
                     "/dev/kvm\n" ->
@@ -269,8 +271,8 @@ handle_cast(connect, #state{name = Host,
     ls_hypervisor:version(Host, ?VERSION),
     update_mem(),
     case System of
-        omnios ->
-            {ok, Networks} = application:get_env(chunter, zoon_root),
+        S when S =:= omnios; S =:= solaris ->
+            {ok, Networks} = application:get_env(chunter, network_tags),
             Networks1 = [list_to_binary(N) || {N, _} <- Networks],
             ls_hypervisor:networks(Host, Networks1);
         smartos ->

@@ -1,8 +1,7 @@
 [0m├─ bugsnag─0.1.1
 ├─ chunter─0.7.3
-├─ cuttlefish─2.0.0+build.479.reff5f6fdc
-│  ├─ getopt─0.4.3
-│  └─ neotoma─1.7.2
+├─ cuttlefish─2.0.1+build.505.ref2348f6f
+│  └─ getopt─0.8.2
 ├─ eper─0.94.0
 ├─ erlsom─1.2.1
 ├─ erltrace─0.1.4
@@ -17,7 +16,7 @@
 │  ├─ erlcloud─0.8.6
 │  └─ poolboy─1.5.1
 ├─ fifo_spec─0.1.26
-├─ fifo_utils─0.1.19
+├─ fifo_utils─0.1.21
 ├─ jsx─1.4.5
 ├─ jsxd─0.1.10
 ├─ lager─2.1.1

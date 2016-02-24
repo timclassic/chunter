@@ -25,8 +25,8 @@
 ├─ jsx─1.4.5
 ├─ jsxd─0.1.10
 ├─ libchunter─0.1.45
-├─ libhowl─0.1.30
-│  └─ mdns_client_lib─0.1.30
+├─ libhowl─0.1.31
+│  └─ mdns_client_lib─0.1.33
 │     ├─ mdns_client─0.1.7
 │     └─ pooler─1.4.0
 ├─ libsnarl─0.3.40

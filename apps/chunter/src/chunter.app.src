@@ -25,7 +25,6 @@
                   erltrace,
                   base16,
                   smurf,
-                  uuid,
                   ranch
                  ]},
   {mod, { chunter_app, []}},

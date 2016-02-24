@@ -400,7 +400,7 @@ initialized({restore, SnapID, Options},
                                  args={SnapID, Options, Path, Toss}},
             libhowl:send(<<"command">>,
                          [{<<"event">>, <<"vm-restored">>},
-                          {<<"uuid">>, uuid:uuid4s()},
+                          {<<"uuid">>, fifo_utils:uuid()},
                           {<<"data">>,
                            [{<<"uuid">>, UUID}]}]),
             restoring_backup(next, State1);

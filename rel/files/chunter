@@ -48,7 +48,7 @@ fi
 
 # Extract the target node name and cookie from vm.args
 if [ ! -f "$RUNNER_ETC_DIR/vm.args" ]; then
-    NODENAME=`egrep '^[ \t]*nodename[ \t]*=[ \t]*' $RUNNER_ETC_DIR/{{cuttlefish_conf}} 2> /dev/null | tail -n 1 | cut -d = -f 2`
+    NODENAME=`egrep '^[ \t]*nodename[ \t]*=[ \t]*' $RUNNER_ETC_DIR/{{cuttlefish_conf}} 2> /dev/null | tail -1 | cut -d = -f 2`
     if [ -z "$NODENAME" ]; then
         echo "vm.args needs to have a -name parameter."
         echo "  -sname is not supported."

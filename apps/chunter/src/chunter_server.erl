@@ -263,20 +263,11 @@ handle_cast({reserve_mem, N}, State =
 
 handle_cast(connect, #state{name = Host,
                             system = System,
-                            reserved_memory = ReservedMem,
                             capabilities = Caps} = State) ->
     register_hypervisor(),
-    {TotalMem, ProvMem} = mem(),
-    lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
-               [Host, ProvMem, TotalMem]),
     ls_hypervisor:sysinfo(Host, State#state.sysinfo),
     ls_hypervisor:version(Host, ?VERSION),
-    ls_hypervisor:set_resource(
-      Host,
-      [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
-       {[<<"reserved-memory">>], ReservedMem},
-       {[<<"provisioned-memory">>], ProvMem},
-       {[<<"total-memory">>], TotalMem}]),
+    update_mem(),
     case System of
         omnios ->
             {ok, Networks} = application:get_env(chunter, zoon_root),
@@ -299,8 +290,6 @@ handle_cast(connect, #state{name = Host,
 
     ls_hypervisor:virtualisation(Host, Caps),
     {noreply, State#state{
-                total_memory = TotalMem,
-                provisioned_memory = ProvMem,
                 connected = true
                }};
 

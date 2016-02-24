@@ -31,7 +31,7 @@ list_() ->
                 %% SmartOS seems to have one more coumn
                 [ID, Name, VMState, _Path, UUID, _Type, _IP | _] <-
                     zoneadm_list(), ID =/= <<"0">>];
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             [#{uuid => UUID, name => UUID, state => VMState} ||
                 %% SmartOS seems to have one more coumn
                 [ID, UUID, VMState, _Path, _OtherUUID, _Type, _IP | _] <-
@@ -68,7 +68,7 @@ get_raw(ZUUID) when is_binary(ZUUID) ->
                                                   " list -p"]), "\n")],
             [{ID, Name, VMState, Path, UUID, Type} ||
                 [ID, Name, VMState, Path, UUID, Type, _IP | _] <- Zones];
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             Zones = [ re:split(Line, ":")
                       || Line <- re:split(os:cmd([?ZONEADM, " -z ", UUIDs,
                                                   " list -p"]), "\n")],

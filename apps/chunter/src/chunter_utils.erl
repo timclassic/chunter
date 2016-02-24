@@ -31,6 +31,8 @@ system() ->
             smartos;
         "omnios" ++ _ ->
             omnios;
+        "11." ++ _ ->
+            solaris;
         _ ->
             undefined
     end.

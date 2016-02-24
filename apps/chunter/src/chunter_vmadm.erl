@@ -241,7 +241,7 @@ create(UUID, Data) ->
                   lager:info("vmadm:create - vmadm returned sucessfully.", []),
                   libhowl:send(<<"command">>,
                                [{<<"event">>, <<"vm-create">>},
-                                {<<"uuid">>, uuid:uuid4s()},
+                                {<<"uuid">>, fifo_utils:uuid()},
                                 {<<"data">>,
                                  [{<<"uuid">>, UUID}]}]),
                   chunter_vm_fsm:load(UUID);

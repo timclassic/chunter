@@ -407,7 +407,7 @@ host_info() ->
                      [HostIDi | _] = re:split(F, "\n"),
                      HostIDi;
                  _ ->
-                     UUID = uuid:uuid4s(),
+                     UUID = fifo_utils:uuid(hypervisor),
                      file:write_file(Path, UUID),
                      UUID
              end,

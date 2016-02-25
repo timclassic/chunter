@@ -73,6 +73,8 @@ translate_to_sniffle(<<"internal_metadata">>, Int, Obj) ->
     jsxd:merge(Int, Obj);
 translate_to_sniffle(<<"dataset_uuid">>, V, Obj) ->
     jsxd:set(<<"dataset">>, V, Obj);
+translate_to_sniffle(<<"package_name">>, V, Obj) ->
+    jsxd:set(<<"package">>, V, Obj);
 translate_to_sniffle(<<"image_uuid">>, V, Obj) ->
     jsxd:set(<<"dataset">>, V, Obj);
 translate_to_sniffle(<<"docker">>, true, Obj) ->

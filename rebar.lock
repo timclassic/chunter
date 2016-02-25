@@ -28,7 +28,7 @@
  {<<"libsniffle">>,{pkg,<<"libsniffle">>,<<"0.3.37">>},0},
  {<<"mdns_client">>,{pkg,<<"mdns_client">>,<<"0.1.7">>},2},
  {<<"mdns_client_lib">>,{pkg,<<"mdns_client_lib">>,<<"0.1.33">>},1},
- {<<"oauth2">>,{pkg,<<"oauth2_erlang">>,<<"0.6.1">>},1},
+ {<<"oauth2_erlang">>,{pkg,<<"oauth2_erlang">>,<<"0.6.1">>},1},
  {<<"poolboy">>,{pkg,<<"poolboy">>,<<"1.5.1">>},1},
  {<<"pooler">>,{pkg,<<"pooler">>,<<"1.4.0">>},2},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"1.5.1">>},2},

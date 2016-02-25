@@ -24,6 +24,6 @@ clean:
 	$(REBAR) clean
 	make -C rel/pkg clean
 
-rel: all
+rel: apps/chunter/priv/zonedoor version_header
 	-rm -r ./rel/chunter/share
 	$(REBAR) as prod release

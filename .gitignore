@@ -18,4 +18,5 @@ standalone.config
 rel/chunter
 rel/chunter.tar.bz2
 fifo
+TEST*
 _build

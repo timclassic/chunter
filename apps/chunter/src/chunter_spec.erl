@@ -426,20 +426,25 @@ zone_spec(Base0, Package, Dataset, OwnerData) ->
     {ok, ImageID} = jsxd:get(<<"uuid">>, Dataset),
     {ok, Ram} = jsxd:get(<<"ram">>, Package),
     {ok, Quota} = jsxd:get(<<"quota">>, Package),
-    Base11 = jsxd:thread([{set, <<"max_physical_memory">>, Ram},
-                          {set, <<"brand">>, <<"joyent">>},
-                          {set, <<"quota">>, Quota},
-                          {set, <<"image_uuid">>, ImageID}],
-                         Base0),
-    Base12 = perhaps_set(<<"compression">>, Package,
-                         [<<"zfs_root_compression">>], Base11),
+    Base1 = jsxd:thread([{set, <<"max_physical_memory">>, Ram},
+                         {set, <<"brand">>, <<"joyent">>},
+                         {set, <<"quota">>, Quota},
+                         {set, <<"image_uuid">>, ImageID}],
+                        Base0),
+
+    Base2 = perhaps_set(<<"compression">>, Package,
+                        [<<"zfs_root_compression">>], Base1),
+    Base3 = perhaps_set(<<"compression">>, Package,
+                        [<<"zfs_data_compression">>], Base2),
+    Base4 = perhaps_set(<<"delegate_dataset">>, OwnerData,
+                        [<<"delegate_dataset">>], Base3),
     case jsxd:get([<<"zone_type">>], Dataset) of
         {ok, <<"lx">>} ->
-            lx_spec(Base12, Dataset);
+            lx_spec(Base4, Dataset);
         {ok, <<"docker">>} ->
-            docker_spec(Base12, Dataset, OwnerData);
+            docker_spec(Base4, Dataset, OwnerData);
         _ ->
-            Base12
+            Base4
     end.
 
 lx_spec(Base, Dataset) ->

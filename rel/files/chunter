@@ -43,7 +43,7 @@ fi
 if [ -e "$RUNNER_BASE_DIR/releases/$APP_VSN/sys.config" ]; then
     CONFIG_PATH="$RUNNER_BASE_DIR/releases/$APP_VSN/sys.config"
 else
-    CONFIG_PATH="$RUNNER_ETC_DIR/app.config"x
+    CONFIG_PATH="$RUNNER_ETC_DIR/app.config"
 fi
 
 # Extract the target node name and cookie from vm.args
@@ -161,7 +161,21 @@ case "$1" in
         fi
         pkill -z0 zonedoor
         ;;
-
+    connections)
+        shift
+        $NODETOOL rpc chunter_console connections
+        ES=$?
+        if [ "$ES" -ne 0 ]; then
+            exit $ES
+        fi
+        ;;
+    update_memory)
+        shift
+        $NODETOOL rpc chunter_console update_mem
+        ES=$?
+        if [ "$ES" -ne 0 ]; then
+            exit $ES
+        fi
     ping)
         ## See if the VM is alive
         $NODETOOL ping

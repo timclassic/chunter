@@ -20,9 +20,14 @@ connections(["howl"]) ->
     print_endpoints(libsniffle:servers());
 
 connections([]) ->
-    connections(["snarl"]),
-    connections(["sniffle"]),
-    connections(["howl"]).
+    case {connections(["snarl"]),
+          connections(["sniffle"]),
+          connections(["howl"])} of
+        {ok, ok, ok} ->
+            ok;
+        _ ->
+            error
+    end.
 
 update_mem([]) ->
     chunter_server:update_mem().
@@ -36,7 +41,12 @@ print_endpoints(Es) ->
               "----------"
               " --------------------"
               " ---------------~n", []),
-    [print_endpoint(E) || E <- Es].
+    case [print_endpoint(E) || E <- Es] of
+        [] ->
+            error;
+        _ ->
+            ok
+    end.
 
 print_endpoint({{Hostname, [{port, Port}, {ip, IP}]}, _, Fails}) ->
     HostPort = <<IP/binary, ":", Port/binary>>,

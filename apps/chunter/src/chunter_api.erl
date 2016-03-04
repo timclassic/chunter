@@ -147,6 +147,26 @@ call_(UUID, [{<<"action">>, <<"stack-vms">>}]) ->
             E
     end;
 
+call_(UUID, [{<<"action">>, <<"stack-power">>},
+             {<<"state">>, Action},
+             {<<"vm">>, VM}]) ->
+    case stack(UUID) of
+        {ok, _, G} ->
+            stack_power(VM, Action, G);
+        E ->
+            E
+    end;
+
+call_(UUID, [{<<"action">>, <<"stack-execute">>},
+             {<<"command">>, Command},
+             {<<"vm">>, VM}]) ->
+    case stack(UUID) of
+        {ok, _, G} ->
+            stack_execute(VM, Command, G);
+        E ->
+            E
+    end;
+
 call_(UUID, [{<<"action">>, <<"stack-set">>},
              {<<"data">>, D}]) ->
     case stack(UUID) of
@@ -264,6 +284,10 @@ stack_vms(Stack) ->
     Clusters = ft_grouping:elements(Stack),
     [{UUID, grouping_elements(UUID)} || UUID <- Clusters].
 
+stack_vms_flat(Stack) ->
+    Res = [VMs || {_, VMs} <- stack_vms(Stack)],
+    lists:usort(lists:flatten(Res)).
+
 grouping_elements(UUID) ->
     {ok, G} = ls_grouping:get(UUID),
     ft_grouping:elements(G).
@@ -281,3 +305,61 @@ set_grouping_config(GID, G, D) ->
             {ok, ft_grouping:config(G1)}
     end.
 
+
+stack_power(VM, Action, Stack) ->
+    case lists:member(VM, stack_vms_flat(Stack)) of
+        true ->
+            stack_power(VM, Action);
+        false ->
+            {error, "VM not part of the stack"}
+    end.
+
+stack_execute(VM, Command, Stack) ->
+    case lists:member(VM, stack_vms_flat(Stack)) of
+        true ->
+            stack_execute(VM, Command);
+        false ->
+            {error, "VM not part of the stack"}
+    end.
+
+stack_execute(VM, Command) ->
+    case ls_vm:get(VM) of
+        {ok, V} ->
+            Hv = ft_vm:hypervisor(V),
+            {ok, H} = ls_hypervisor:get(Hv),
+            {Host, Port} = ft_hypervisor:endpoint(H),
+            stack_execute(Host, Port, VM, Command);
+        E1 ->
+            E1
+    end.
+
+stack_execute(Host, Port, VM, Command) ->
+    case libchunter:execute(Host, Port, VM, Command, <<>>, fun fold_reply/2) of
+        {ok, ExitCode, Reply} ->
+            {ok, [{<<"exit_code">>, ExitCode},
+                  {<<"output">>, Reply}]};
+        E ->
+            E
+    end.
+
+fold_reply(Acc, {exit_status, E}) ->
+    {ok, E, Acc};
+fold_reply(Acc, {data, B}) ->
+    <<Acc/binary, B/binary>>;
+fold_reply(Acc, _) ->
+    Acc.
+stack_power(VM, <<"start">>) ->
+    ls_vm:start(VM),
+    {ok, [{<<"reply">>, <<"starting">>}]};
+stack_power(VM, <<"stop">>) ->
+    ls_vm:stop(VM),
+    {ok, [{<<"reply">>, <<"stopping">>}]};
+stack_power(VM, <<"force-stop">>) ->
+    ls_vm:stop(VM, [force]),
+    {ok, [{<<"reply">>, <<"stopping">>}]};
+stack_power(VM, <<"reboot">>) ->
+    ls_vm:reboot(VM),
+    {ok, [{<<"reply">>, <<"rebooting">>}]};
+stack_power(VM, <<"force-reboot">>) ->
+    ls_vm:reboot(VM, [force]),
+    {ok, [{<<"reply">>, <<"rebooting">>}]}.

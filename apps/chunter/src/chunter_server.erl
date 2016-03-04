@@ -145,6 +145,8 @@ init([]) ->
         case System of
             omnios ->
                 [<<"ipkg">>];
+            solaris ->
+                [<<"ipkg">>];
             smartos ->
                 case os:cmd("ls /dev/kvm") of
                     "/dev/kvm\n" ->
@@ -263,23 +265,14 @@ handle_cast({reserve_mem, N}, State =
 
 handle_cast(connect, #state{name = Host,
                             system = System,
-                            reserved_memory = ReservedMem,
                             capabilities = Caps} = State) ->
     register_hypervisor(),
-    {TotalMem, ProvMem} = mem(),
-    lager:info("[~p] Counting ~p MB used out of ~p MB in total.",
-               [Host, ProvMem, TotalMem]),
     ls_hypervisor:sysinfo(Host, State#state.sysinfo),
     ls_hypervisor:version(Host, ?VERSION),
-    ls_hypervisor:set_resource(
-      Host,
-      [{[<<"free-memory">>], TotalMem - ReservedMem - ProvMem},
-       {[<<"reserved-memory">>], ReservedMem},
-       {[<<"provisioned-memory">>], ProvMem},
-       {[<<"total-memory">>], TotalMem}]),
+    update_mem(),
     case System of
-        omnios ->
-            {ok, Networks} = application:get_env(chunter, zoon_root),
+        S when S =:= omnios; S =:= solaris ->
+            {ok, Networks} = application:get_env(chunter, network_tags),
             Networks1 = [list_to_binary(N) || {N, _} <- Networks],
             ls_hypervisor:networks(Host, Networks1);
         smartos ->
@@ -299,8 +292,6 @@ handle_cast(connect, #state{name = Host,
 
     ls_hypervisor:virtualisation(Host, Caps),
     {noreply, State#state{
-                total_memory = TotalMem,
-                provisioned_memory = ProvMem,
                 connected = true
                }};
 
@@ -418,7 +409,7 @@ host_info() ->
                      [HostIDi | _] = re:split(F, "\n"),
                      HostIDi;
                  _ ->
-                     UUID = uuid:uuid4s(),
+                     UUID = fifo_utils:uuid(hypervisor),
                      file:write_file(Path, UUID),
                      UUID
              end,

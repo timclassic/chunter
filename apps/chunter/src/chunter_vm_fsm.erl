@@ -400,7 +400,7 @@ initialized({restore, SnapID, Options},
                                  args={SnapID, Options, Path, Toss}},
             libhowl:send(<<"command">>,
                          [{<<"event">>, <<"vm-restored">>},
-                          {<<"uuid">>, uuid:uuid4s()},
+                          {<<"uuid">>, fifo_utils:uuid()},
                           {<<"data">>,
                            [{<<"uuid">>, UUID}]}]),
             restoring_backup(next, State1);
@@ -502,8 +502,9 @@ restoring_backup(next, State =
     %% The restored dataset does not have the correct quota,
     %% we reapply the package to make sure it is applied.
     {ok, V} = ls_vm:get(VM),
-    Package = ft_vm:package(V),
-    ls_vm:update(VM, Package, []),
+    PID = ft_vm:package(V),
+    {ok, Package} = ls_package:get(PID),
+    update(VM, Package, []),
     {next_state, NextState, State#state{orig_state=undefined, args={}}}.
 
 creating_backup(next, State = #state{orig_state = NextState, uuid=VM,

@@ -84,7 +84,7 @@ start(UUID) ->
             R = os:cmd(binary_to_list(Cmd)),
             lager:debug("[vmadm] ~s", [R]),
             R;
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             lager:info("zoneadm:start - UUID: ~s.", [UUID]),
             zoneadm(UUID, boot)
     end.
@@ -100,7 +100,7 @@ start(UUID, Image) ->
             R = os:cmd(binary_to_list(Cmd)),
             lager:debug("[vmadm] ~s", [R]),
             R;
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             lager:info("zoneadm:start - UUID: ~s, Image: ~s.", [UUID, Image]),
             zoneadm(UUID, boot)
     end.
@@ -116,7 +116,7 @@ delete(UUID) ->
                  R = os:cmd(binary_to_list(Cmd)),
                  lager:debug("[vmadm] ~s", [R]),
                  R;
-             omnios ->
+             S when S =:= omnios; S =:= solaris ->
                  VM = chunter_zone:get(UUID),
                  force_stop(UUID),
                  lager:info("zoneadm:uninstall - UUID: ~s / ~p.", [UUID, VM]),
@@ -144,7 +144,7 @@ info(UUID) ->
             lager:debug("vmadm:cmd - ~s.", [Cmd]),
             Output = os:cmd(binary_to_list(Cmd)),
             decode_info(Output);
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             {error, no_info}
     end.
 decode_info("Unable" ++ _) ->
@@ -169,7 +169,7 @@ stop(UUID) ->
             R = os:cmd(binary_to_list(Cmd)),
             lager:debug("[vmadm] ~s", [R]),
             R;
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             lager:info("zoneadm:stop - UUID: ~s.", [UUID]),
             zoneadm(UUID, shutdown)
     end.
@@ -185,7 +185,7 @@ force_stop(UUID) ->
             R = os:cmd(binary_to_list(Cmd)),
             lager:debug("[vmadm] ~s", [R]),
             R;
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             lager:info("vmadm:force-stop - UUID: ~s.", [UUID]),
             zoneadm(UUID, halt)
     end.
@@ -201,7 +201,7 @@ reboot(UUID) ->
             R = os:cmd(binary_to_list(Cmd)),
             lager:debug("[vmadm] ~s", [R]),
             R;
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             lager:info("vmadm:reboot - UUID: ~s.", [UUID]),
             zoneadm(UUID, "shutdown -r")
     end.
@@ -217,7 +217,7 @@ force_reboot(UUID) ->
             R = os:cmd(binary_to_list(Cmd)),
             lager:debug("[vmadm] ~s", [R]),
             R;
-        omnios ->
+        S when S =:= omnios; S =:= solaris ->
             lager:info("vmadm:reboot - UUID: ~s.", [UUID]),
             zoneadm(UUID, reboot)
     end.
@@ -241,7 +241,7 @@ create(UUID, Data) ->
                   lager:info("vmadm:create - vmadm returned sucessfully.", []),
                   libhowl:send(<<"command">>,
                                [{<<"event">>, <<"vm-create">>},
-                                {<<"uuid">>, uuid:uuid4s()},
+                                {<<"uuid">>, fifo_utils:uuid()},
                                 {<<"data">>,
                                  [{<<"uuid">>, UUID}]}]),
                   chunter_vm_fsm:load(UUID);

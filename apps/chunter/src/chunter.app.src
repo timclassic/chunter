@@ -1,6 +1,6 @@
 {application, chunter,
  [{description, "SmartOS hypervisor manager."},
-  {vsn, "0.7.2"},
+  {vsn, "0.8.0"},
   {registered, []},
   {applications, [
                   kernel,
@@ -12,6 +12,7 @@
                   inets,
                   erlsom,
                   libsniffle,
+                  libchunter,
                   libsnarl,
                   libhowl,
                   fifo_spec,
@@ -24,7 +25,6 @@
                   erltrace,
                   base16,
                   smurf,
-                  uuid,
                   ranch
                  ]},
   {mod, { chunter_app, []}},
